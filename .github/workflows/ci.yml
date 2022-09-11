@@ -1,0 +1,43 @@
+name: CI
+
+on: 
+  push:
+  pull_request:
+  release:
+    types:
+      - published
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - elixir: 1.13
+            otp: 25.0
+            deploy: true
+    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-elixir@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+      - run: mix deps.get
+      - run: mix test
+      - run: MIX_ENV=test mix credo
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'
+    name: Deploy published release
+    env:
+      HEX_API_KEY: ${{secrets.HEX_API_KEY}}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-elixir@v1
+        with:
+          otp-version: 24.0
+          elixir-version: 1.12
+      - run: mix deps.get
+      - run: mix hex.publish --yes

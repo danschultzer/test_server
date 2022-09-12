@@ -102,6 +102,27 @@ defmodule TestServerTest do
     end
   end
 
+  describe "get_instance/0" do
+    test "when not running" do
+      refute TestServer.get_instance()
+    end
+
+    test "with multiple instances" do
+      {:ok, _instance_1} = TestServer.start()
+      {:ok, _instance_2} = TestServer.start()
+
+      assert_raise RuntimeError, ~r/Multiple TestServer\.Instance's running./, fn ->
+        TestServer.get_instance()
+      end
+    end
+
+    test "with instance" do
+      {:ok, instance} = TestServer.start()
+
+      assert TestServer.get_instance() == instance
+    end
+  end
+
   describe "url/3" do
     test "when instance not running" do
       assert_raise RuntimeError, "No current TestServer.Instance is not running", fn ->

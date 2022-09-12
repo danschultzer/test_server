@@ -106,6 +106,17 @@ defmodule TestServer do
     end
   end
 
+  @doc """
+  Gets current test server instance if running.
+  """
+  @spec get_instance() :: pid() | nil
+  def get_instance do
+    case fetch_instance(false) do
+      {:ok, instance} -> instance
+      :error -> nil
+    end
+  end
+
   @spec url() :: binary()
   def url, do: url("")
 
@@ -151,7 +162,7 @@ defmodule TestServer do
     end
   end
 
-  defp fetch_instance do
+  defp fetch_instance(function_accepts_instance_arg \\ true) do
     case InstanceManager.get_by_caller(self()) do
       nil ->
         :error
@@ -173,8 +184,14 @@ defmodule TestServer do
             """
           end)
 
+        message =
+          case function_accepts_instance_arg do
+            true -> "Multiple #{inspect(Instance)}'s running, please pass instance to `#{inspect(m)}.#{f}/#{a}`."
+            false -> "Multiple #{inspect(Instance)}'s running."
+          end
+
         raise """
-        Multiple #{inspect(Instance)}'s running, please pass instance to `#{inspect(m)}.#{f}/#{a}`.
+        #{message}
 
         #{formatted_instances}
         """

@@ -86,7 +86,7 @@ Custom SSL certificates can also be used by defining the cowboy options:
 TestServer.start(scheme: :https, cowboy_options: [keyfile: key, certfile: cert])
 ```
 
-When a route is matched it'll be removed from active routes list. The route will be triggered in the order they where added:
+When a route is matched it'll be removed from active routes list. The route will be triggered in the order they were added:
 
 ```elixir
 TestServer.add("/", via: :get, to: &Conn.send_resp(&1, 200, "first"))

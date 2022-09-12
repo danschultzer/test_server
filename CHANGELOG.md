@@ -1,4 +1,4 @@
-## v0.1.2 (TBA)
+## v0.1.2 (2022-09-12)
 
 - Better formatting of errors
 

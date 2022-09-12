@@ -135,5 +135,7 @@ defmodule TestServer.Plug.Cowboy do
 
       Conn.send_resp(conn, 500, Exception.format(:error, exception, stacktrace))
     end
+
+    def default_plug, do: &Conn.fetch_query_params/1
   end
 end

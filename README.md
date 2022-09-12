@@ -96,6 +96,22 @@ TestServer.add("/", via: :get, to: &Conn.send_resp(&1, 200, "second"))
 {:ok, "second"} = fetch_request()
 ```
 
+Plugs can be added to process requests before it matches any routes. If no plugs are defined `Plug.Conn.fetch_query_params/1` will run.
+
+```elixir
+TestServer.plug(fn conn ->
+  Plug.Conn.fetch_query_params(conn)
+end)
+
+TestServer.plug(fn conn ->
+  {:ok, body, _conn} = Plug.Conn.read_body(conn, [])
+
+  Map.put(conn, :request_body, body)
+end)
+
+TestServer.plug(MyPlug)
+```
+
 <!-- MDOC !-->
 
 ## LICENSE

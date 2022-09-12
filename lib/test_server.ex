@@ -84,13 +84,13 @@ defmodule TestServer do
   end
 
   @doc """
-  Shuts down the current test server instance
+  Shuts down the current test server.
   """
   @spec stop() :: :ok | {:error, term()}
   def stop, do: stop(fetch_instance!())
 
   @doc """
-  Shuts down a test server instance
+  Shuts down a test server instance.
   """
   @spec stop(pid()) :: :ok | {:error, term()}
   def stop(instance) do
@@ -115,7 +115,7 @@ defmodule TestServer do
   def url(instance) when is_pid(instance), do: url(instance, "", [])
 
   @doc """
-  Produces a URL for the test server instance.
+  Produces a URL for current test server.
 
   ## Options
     * `:host` - binary host value, it'll be added to inet for IP 127.0.0.1, defaults to `"localhost"`;
@@ -213,7 +213,7 @@ defmodule TestServer do
   def add(instance, uri) when is_pid(instance) and is_binary(uri), do: add(instance, uri, [])
 
   @doc """
-  Adds a route to a test server.
+  Adds a route to a test server instance.
 
   See `add/2` for options.
   """
@@ -225,7 +225,7 @@ defmodule TestServer do
 
     options = Keyword.put_new(options, :to, &default_response_handler/1)
 
-    Instance.register(instance, {uri, options, stacktrace})
+    Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
   end
 
   defp get_stacktrace do
@@ -265,7 +265,32 @@ defmodule TestServer do
   end
 
   @doc """
-  Fetches the generated x509 suite for the current test server instance.
+  Adds a plug to the current test server.
+
+  This plug will be called for all requests before route is matched.
+  """
+  @spec plug(atom() | function()) :: :ok | {:error, term()}
+  def plug(plug) when is_atom(plug) or is_function(plug) do
+    {:ok, instance} = autostart()
+
+    plug(instance, plug)
+  end
+
+
+  @doc """
+  Adds a route to a test server instance.
+
+  See `plug/1` for options.
+  """
+  @spec plug(pid(), atom() | function()) :: :ok | {:error, term()}
+  def plug(instance, plug) do
+    [_first_module_entry | stacktrace] = get_stacktrace()
+
+    Instance.register(instance, {:plug, {plug, stacktrace}})
+  end
+
+  @doc """
+  Fetches the generated x509 suite for the current test server.
   """
   @spec x509_suite() :: term()
   def x509_suite, do: x509_suite(fetch_instance!())

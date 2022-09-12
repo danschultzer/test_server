@@ -190,7 +190,7 @@ defmodule TestServerTest do
         test "fails" do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert :ok = TestServer.add("/")
-          assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/path"))
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/path"))
         end
       end
 
@@ -205,7 +205,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", via: :post)
-          assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
         end
       end
 
@@ -221,7 +221,7 @@ defmodule TestServerTest do
           assert :ok = TestServer.add("/")
 
           assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
-          assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
         end
       end
 
@@ -234,7 +234,6 @@ defmodule TestServerTest do
 
         test "fails" do
           assert :ok = TestServer.add("/")
-          :timer.sleep(1000)
         end
       end
 
@@ -243,14 +242,14 @@ defmodule TestServerTest do
     end
 
     test "with callback plug" do
-      defmodule MyPlug do
+      defmodule ToPlug do
         def init(opts), do: opts
 
         def call(conn, _opts), do: Plug.Conn.send_resp(conn, 200, to_string(__MODULE__))
       end
 
-      assert :ok = TestServer.add("/", to: MyPlug)
-      assert request(TestServer.url("/")) == {:ok, to_string(MyPlug)}
+      assert :ok = TestServer.add("/", to: ToPlug)
+      assert request(TestServer.url("/")) == {:ok, to_string(ToPlug)}
     end
 
     test "with callback function raising exception" do
@@ -261,13 +260,29 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", to: fn _conn -> raise "boom" end)
-          assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
         end
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/1 in TestServerTest.ToFunctionRaiseTest"
+    end
+
+    test "with callback function halts" do
+      defmodule ToFunctionHaltsTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          assert :ok = TestServer.add("/", to: fn conn -> Plug.Conn.halt(conn) end)
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+        end
+      end
+
+      assert capture_io(fn -> ExUnit.run() end) =~
+               "Do not halt a connection. All requests are has to be processed."
     end
 
     test "with callback function" do
@@ -296,6 +311,65 @@ defmodule TestServerTest do
       assert :ok = TestServer.add("/", via: :post)
       assert {:ok, _} = request(TestServer.url("/"))
       assert {:ok, _} = request(TestServer.url("/"), method: :post)
+    end
+  end
+
+  describe "plug/2" do
+    test "with plug function" do
+      assert :ok =
+               TestServer.plug(fn conn ->
+                 %{conn | params: %{"plug" => "anonymous function"}}
+               end)
+
+      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, &1.params["plug"]))
+
+      assert {:ok, "anonymous function"} = request(TestServer.url("/"))
+    end
+
+    test "with plug module" do
+      defmodule ModulePlug do
+        def init(opts), do: opts
+
+        def call(conn, _opts), do: %{conn | params: %{"plug" => to_string(__MODULE__)}}
+      end
+
+      assert :ok = TestServer.plug(ModulePlug)
+      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, &1.params["plug"]))
+      assert request(TestServer.url("/")) == {:ok, to_string(ModulePlug)}
+    end
+
+    test "when plug errors" do
+      defmodule PlugFunctionRaiseTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          assert :ok = TestServer.plug(fn _conn -> raise "boom" end)
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+        end
+      end
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "(RuntimeError) boom"
+      assert io =~ "anonymous fn/1 in TestServerTest.PlugFunctionRaiseTest"
+    end
+
+    test "when plug function halts" do
+      defmodule PlugFunctionHaltsTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          assert :ok = TestServer.plug(fn conn -> Plug.Conn.halt(conn) end)
+          assert :ok = TestServer.add("/")
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+        end
+      end
+
+      assert capture_io(fn -> ExUnit.run() end) =~
+               "Do not halt a connection. All requests are has to be processed."
     end
   end
 

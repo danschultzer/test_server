@@ -13,15 +13,23 @@ defmodule TestServer.Instance do
     GenServer.stop(instance)
   end
 
-  @spec register(pid(), {binary(), keyword(), list()}) :: :ok
-  def register(instance, {uri, options, stacktrace}) do
+  @spec register(pid(), {:plug_router_to, {binary(), keyword(), list()}}) :: :ok
+  def register(instance, {:plug_router_to, {uri, options, stacktrace}}) do
     unless is_atom(options[:to]) or is_function(options[:to]),
       do: raise(BadFunctionError, term: options[:to])
 
     unless is_nil(options[:match]) or is_function(options[:match]),
       do: raise(BadFunctionError, term: options[:match])
 
-    GenServer.call(instance, {:register, {uri, options, stacktrace}})
+    GenServer.call(instance, {:register, {:plug_router_to, {uri, options, stacktrace}}})
+  end
+
+  @spec register(pid(), {:plug, {atom() | function(), list()}}) :: :ok
+  def register(instance, {:plug, {plug, stacktrace}}) do
+    unless is_atom(plug) or is_function(plug),
+      do: raise(BadFunctionError, term: plug)
+
+    GenServer.call(instance, {:register, {:plug, {plug, stacktrace}}})
   end
 
   @spec dispatch(pid(), Plug.Conn.t()) ::
@@ -73,7 +81,7 @@ defmodule TestServer.Instance do
 
   @impl true
   def init(options) do
-    init_state = %{routes: [], options: options}
+    init_state = %{routes: [], plugs: [], options: options}
 
     case start_cowboy(init_state) do
       {:ok, state} -> {:ok, state}
@@ -94,7 +102,7 @@ defmodule TestServer.Instance do
   end
 
   @impl true
-  def handle_call({:register, {uri, options, stacktrace}}, _from, state) do
+  def handle_call({:register, {:plug_router_to, {uri, options, stacktrace}}}, _from, state) do
     methods =
       options
       |> Keyword.get(:via, ["*"])
@@ -119,6 +127,10 @@ defmodule TestServer.Instance do
         ]
 
     {:reply, :ok, %{state | routes: routes}}
+  end
+
+  def handle_call({:register, {:plug, {plug, stacktrace}}}, _from, state) do
+    {:reply, :ok, %{state | plugs: state.plugs ++ [%{plug: plug, stacktrace: stacktrace}]}}
   end
 
   defp build_match_function(uri, methods) do
@@ -160,26 +172,75 @@ defmodule TestServer.Instance do
   end
 
   def handle_call({:dispatch, conn}, _from, state) do
+    {res, state} =
+      conn
+      |> run_plugs(state)
+      |> run_routes(state)
+
+    {:reply, res, state}
+  end
+
+  defp run_plugs(conn, state) do
+    state.plugs
+    |> case do
+      [] -> [%{plug: Cowboy.Plug.default_plug(), stacktrace: nil}]
+      plugs -> plugs
+    end
+    |> Enum.reduce_while(conn, fn %{plug: plug, stacktrace: stacktrace}, conn ->
+      case try_run_plug(plug, stacktrace, conn) do
+        {:ok, conn} -> {:cont, conn}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp try_run_plug(plug, stacktrace, conn) do
+    plug
+    |> run_plug(conn)
+    |> check_halted!(plug, stacktrace)
+  rescue
+    error -> {:error, {error, __STACKTRACE__}}
+  end
+
+  defp check_halted!(%{halted: true}, plug, stacktrace) do
+    raise """
+    Do not halt a connection. All requests are has to be processed.
+
+    # #{inspect(plug)}
+        #{Exception.format_stacktrace_entry(List.first(stacktrace))}")}
+    """
+  end
+
+  defp check_halted!(conn, _plug, _stacktrace), do: {:ok, conn}
+
+  defp run_plug(plug, conn) when is_function(plug) do
+    plug.(conn)
+  end
+
+  defp run_plug(plug, conn) when is_atom(plug) do
+    options = plug.init([])
+    plug.call(conn, options)
+  end
+
+  defp run_routes({:error, error}, state), do: {{:error, error}, state}
+
+  defp run_routes(conn, state) do
     state.routes
     |> Enum.find_index(&matches?(&1, conn))
     |> case do
       nil ->
-        {:reply, {:error, :not_found}, state}
+        {{:error, :not_found}, state}
 
       index ->
-        result =
-          try do
-            {:ok, run_plug(Enum.at(state.routes, index), conn)}
-          rescue
-            error -> {:error, {error, __STACKTRACE__}}
-          end
+        %{to: plug, stacktrace: stacktrace} = Enum.at(state.routes, index)
+        result = try_run_plug(plug, stacktrace, conn)
 
         routes =
           List.update_at(state.routes, index, fn route ->
             %{route | suspended: true, requests: route.requests ++ [result]}
           end)
 
-        {:reply, result, %{state | routes: routes}}
+        {result, %{state | routes: routes}}
     end
   end
 
@@ -187,14 +248,5 @@ defmodule TestServer.Instance do
 
   defp matches?(%{match: match}, conn) do
     match.(conn)
-  end
-
-  defp run_plug(%{to: to}, conn) when is_function(to) do
-    to.(conn)
-  end
-
-  defp run_plug(%{to: plug}, conn) when is_atom(plug) do
-    options = plug.init([])
-    plug.call(conn, options)
   end
 end

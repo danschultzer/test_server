@@ -121,10 +121,7 @@ defmodule TestServer.Plug.Cowboy do
 
             Active routes for request:
 
-            #{case Instance.active_routes(instance) do
-              [] -> "None"
-              routes -> Instance.routes_info(routes)
-            end}
+            #{Instance.format_routes(Instance.active_routes(instance))}
             """
           )
 

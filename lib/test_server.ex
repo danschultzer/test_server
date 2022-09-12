@@ -89,7 +89,7 @@ defmodule TestServer do
         raise """
           The test ended before the following #{inspect(__MODULE__)} route(s) received a request:
 
-          #{Instance.routes_info(routes)}
+          #{Instance.format_routes(routes)}
         """
     end
   end

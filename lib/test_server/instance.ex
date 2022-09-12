@@ -42,8 +42,9 @@ defmodule TestServer.Instance do
     |> Enum.reject(& &1.suspended)
   end
 
-  @spec routes_info([map()]) :: binary()
-  def routes_info(routes) do
+  @spec format_routes([map()]) :: binary()
+  def format_routes([]), do: "None"
+  def format_routes(routes) do
     routes
     |> Enum.with_index()
     |> Enum.map_join("\n\n", fn {route, index} ->

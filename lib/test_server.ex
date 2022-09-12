@@ -186,8 +186,11 @@ defmodule TestServer do
 
         message =
           case function_accepts_instance_arg do
-            true -> "Multiple #{inspect(Instance)}'s running, please pass instance to `#{inspect(m)}.#{f}/#{a}`."
-            false -> "Multiple #{inspect(Instance)}'s running."
+            true ->
+              "Multiple #{inspect(Instance)}'s running, please pass instance to `#{inspect(m)}.#{f}/#{a}`."
+
+            false ->
+              "Multiple #{inspect(Instance)}'s running."
           end
 
         raise """

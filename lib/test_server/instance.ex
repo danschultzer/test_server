@@ -33,7 +33,9 @@ defmodule TestServer.Instance do
   end
 
   @spec dispatch(pid(), Plug.Conn.t()) ::
-          {:ok, Plug.Conn.t()} | {:error, :not_found} | {:error, {term(), list()}}
+          {:ok, Plug.Conn.t()}
+          | {:error, {:not_found, Plug.Conn.t()}}
+          | {:error, {term(), list()}}
   def dispatch(instance, conn) do
     GenServer.call(instance, {:dispatch, conn})
   end
@@ -51,8 +53,6 @@ defmodule TestServer.Instance do
   end
 
   @spec format_routes([map()]) :: binary()
-  def format_routes([]), do: "None"
-
   def format_routes(routes) do
     routes
     |> Enum.with_index()
@@ -229,7 +229,7 @@ defmodule TestServer.Instance do
     |> Enum.find_index(&matches?(&1, conn))
     |> case do
       nil ->
-        {{:error, :not_found}, state}
+        {{:error, {:not_found, conn}}, state}
 
       index ->
         %{to: plug, stacktrace: stacktrace} = Enum.at(state.routes, index)

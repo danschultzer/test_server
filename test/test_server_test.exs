@@ -242,11 +242,13 @@ defmodule TestServerTest do
           assert :ok = TestServer.add("/")
 
           assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/?a=1"))
         end
       end
 
-      assert capture_io(fn -> ExUnit.run() end) =~ "Unexpected GET request received at /."
+      assert captured_io = capture_io(fn -> ExUnit.run() end)
+      assert captured_io =~ "Unexpected GET request received at / with params:"
+      assert captured_io =~ "query_params: %{\"a\" => \"1\"}"
     end
 
     test "with no requests" do

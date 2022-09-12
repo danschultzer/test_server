@@ -106,7 +106,7 @@ end)
 TestServer.plug(fn conn ->
   {:ok, body, _conn} = Plug.Conn.read_body(conn, [])
 
-  Map.put(conn, :request_body, body)
+  %{conn | body_params: Jason.decode!(body)}
 end)
 
 TestServer.plug(MyPlug)

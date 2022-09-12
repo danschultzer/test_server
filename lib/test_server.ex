@@ -169,7 +169,7 @@ defmodule TestServer do
           |> Enum.map_join("\n\n", fn {{instance, options}, index} ->
             """
             ##{index + 1}: #{inspect(instance)}
-                #{Exception.format_stacktrace_entry(List.first(options[:stacktrace]))}")}
+                #{Enum.map_join(options[:stacktrace], "\n    ", &Exception.format_stacktrace_entry/1)}")}
             """
           end)
 
@@ -275,7 +275,6 @@ defmodule TestServer do
 
     plug(instance, plug)
   end
-
 
   @doc """
   Adds a route to a test server instance.

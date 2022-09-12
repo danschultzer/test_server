@@ -59,7 +59,7 @@ defmodule TestServer.Instance do
     |> Enum.map_join("\n\n", fn {route, index} ->
       """
       ##{index + 1}: #{Enum.join(route.methods, ", ")} #{route.uri}
-          #{Exception.format_stacktrace_entry(List.first(route.stacktrace))}")}
+          #{Enum.map_join(route.stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
       """
     end)
   end
@@ -207,7 +207,7 @@ defmodule TestServer.Instance do
     Do not halt a connection. All requests are has to be processed.
 
     # #{inspect(plug)}
-        #{Exception.format_stacktrace_entry(List.first(stacktrace))}")}
+        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}")}
     """
   end
 

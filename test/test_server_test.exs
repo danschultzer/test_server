@@ -73,13 +73,23 @@ defmodule TestServerTest do
   end
 
   describe "url/2" do
+    test "when instance not running" do
+      assert_raise RuntimeError, ~r/TestServer.Instance is not running, did you start it?/, fn ->
+        TestServer.url()
+      end
+    end
+
     test "invalid `:host`" do
+      TestServer.start()
+
       assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
         TestServer.url("/", host: :invalid)
       end
     end
 
     test "produces routes" do
+      TestServer.start()
+
       assert TestServer.url("/") == TestServer.url("/")
       refute TestServer.url("/") == TestServer.url("/path")
       refute TestServer.url("/") == TestServer.url("/", host: "bad-host")

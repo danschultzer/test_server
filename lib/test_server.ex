@@ -112,7 +112,7 @@ defmodule TestServer do
     unless is_nil(opts[:host]) or is_binary(opts[:host]),
       do: raise("Invalid host, got: #{inspect(opts[:host])}")
 
-    {:ok, instance} = autostart()
+    instance = fetch_instance!()
 
     domain = maybe_enable_host(opts[:host])
     options = Instance.get_options(instance)
@@ -120,9 +120,16 @@ defmodule TestServer do
     "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{uri}"
   end
 
-  defp autostart do
+  defp fetch_instance! do
+    case fetch_instance() do
+      :error -> raise "#{inspect(Instance)} is not running, did you start it?"
+      {:ok, instance} -> instance
+    end
+  end
+
+  defp fetch_instance do
     case InstanceManager.get_by_caller(self()) do
-      nil -> start([])
+      nil -> :error
       instance -> {:ok, instance}
     end
   end
@@ -157,6 +164,13 @@ defmodule TestServer do
     Instance.register(instance, {uri, options, stacktrace})
   end
 
+  defp autostart do
+    case fetch_instance() do
+      :error -> start()
+      {:ok, instance} -> {:ok, instance}
+    end
+  end
+
   defp default_response_handler(conn) do
     Conn.send_resp(conn, 200, to_string(Conn.get_http_protocol(conn)))
   end
@@ -165,12 +179,7 @@ defmodule TestServer do
   Fetches the generated x509 suite for the current test server instance.
   """
   @spec x509_suite() :: term()
-  def x509_suite do
-    case InstanceManager.get_by_caller(self()) do
-      nil -> raise "#{inspect(Instance)} is not running, did you start it?"
-      instance -> x509_suite(instance)
-    end
-  end
+  def x509_suite, do: x509_suite(fetch_instance!())
 
   @doc """
   Fetches the generated x509 suite for a test server instance.

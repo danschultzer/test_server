@@ -44,6 +44,7 @@ defmodule TestServer.Instance do
 
   @spec format_routes([map()]) :: binary()
   def format_routes([]), do: "None"
+
   def format_routes(routes) do
     routes
     |> Enum.with_index()
@@ -55,15 +56,16 @@ defmodule TestServer.Instance do
     end)
   end
 
-  @spec report_error(pid(), binary()) :: :ok
-  def report_error(instance, message) do
+  @spec report_error(pid(), {struct(), list()}) :: :ok
+  def report_error(instance, {exception, stacktrace}) do
     options = get_options(instance)
     caller = Keyword.fetch!(options, :caller)
 
-    unless Keyword.get(options, :suppress_warning, false), do: IO.warn(message)
+    unless Keyword.get(options, :suppress_warning, false),
+      do: IO.warn(Exception.format(:error, exception, stacktrace))
 
     ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      raise message
+      reraise exception, stacktrace
     end)
 
     :ok

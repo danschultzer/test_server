@@ -116,13 +116,13 @@ defmodule TestServer.Plug.Cowboy do
           resp_error(
             conn,
             instance,
-            """
-            Unexpected #{conn.method} request received at #{conn.request_path}.
+            {RuntimeError.exception("""
+             Unexpected #{conn.method} request received at #{conn.request_path}.
 
-            Active routes for request:
+             Active routes for request:
 
-            #{Instance.format_routes(Instance.active_routes(instance))}
-            """
+             #{Instance.format_routes(Instance.active_routes(instance))}
+             """), []}
           )
 
         {:error, {error, stacktrace}} ->
@@ -130,22 +130,10 @@ defmodule TestServer.Plug.Cowboy do
       end
     end
 
-    defp resp_error(conn, instance, {error, stacktrace}) do
-      resp_error(
-        conn,
-        instance,
-        """
-        #{inspect error}
+    defp resp_error(conn, instance, {exception, stacktrace}) do
+      Instance.report_error(instance, {exception, stacktrace})
 
-        #{Exception.format_stacktrace(stacktrace)}
-        """
-      )
-    end
-
-    defp resp_error(conn, instance, message) do
-      Instance.report_error(instance, message)
-
-      Conn.send_resp(conn, 500, to_string(message))
+      Conn.send_resp(conn, 500, Exception.format(:error, exception, stacktrace))
     end
   end
 end

@@ -1,3 +1,7 @@
+## v0.1.2 (TBA)
+
+- Better formatting of errors
+
 ## v0.1.1 (2022-09-11)
 
 - `TestServer.url/2` no longer autostarts the test server

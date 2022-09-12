@@ -163,7 +163,7 @@ defmodule TestServerTest do
       end
 
       assert capture_io(fn -> ExUnit.run() end) =~
-               "The test ended before the following TestServer route(s) received a request"
+               "The test ended before the following TestServer.Instance route(s) received a request"
     end
 
     test "with callback plug" do
@@ -175,6 +175,23 @@ defmodule TestServerTest do
 
       assert :ok = TestServer.add("/", to: MyPlug)
       assert request(TestServer.url("/")) == {:ok, to_string(MyPlug)}
+    end
+
+    test "with callback function raising exception" do
+      defmodule ToFunctionRaiseTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          assert :ok = TestServer.add("/", to: fn _conn -> raise "boom" end)
+          assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
+        end
+      end
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "(RuntimeError) boom"
+      assert io =~ "anonymous fn/1 in TestServerTest.ToFunctionRaiseTest"
     end
 
     test "with callback function" do

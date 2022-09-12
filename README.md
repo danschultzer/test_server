@@ -1,5 +1,8 @@
 # TestServer
 
+[![Github CI](https://github.com/danschultzer/test_server/workflows/CI/badge.svg)](https://github.com/danschultzer/test_server/actions?query=workflow%3ACI)
+[![hex.pm](https://img.shields.io/hexpm/v/test_server.svg)](https://hex.pm/packages/test_server)
+
 <!-- MDOC !-->
 
 No fuzz ExUnit test server to mock third party services.
@@ -70,7 +73,7 @@ end)
 
 By default all routes are served as plain HTTP.
 
-HTTPS can be enabled with the `:scheme` option when starting the test server. The certificate suite is will automatically be generated.
+HTTPS can be enabled with the `:scheme` option when starting the test server. The certificate suite is automatically generated.
 
 ```elixir
 {:ok, instance} = TestServer.start(scheme: :https)
@@ -86,8 +89,8 @@ TestServer.start(scheme: :https, cowboy_options: [keyfile: key, certfile: cert])
 When a route is matched it'll be removed from active routes list. The route will be triggered in the order they where added:
 
 ```elixir
-TestServer.add("/", via: :get, &Conn.send_resp(&1, 200, "first"))
-TestServer.add("/", via: :get, &Conn.send_resp(&1, 200, "second"))
+TestServer.add("/", via: :get, to: &Conn.send_resp(&1, 200, "first"))
+TestServer.add("/", via: :get, to: &Conn.send_resp(&1, 200, "second"))
 
 {:ok, "first"} = fetch_request()
 {:ok, "second"} = fetch_request()

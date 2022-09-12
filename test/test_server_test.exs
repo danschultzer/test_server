@@ -112,6 +112,7 @@ defmodule TestServerTest do
         use ExUnit.Case
 
         test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert :ok = TestServer.add("/")
           assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/path"))
         end
@@ -125,6 +126,8 @@ defmodule TestServerTest do
         use ExUnit.Case
 
         test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
           assert :ok = TestServer.add("/", via: :post)
           assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
         end
@@ -138,6 +141,7 @@ defmodule TestServerTest do
         use ExUnit.Case
 
         test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert :ok = TestServer.add("/")
 
           assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))

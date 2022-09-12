@@ -56,9 +56,10 @@ defmodule TestServer.Instance do
 
   @spec report_error(pid(), binary()) :: :ok
   def report_error(instance, message) do
-    caller = Keyword.fetch!(get_options(instance), :caller)
+    options = get_options(instance)
+    caller = Keyword.fetch!(options, :caller)
 
-    IO.warn(message)
+    unless Keyword.get(options, :suppress_warning, false), do: IO.warn(message)
 
     ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
       raise message

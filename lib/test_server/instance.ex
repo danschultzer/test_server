@@ -190,7 +190,7 @@ defmodule TestServer.Instance do
   end
 
   defp run_plug(%{to: to}, conn) when is_function(to) do
-    apply(to, [conn])
+    to.(conn)
   end
 
   defp run_plug(%{to: plug}, conn) when is_atom(plug) do

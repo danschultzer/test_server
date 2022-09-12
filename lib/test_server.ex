@@ -31,15 +31,30 @@ defmodule TestServer do
   end
 
   defp start_with_ex_unit(options, _sup) do
-    case InstanceManager.start_instance(options) do
+    [_first_module_entry | stacktrace] = get_stacktrace()
+
+    case InstanceManager.start_instance(self(), stacktrace, options) do
       {:ok, instance} ->
-        ExUnit.Callbacks.on_exit(fn -> stop(instance) end)
+        put_ex_unit_on_exit_callback(instance)
 
         {:ok, instance}
 
       {:error, error} ->
         raise_start_failure({:error, error})
     end
+  end
+
+  defp put_ex_unit_on_exit_callback(instance) do
+    ExUnit.Callbacks.on_exit(fn ->
+      case Process.alive?(instance) do
+        true ->
+          verify_routes!(instance)
+          stop(instance)
+
+        false ->
+          :ok
+      end
+    end)
   end
 
   defp raise_start_failure({:error, {{:EXIT, reason}, _spec}}) do
@@ -52,32 +67,6 @@ defmodule TestServer do
 
     #{Exception.format_exit(error)}
     """
-  end
-
-  @doc """
-  Shuts down the current test server instance
-  """
-  @spec stop() :: :ok | {:error, term()}
-  def stop do
-    case InstanceManager.get_by_caller(self()) do
-      nil -> :ok
-      instance -> stop(instance)
-    end
-  end
-
-  @doc """
-  Shuts down a test server instance
-  """
-  @spec stop(pid()) :: :ok | {:error, term()}
-  def stop(instance) do
-    case Process.alive?(instance) do
-      true ->
-        verify_routes!(instance)
-        InstanceManager.stop_instance(instance)
-
-      false ->
-        :ok
-    end
   end
 
   defp verify_routes!(instance) do
@@ -94,12 +83,36 @@ defmodule TestServer do
     end
   end
 
+  @doc """
+  Shuts down the current test server instance
+  """
+  @spec stop() :: :ok | {:error, term()}
+  def stop, do: stop(fetch_instance!())
+
+  @doc """
+  Shuts down a test server instance
+  """
+  @spec stop(pid()) :: :ok | {:error, term()}
+  def stop(instance) do
+    instance_alive!(instance)
+
+    InstanceManager.stop_instance(instance)
+  end
+
+  defp instance_alive!(instance) do
+    case Process.alive?(instance) do
+      true -> :ok
+      false -> raise "The #{inspect(Instance)} #{inspect(instance)} is not running"
+    end
+  end
+
   @spec url() :: binary()
   def url, do: url("")
 
   @spec url(binary() | keyword()) :: binary()
   def url(uri) when is_binary(uri), do: url(uri, [])
   def url(opts) when is_list(opts), do: url("", opts)
+  def url(instance) when is_pid(instance), do: url(instance, "", [])
 
   @doc """
   Produces a URL for the test server instance.
@@ -108,11 +121,22 @@ defmodule TestServer do
     * `:host` - binary host value, it'll be added to inet for IP 127.0.0.1, defaults to `"localhost"`;
   """
   @spec url(binary(), keyword()) :: binary()
-  def url(uri, opts) do
+  def url(uri, opts) when is_binary(uri), do: url(fetch_instance!(), uri, opts)
+
+  @spec url(pid(), binary()) :: binary()
+  def url(instance, uri) when is_pid(instance), do: url(instance, uri, [])
+
+  @doc """
+  Produces a URL for a test server instance.
+
+  See `url/2` for options.
+  """
+  @spec url(pid(), binary(), keyword()) :: binary()
+  def url(instance, uri, opts) do
+    instance_alive!(instance)
+
     unless is_nil(opts[:host]) or is_binary(opts[:host]),
       do: raise("Invalid host, got: #{inspect(opts[:host])}")
-
-    instance = fetch_instance!()
 
     domain = maybe_enable_host(opts[:host])
     options = Instance.get_options(instance)
@@ -122,15 +146,38 @@ defmodule TestServer do
 
   defp fetch_instance! do
     case fetch_instance() do
-      :error -> raise "#{inspect(Instance)} is not running, did you start it?"
+      :error -> raise "No current #{inspect(Instance)} is not running"
       {:ok, instance} -> instance
     end
   end
 
   defp fetch_instance do
     case InstanceManager.get_by_caller(self()) do
-      nil -> :error
-      instance -> {:ok, instance}
+      nil ->
+        :error
+
+      [instance] ->
+        {:ok, instance}
+
+      [_instance | _rest] = instances ->
+        [{m, f, a, _} | _stacktrace] = get_stacktrace()
+
+        formatted_instances =
+          instances
+          |> Enum.map(&{&1, Instance.get_options(&1)})
+          |> Enum.with_index()
+          |> Enum.map_join("\n\n", fn {{instance, options}, index} ->
+            """
+            ##{index + 1}: #{inspect(instance)}
+                #{Exception.format_stacktrace_entry(List.first(options[:stacktrace]))}")}
+            """
+          end)
+
+        raise """
+        Multiple #{inspect(Instance)}'s running, please pass instance to `#{inspect(m)}.#{f}/#{a}`.
+
+        #{formatted_instances}
+        """
     end
   end
 
@@ -143,8 +190,11 @@ defmodule TestServer do
     host
   end
 
+  @spec add(binary()) :: :ok | {:error, term()}
+  def add(uri), do: add(uri, [])
+
   @doc """
-  Adds a route to the test server.
+  Adds a route to the current test server.
 
   ## Options
 
@@ -153,16 +203,55 @@ defmodule TestServer do
     * `:to`      - a Plug or anonymous function that will be called when the route matches.
   """
   @spec add(binary(), keyword()) :: :ok | {:error, term()}
-  def add(uri, options \\ []) when is_binary(uri) and is_list(options) do
+  def add(uri, options) when is_binary(uri) do
     {:ok, instance} = autostart()
 
-    {:current_stacktrace, [_process, _test_server | stacktrace]} =
-      Process.info(self(), :current_stacktrace)
+    add(instance, uri, options)
+  end
+
+  @spec add(pid(), binary()) :: :ok | {:error, term()}
+  def add(instance, uri) when is_pid(instance) and is_binary(uri), do: add(instance, uri, [])
+
+  @doc """
+  Adds a route to a test server.
+
+  See `add/2` for options.
+  """
+  @spec add(pid(), binary(), keyword()) :: :ok | {:error, term()}
+  def add(instance, uri, options) when is_pid(instance) and is_binary(uri) and is_list(options) do
+    instance_alive!(instance)
+
+    [_first_module_entry | stacktrace] = get_stacktrace()
 
     options = Keyword.put_new(options, :to, &default_response_handler/1)
 
     Instance.register(instance, {uri, options, stacktrace})
   end
+
+  defp get_stacktrace do
+    {:current_stacktrace, [{Process, :info, _, _} | stacktrace]} =
+      Process.info(self(), :current_stacktrace)
+
+    first_module_entry =
+      stacktrace
+      |> Enum.reverse()
+      |> Enum.find(fn {mod, _, _, _} -> mod == __MODULE__ end)
+
+    [first_module_entry] ++ prune_stacktrace(stacktrace)
+  end
+
+  # Remove TestServer
+  defp prune_stacktrace([{__MODULE__, _, _, _} | t]), do: prune_stacktrace(t)
+
+  # Assertions can pop-up in the middle of the stack
+  defp prune_stacktrace([{ExUnit.Assertions, _, _, _} | t]), do: prune_stacktrace(t)
+
+  # As soon as we see a Runner, it is time to ignore the stacktrace
+  defp prune_stacktrace([{ExUnit.Runner, _, _, _} | _]), do: []
+
+  # All other cases
+  defp prune_stacktrace([h | t]), do: [h | prune_stacktrace(t)]
+  defp prune_stacktrace([]), do: []
 
   defp autostart do
     case fetch_instance() do
@@ -186,6 +275,8 @@ defmodule TestServer do
   """
   @spec x509_suite(pid()) :: term()
   def x509_suite(instance) do
+    instance_alive!(instance)
+
     options = Instance.get_options(instance)
 
     cond do

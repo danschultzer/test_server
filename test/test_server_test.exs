@@ -62,20 +62,58 @@ defmodule TestServerTest do
     end
   end
 
-  test "stop/0" do
-    assert {:ok, pid} = TestServer.start()
-    url = TestServer.url("/")
+  describe "stop/1" do
+    test "when not running" do
+      assert_raise RuntimeError, "No current TestServer.Instance is not running", fn ->
+        TestServer.stop()
+      end
 
-    assert :ok = TestServer.stop()
-    refute Process.alive?(pid)
+      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+        {:ok, instance} = TestServer.start()
 
-    assert {:error, {:failed_connect, _}} = request(url)
+        assert :ok = TestServer.stop()
+
+        TestServer.stop(instance)
+      end
+    end
+
+    test "stops" do
+      assert {:ok, pid} = TestServer.start()
+      url = TestServer.url("/")
+
+      assert :ok = TestServer.stop()
+      refute Process.alive?(pid)
+
+      assert {:error, {:failed_connect, _}} = request(url)
+    end
+
+    test "with multiple instances" do
+      {:ok, instance_1} = TestServer.start()
+      {:ok, _instance_2} = TestServer.start()
+
+      assert_raise RuntimeError,
+                   ~r/Multiple TestServer\.Instance's running, please pass instance to `TestServer\.stop\/0`/,
+                   fn ->
+                     TestServer.stop()
+                   end
+
+      assert :ok = TestServer.stop(instance_1)
+      assert :ok = TestServer.stop()
+    end
   end
 
-  describe "url/2" do
+  describe "url/3" do
     test "when instance not running" do
-      assert_raise RuntimeError, ~r/TestServer.Instance is not running, did you start it?/, fn ->
+      assert_raise RuntimeError, "No current TestServer.Instance is not running", fn ->
         TestServer.url()
+      end
+
+      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+        {:ok, instance} = TestServer.start()
+
+        assert :ok = TestServer.stop()
+
+        TestServer.url(instance)
       end
     end
 
@@ -90,13 +128,36 @@ defmodule TestServerTest do
     test "produces routes" do
       TestServer.start()
 
-      assert TestServer.url("/") == TestServer.url("/")
+      assert TestServer.url("/") =~ ~r/^http\:\/\/localhost\:[0-9]+\/$/
       refute TestServer.url("/") == TestServer.url("/path")
       refute TestServer.url("/") == TestServer.url("/", host: "bad-host")
+    end
+
+    test "with multiple instances" do
+      {:ok, instance_1} = TestServer.start()
+      {:ok, instance_2} = TestServer.start()
+
+      assert_raise RuntimeError,
+                   ~r/Multiple TestServer\.Instance's running, please pass instance to `TestServer\.url\/2`/,
+                   fn ->
+                     TestServer.url()
+                   end
+
+      refute TestServer.url(instance_1) == TestServer.url(instance_2)
     end
   end
 
   describe "add/3" do
+    test "when instance not running" do
+      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+        {:ok, instance} = TestServer.start()
+
+        assert :ok = TestServer.stop()
+
+        TestServer.add(instance, "/")
+      end
+    end
+
     test "invalid options" do
       assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
         TestServer.add("/", match: :invalid)
@@ -105,6 +166,21 @@ defmodule TestServerTest do
       assert_raise BadFunctionError, ~r/expected a function, got: "not a plug"/, fn ->
         TestServer.add("/", to: "not a plug")
       end
+    end
+
+    test "with multiple instances" do
+      {:ok, instance_1} = TestServer.start()
+      {:ok, _instance_2} = TestServer.start()
+
+      assert_raise RuntimeError,
+                   ~r/Multiple TestServer\.Instance's running, please pass instance to `TestServer\.add\/2`/,
+                   fn ->
+                     TestServer.add("/")
+                   end
+
+      assert :ok = TestServer.add(instance_1, "/")
+
+      TestServer.stop(instance_1)
     end
 
     test "with mismatching URI" do
@@ -225,8 +301,16 @@ defmodule TestServerTest do
 
   describe "x509_suite/0" do
     test "when instance not running" do
-      assert_raise RuntimeError, ~r/TestServer.Instance is not running, did you start it?/, fn ->
+      assert_raise RuntimeError, "No current TestServer.Instance is not running", fn ->
         TestServer.x509_suite()
+      end
+
+      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+        {:ok, instance} = TestServer.start()
+
+        assert :ok = TestServer.stop()
+
+        TestServer.x509_suite(instance)
       end
     end
 

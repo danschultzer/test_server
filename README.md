@@ -9,10 +9,10 @@ No fuzz ExUnit test server to mock third party services.
 
 Features:
 
-* HTTP/1
-* HTTP/2
-* Built-in TLS with self-signed certificates
-* Plug route matching
+- HTTP/1
+- HTTP/2
+- Built-in TLS with self-signed certificates
+- Plug route matching
 
 <!-- MDOC !-->
 
@@ -35,7 +35,7 @@ test "fetch_url/0" do
   # The test server will autostart the current test, if not already running
   TestServer.add("/", via: :get)
 
-  # The URL is derrived from the current test server instance
+  # The URL is derived from the current test server instance
   Application.put_env(:my_app, :fetch_url, TestServer.url())
 
   {:ok, "HTTP"} = MyModule.fetch_url()

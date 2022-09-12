@@ -23,7 +23,7 @@ Add `test_server` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:test_server, "~> 0.1.0", only: [:test]}
+    {:test_server, "~> 0.1.1", only: [:test]}
   ]
 end
 ```

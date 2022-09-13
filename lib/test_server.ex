@@ -441,16 +441,17 @@ defmodule TestServer do
   @doc """
   Sends an message to a websocket instance.
   """
-  @spec websocket_info(websocket_socket(), keyword()) :: :ok
-  def websocket_info({instance, _route_ref} = socket, options \\ []) do
+  @spec websocket_info(websocket_socket(), function() | nil) :: :ok
+  def websocket_info({instance, _route_ref} = socket, callback \\ nil)
+      when is_function(callback) or is_nil(callback) do
     instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = get_stacktrace()
 
-    options = Keyword.put_new(options, :to, &default_websocket_info/1)
+    callback = callback || (&default_websocket_info/1)
 
     for pid <- Instance.active_websocket_connections(socket) do
-      send(pid, {options, stacktrace})
+      send(pid, {callback, stacktrace})
     end
 
     :ok

@@ -1,3 +1,7 @@
+## v0.1.5 (TBA)
+
+- `TestServer.websocket_info/2` now takes the callback function as second argument
+
 ## v0.1.4 (2022-09-13)
 
 - WebSocket support

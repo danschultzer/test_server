@@ -122,7 +122,7 @@ TestServer.websocket_handle(socket)
 TestServer.websocket_handle(socket, to: fn _frame_, state -> {:reply, "pong", state})
 TestServer.websocket_handle(socket, match: fn {_opcode, message}, _state -> messsage == "ping")
 
-TestServer.websocket_info(socket, to: fn state -> {:reply, {:text, "ping"}, state} end)
+TestServer.websocket_info(socket, fn state -> {:reply, {:text, "ping"}, state} end)
 ```
 
 <!-- MDOC !-->

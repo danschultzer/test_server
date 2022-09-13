@@ -33,7 +33,10 @@ defmodule TestServer.Instance do
     GenServer.call(instance, {:register, {:plug, {plug, stacktrace}}})
   end
 
-  @spec register(TestServer.websocket_socket(), {:websocket, {:handle, keyword(), TestServer.stacktrace()}}) ::
+  @spec register(
+          TestServer.websocket_socket(),
+          {:websocket, {:handle, keyword(), TestServer.stacktrace()}}
+        ) ::
           {:ok, map()}
   def register({instance, _router_ref} = socket, {:websocket, {:handle, options, stacktrace}}) do
     unless is_nil(options[:match]) or is_function(options[:match]),
@@ -66,17 +69,17 @@ defmodule TestServer.Instance do
 
   @spec dispatch(
           TestServer.websocket_socket(),
-          {:websocket, {:info, keyword(), TestServer.stacktrace()}, TestServer.websocket_state()}
+          {:websocket, {:info, function(), TestServer.stacktrace()}, TestServer.websocket_state()}
         ) ::
           {:ok, TestServer.websocket_reply()}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(
         {instance, _router_ref} = socket,
-        {:websocket, {:info, options, stacktrace}, state}
+        {:websocket, {:info, callback, stacktrace}, state}
       ) do
     GenServer.call(
       instance,
-      {:dispatch, {:websocket, socket, {:info, options, stacktrace}, state}}
+      {:dispatch, {:websocket, socket, {:info, callback, stacktrace}, state}}
     )
   end
 
@@ -286,16 +289,13 @@ defmodule TestServer.Instance do
   end
 
   def handle_call(
-        {:dispatch, {:websocket, _socket, {:info, options, stacktrace}, websocket_state}},
+        {:dispatch, {:websocket, _socket, {:info, callback, stacktrace}, websocket_state}},
         _from,
         state
       ) do
     res =
       try do
-        unless is_function(options[:to]),
-          do: raise(BadFunctionError, term: options[:to])
-
-        frame = validate_websocket_frame!(options[:to].(websocket_state), stacktrace)
+        frame = validate_websocket_frame!(callback.(websocket_state), stacktrace)
 
         {:ok, frame}
       rescue

@@ -598,12 +598,6 @@ defmodule TestServerTest do
       end
     end
 
-    test "invalid options" do
-      assert_raise ArgumentError, ~r/`:to` is an invalid option/, fn ->
-        TestServer.websocket_init("/", to: :invalid)
-      end
-    end
-
     test "with invalid callback response" do
       defmodule WebSocketInfoInvalidMessageTest do
         use ExUnit.Case
@@ -612,7 +606,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert {:ok, socket} = TestServer.websocket_init("/ws")
           assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-          assert :ok = TestServer.websocket_info(socket, to: fn _state -> :invalid end)
+          assert :ok = TestServer.websocket_info(socket, fn _state -> :invalid end)
 
           assert {:ok, message} = WebSocketClient.receive_message(client)
           assert message =~ "(RuntimeError) Invalid callback response, got: :invalid."
@@ -632,7 +626,7 @@ defmodule TestServerTest do
           assert {:ok, socket} = TestServer.websocket_init("/ws")
           assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
 
-          assert :ok = TestServer.websocket_info(socket, to: fn _state -> raise "boom" end)
+          assert :ok = TestServer.websocket_info(socket, fn _state -> raise "boom" end)
 
           assert {:ok, message} = WebSocketClient.receive_message(client)
           assert message =~ "(RuntimeError) boom"
@@ -649,11 +643,9 @@ defmodule TestServerTest do
       assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
 
       assert :ok =
-               TestServer.websocket_info(socket,
-                 to: fn state ->
-                   {:reply, {:text, "pong"}, state}
-                 end
-               )
+               TestServer.websocket_info(socket, fn state ->
+                 {:reply, {:text, "pong"}, state}
+               end)
 
       assert {:ok, "pong"} = WebSocketClient.receive_message(client)
     end

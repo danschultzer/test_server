@@ -80,8 +80,8 @@ defmodule TestServer.Plug.Cowboy.Handler do
   defp handle_reply({:ok, state}, socket), do: {:ok, {socket, state}}
 
   @impl true
-  def websocket_info({options, stacktrace}, {socket, state}) do
-    case Instance.dispatch(socket, {:websocket, {:info, options, stacktrace}, state}) do
+  def websocket_info({callback, stacktrace}, {socket, state}) do
+    case Instance.dispatch(socket, {:websocket, {:info, callback, stacktrace}, state}) do
       {:ok, result} -> handle_reply(result, socket)
       {:error, {error, stacktrace}} -> reply_with_error({socket, state}, {error, stacktrace})
     end

@@ -64,7 +64,7 @@ defmodule TestServerTest do
 
   describe "stop/1" do
     test "when not running" do
-      assert_raise RuntimeError, "No current TestServer.Instance is not running", fn ->
+      assert_raise RuntimeError, "No current TestServer.Instance running", fn ->
         TestServer.stop()
       end
 
@@ -125,7 +125,7 @@ defmodule TestServerTest do
 
   describe "url/3" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.Instance is not running", fn ->
+      assert_raise RuntimeError, "No current TestServer.Instance running", fn ->
         TestServer.url()
       end
 
@@ -398,7 +398,7 @@ defmodule TestServerTest do
 
   describe "x509_suite/0" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.Instance is not running", fn ->
+      assert_raise RuntimeError, "No current TestServer.Instance running", fn ->
         TestServer.x509_suite()
       end
 

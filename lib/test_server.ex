@@ -157,7 +157,7 @@ defmodule TestServer do
 
   defp fetch_instance! do
     case fetch_instance() do
-      :error -> raise "No current #{inspect(Instance)} is not running"
+      :error -> raise "No current #{inspect(Instance)} running"
       {:ok, instance} -> instance
     end
   end

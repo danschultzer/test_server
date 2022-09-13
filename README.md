@@ -47,7 +47,7 @@ The `TestServer.add/2` function can route a request to an anonymous function:
 
 ```elixir
 TestServer.add("/", to: fn conn ->
-  Conn.send_resp(conn, 200, "success")
+  Plug.Conn.send_resp(conn, 200, "success")
 end)
 ```
 
@@ -90,8 +90,8 @@ TestServer.start(scheme: :https, cowboy_options: [keyfile: key, certfile: cert])
 When a route is matched it'll be removed from active routes list. The route will be triggered in the order they were added:
 
 ```elixir
-TestServer.add("/", via: :get, to: &Conn.send_resp(&1, 200, "first"))
-TestServer.add("/", via: :get, to: &Conn.send_resp(&1, 200, "second"))
+TestServer.add("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "first"))
+TestServer.add("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "second"))
 
 {:ok, "first"} = fetch_request()
 {:ok, "second"} = fetch_request()

@@ -8,6 +8,14 @@ defmodule TestServer do
   alias Plug.Conn
   alias TestServer.{Instance, InstanceManager}
 
+  @type instance :: pid()
+  @type route :: reference()
+  @type stacktrace :: list()
+  @type websocket_socket :: {instance(), route()}
+  @type websocket_frame :: {atom(), any()}
+  @type websocket_state :: any()
+  @type websocket_reply :: {:reply, any(), websocket_state()} | {:ok, websocket_state()}
+
   @doc """
   Start a test server instance.
 
@@ -49,6 +57,7 @@ defmodule TestServer do
       case Process.alive?(instance) do
         true ->
           verify_routes!(instance)
+          verify_websocket_handlers!(instance)
           stop(instance)
 
         false ->
@@ -70,15 +79,35 @@ defmodule TestServer do
   end
 
   defp verify_routes!(instance) do
-    case Instance.active_routes(instance) do
+    instance
+    |> Instance.routes()
+    |> Enum.reject(& &1.suspended)
+    |> case do
       [] ->
         :ok
 
-      routes ->
+      active_routes ->
         raise """
         The test ended before the following #{inspect(Instance)} route(s) received a request:
 
-        #{Instance.format_routes(routes)}
+        #{Instance.format_routes(active_routes)}
+        """
+    end
+  end
+
+  defp verify_websocket_handlers!(instance) do
+    instance
+    |> Instance.websocket_handlers()
+    |> Enum.reject(& &1.suspended)
+    |> case do
+      [] ->
+        :ok
+
+      active_websocket_handlers ->
+        raise """
+        The test ended before the following #{inspect(Instance)} websocket handler(s) received a message:
+
+        #{Instance.format_websocket_handlers(active_websocket_handlers)}
         """
     end
   end
@@ -210,7 +239,7 @@ defmodule TestServer do
     host
   end
 
-  @spec add(binary()) :: :ok | {:error, term()}
+  @spec add(binary()) :: :ok
   def add(uri), do: add(uri, [])
 
   @doc """
@@ -218,18 +247,18 @@ defmodule TestServer do
 
   ## Options
 
-    * `:via`     - matches the route against some specific HTTP method(s) specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`.
-    * `:match`   - an anonymous function that will be called to see if a route matches, defaults to matching with arguments of uri and `:via` option.
-    * `:to`      - a Plug or anonymous function that will be called when the route matches.
+    * `:via`       - matches the route against some specific HTTP method(s) specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`.
+    * `:match`     - an anonymous function that will be called to see if a route matches, defaults to matching with arguments of uri and `:via` option.
+    * `:to`        - a Plug or anonymous function that will be called when the route matches.
   """
-  @spec add(binary(), keyword()) :: :ok | {:error, term()}
+  @spec add(binary(), keyword()) :: :ok
   def add(uri, options) when is_binary(uri) do
     {:ok, instance} = autostart()
 
     add(instance, uri, options)
   end
 
-  @spec add(pid(), binary()) :: :ok | {:error, term()}
+  @spec add(pid(), binary()) :: :ok
   def add(instance, uri) when is_pid(instance) and is_binary(uri), do: add(instance, uri, [])
 
   @doc """
@@ -237,7 +266,7 @@ defmodule TestServer do
 
   See `add/2` for options.
   """
-  @spec add(pid(), binary(), keyword()) :: :ok | {:error, term()}
+  @spec add(pid(), binary(), keyword()) :: :ok
   def add(instance, uri, options) when is_pid(instance) and is_binary(uri) and is_list(options) do
     instance_alive!(instance)
 
@@ -245,7 +274,9 @@ defmodule TestServer do
 
     options = Keyword.put_new(options, :to, &default_response_handler/1)
 
-    Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
+    {:ok, _route} = Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
+
+    :ok
   end
 
   defp get_stacktrace do
@@ -289,7 +320,7 @@ defmodule TestServer do
 
   This plug will be called for all requests before route is matched.
   """
-  @spec plug(atom() | function()) :: :ok | {:error, term()}
+  @spec plug(atom() | function()) :: :ok
   def plug(plug) when is_atom(plug) or is_function(plug) do
     {:ok, instance} = autostart()
 
@@ -301,11 +332,13 @@ defmodule TestServer do
 
   See `plug/1` for options.
   """
-  @spec plug(pid(), atom() | function()) :: :ok | {:error, term()}
+  @spec plug(pid(), atom() | function()) :: :ok
   def plug(instance, plug) do
     [_first_module_entry | stacktrace] = get_stacktrace()
 
-    Instance.register(instance, {:plug, {plug, stacktrace}})
+    {:ok, _plug} = Instance.register(instance, {:plug, {plug, stacktrace}})
+
+    :ok
   end
 
   @doc """
@@ -334,4 +367,94 @@ defmodule TestServer do
         options[:x509_suite]
     end
   end
+
+  @spec websocket_init(binary()) :: {:ok, websocket_socket()} | {:error, term()}
+  def websocket_init(uri) when is_binary(uri), do: websocket_init(uri, [])
+
+  @doc """
+  Adds a websocket route to current test server.
+
+  ## Options
+
+  Takes the same options as `add/2`, except `:to`.
+  """
+  @spec websocket_init(binary(), keyword()) :: {:ok, websocket_socket()}
+  def websocket_init(uri, options) when is_binary(uri) do
+    {:ok, instance} = autostart()
+
+    websocket_init(instance, uri, options)
+  end
+
+  @spec websocket_init(pid(), binary()) :: {:ok, websocket_socket()}
+  def websocket_init(instance, uri) when is_pid(instance) and is_binary(uri) do
+    websocket_init(instance, uri, [])
+  end
+
+  @doc """
+  Adds a websocket route to a test server.
+
+  See `websocket_init/2` for options.
+  """
+  @spec websocket_init(pid(), binary(), keyword()) :: {:ok, websocket_socket()}
+  def websocket_init(instance, uri, options) do
+    instance_alive!(instance)
+
+    if Keyword.has_key?(options, :to), do: raise(ArgumentError, "`:to` is an invalid option")
+
+    [_first_module_entry | stacktrace] = get_stacktrace()
+
+    options = Keyword.put(options, :to, :websocket)
+
+    {:ok, %{ref: ref}} =
+      Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
+
+    {:ok, {instance, ref}}
+  end
+
+  @spec websocket_handle(websocket_socket()) :: :ok | {:error, term()}
+  def websocket_handle(socket), do: websocket_handle(socket, [])
+
+  @doc """
+  Adds a message handler to a websocket instance.
+
+  ## Options
+
+    * `:match`     - an anonymous function that will be called to see if a message matches, defaults to matching anything.
+    * `:to`        - an anonymous function that will be called when the message matches.
+  """
+  @spec websocket_handle(websocket_socket(), keyword()) :: :ok
+  def websocket_handle({instance, _route_ref} = socket, options) do
+    instance_alive!(instance)
+
+    [_first_module_entry | stacktrace] = get_stacktrace()
+
+    options = Keyword.put_new(options, :to, &default_websocket_handle/2)
+
+    {:ok, _handler} = Instance.register(socket, {:websocket, {:handle, options, stacktrace}})
+
+    :ok
+  end
+
+  defp default_websocket_handle(frame, state),
+    do: {:reply, {:text, "ECHO #{inspect(frame)}"}, state}
+
+  @doc """
+  Sends an message to a websocket instance.
+  """
+  @spec websocket_info(websocket_socket(), keyword()) :: :ok
+  def websocket_info({instance, _route_ref} = socket, options \\ []) do
+    instance_alive!(instance)
+
+    [_first_module_entry | stacktrace] = get_stacktrace()
+
+    options = Keyword.put_new(options, :to, &default_websocket_info/1)
+
+    for pid <- Instance.active_websocket_connections(socket) do
+      send(pid, {options, stacktrace})
+    end
+
+    :ok
+  end
+
+  defp default_websocket_info(state), do: {:reply, {:text, "ping"}, state}
 end

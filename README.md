@@ -11,6 +11,7 @@ Features:
 
 - HTTP/1
 - HTTP/2
+- WebSocket
 - Built-in TLS with self-signed certificates
 - Plug route matching
 
@@ -110,6 +111,18 @@ TestServer.plug(fn conn ->
 end)
 
 TestServer.plug(MyPlug)
+```
+
+WebSocket endpoint can also be set up. By default a response with `ECHO #{inspect frame}` will be returned.
+
+```elixir
+{:ok, socket} = TestServer.websocket_init("/ws")
+
+TestServer.websocket_handle(socket)
+TestServer.websocket_handle(socket, to: fn _frame_, state -> {:reply, "pong", state})
+TestServer.websocket_handle(socket, match: fn {_opcode, message}, _state -> messsage == "ping")
+
+TestServer.websocket_info(socket, to: fn state -> {:reply, {:text, "ping"}, state} end)
 ```
 
 <!-- MDOC !-->

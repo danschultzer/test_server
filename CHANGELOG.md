@@ -1,3 +1,7 @@
+## v0.1.4 (TBA)
+
+- WebSocket support
+
 ## v0.1.3 (2022-09-12)
 
 - Improved multi-instance handling

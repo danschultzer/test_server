@@ -1,4 +1,4 @@
-## v0.1.4 (TBA)
+## v0.1.4 (2022-09-13)
 
 - WebSocket support
 

@@ -1,4 +1,4 @@
-## v0.1.3 (TBA)
+## v0.1.3 (2022-09-13)
 
 - Improved multi-instance handling
 - Support for pre-match plugs

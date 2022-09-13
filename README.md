@@ -33,7 +33,7 @@ end
 
 ```elixir
 test "fetch_url/0" do
-  # The test server will autostart the current test, if not already running
+  # The test server will autostart the current test server, if not already running
   TestServer.add("/", via: :get)
 
   # The URL is derived from the current test server instance
@@ -119,11 +119,11 @@ WebSocket endpoint can also be set up. By default the handler will echo what was
 test "WebSocketClient" do
   {:ok, socket} = TestServer.websocket_init("/ws")
 
-  {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-
   :ok = TestServer.websocket_handle(socket)
-  :ok = TestServer.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, "pong", state})
+  :ok = TestServer.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, "pong", state} end)
   :ok = TestServer.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi")
+
+  {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
 
   :ok = WebSocketClient.send(client, "hello")
   {:ok, "hello"} = WebSocketClient.receive(client)

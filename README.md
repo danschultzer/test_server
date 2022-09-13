@@ -113,16 +113,30 @@ end)
 TestServer.plug(MyPlug)
 ```
 
-WebSocket endpoint can also be set up. By default a response with `ECHO #{inspect frame}` will be returned.
+WebSocket endpoint can also be set up. By default the handler will echo what was received.
 
 ```elixir
-{:ok, socket} = TestServer.websocket_init("/ws")
+test "WebSocketClient" do
+  {:ok, socket} = TestServer.websocket_init("/ws")
 
-TestServer.websocket_handle(socket)
-TestServer.websocket_handle(socket, to: fn _frame_, state -> {:reply, "pong", state})
-TestServer.websocket_handle(socket, match: fn {_opcode, message}, _state -> messsage == "ping")
+  {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
 
-TestServer.websocket_info(socket, fn state -> {:reply, {:text, "ping"}, state} end)
+  :ok = TestServer.websocket_handle(socket)
+  :ok = TestServer.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, "pong", state})
+  :ok = TestServer.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi")
+
+  :ok = WebSocketClient.send(client, "hello")
+  {:ok, "hello"} = WebSocketClient.receive(client)
+
+  :ok = WebSocketClient.send(client, "ping")
+  {:ok, "pong"} = WebSocketClient.receive(client)
+
+  :ok = WebSocketClient.send("hi")
+  {:ok, "hi"} = WebSocketClient.receive(client)
+
+  :ok = TestServer.websocket_info(socket, fn state -> {:reply, {:text, "ping"}, state} end)
+  {:ok, "ping"} = WebSocketClient.receive(client)
+end
 ```
 
 <!-- MDOC !-->

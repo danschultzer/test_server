@@ -583,7 +583,7 @@ defmodule TestServerTest do
       assert :ok =
                TestServer.websocket_handle(socket, match: fn _frame, %{custom: true} -> true end)
 
-      assert WebSocketClient.send_message(client, "ping") == {:ok, "ECHO {:text, \"ping\"}"}
+      assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}
     end
   end
 

@@ -249,7 +249,7 @@ defmodule TestServer do
 
     * `:via`       - matches the route against some specific HTTP method(s) specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`.
     * `:match`     - an anonymous function that will be called to see if a route matches, defaults to matching with arguments of uri and `:via` option.
-    * `:to`        - a Plug or anonymous function that will be called when the route matches.
+    * `:to`        - a Plug or anonymous function that will be called when the route matches, defaults to return the http scheme.
   """
   @spec add(binary(), keyword()) :: :ok
   def add(uri, options) when is_binary(uri) do
@@ -420,7 +420,7 @@ defmodule TestServer do
   ## Options
 
     * `:match`     - an anonymous function that will be called to see if a message matches, defaults to matching anything.
-    * `:to`        - an anonymous function that will be called when the message matches.
+    * `:to`        - an anonymous function that will be called when the message matches, defaults to returning received message.
   """
   @spec websocket_handle(websocket_socket(), keyword()) :: :ok
   def websocket_handle({instance, _route_ref} = socket, options) do
@@ -436,7 +436,7 @@ defmodule TestServer do
   end
 
   defp default_websocket_handle(frame, state),
-    do: {:reply, {:text, "ECHO #{inspect(frame)}"}, state}
+    do: {:reply, frame, state}
 
   @doc """
   Sends an message to a websocket instance.

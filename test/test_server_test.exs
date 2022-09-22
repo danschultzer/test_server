@@ -70,7 +70,7 @@ defmodule TestServerTest do
         TestServer.stop()
       end
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -131,7 +131,7 @@ defmodule TestServerTest do
         TestServer.url()
       end
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -172,7 +172,7 @@ defmodule TestServerTest do
 
   describe "add/3" do
     test "when instance not running" do
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -217,7 +217,7 @@ defmodule TestServerTest do
         end
       end
 
-      assert capture_io(fn -> ExUnit.run() end) =~ "Unexpected GET request received at /path."
+      assert capture_io(fn -> ExUnit.run() end) =~ "received an unexpected GET request at /path."
     end
 
     test "with mismatching method" do
@@ -232,7 +232,7 @@ defmodule TestServerTest do
         end
       end
 
-      assert capture_io(fn -> ExUnit.run() end) =~ "Unexpected GET request received at /."
+      assert capture_io(fn -> ExUnit.run() end) =~ "received an unexpected GET request at /."
     end
 
     test "with too many requests" do
@@ -249,7 +249,7 @@ defmodule TestServerTest do
       end
 
       assert captured_io = capture_io(fn -> ExUnit.run() end)
-      assert captured_io =~ "Unexpected GET request received at / with params:"
+      assert captured_io =~ "received an unexpected GET request at / with params:"
       assert captured_io =~ "query_params: %{\"a\" => \"1\"}"
     end
 
@@ -263,7 +263,7 @@ defmodule TestServerTest do
       end
 
       assert capture_io(fn -> ExUnit.run() end) =~
-               ~r/The test ended before the following TestServer\.Instance \#PID\<[0-9.]+\> route\(s\) received a request/
+               "did not receive a request for these routes before the test ended:"
     end
 
     test "with callback plug" do
@@ -404,7 +404,7 @@ defmodule TestServerTest do
         TestServer.x509_suite()
       end
 
-      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -417,7 +417,7 @@ defmodule TestServerTest do
       TestServer.start()
 
       assert_raise RuntimeError,
-                   "The TestServer.Instance is not running with `[scheme: :https]` option",
+                   ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running with `\[scheme: :https\]` option/,
                    fn ->
                      TestServer.x509_suite()
                    end
@@ -434,9 +434,11 @@ defmodule TestServerTest do
 
       TestServer.start(scheme: :https, cowboy_options: cowboy_options)
 
-      assert_raise RuntimeError, ~r/The TestServer\.Instance is running with custom SSL/, fn ->
-        TestServer.x509_suite()
-      end
+      assert_raise RuntimeError,
+                   ~r/TestServer\.Instance \#PID\<[0-9.]+\> is running with custom SSL/,
+                   fn ->
+                     TestServer.x509_suite()
+                   end
     end
   end
 
@@ -445,7 +447,7 @@ defmodule TestServerTest do
       {:ok, instance} = TestServer.start()
       assert :ok = TestServer.stop()
 
-      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         TestServer.websocket_init(instance, "/ws")
       end
     end
@@ -474,7 +476,7 @@ defmodule TestServerTest do
       assert {:ok, socket} = TestServer.websocket_init("/ws")
       assert :ok = TestServer.stop(instance)
 
-      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         TestServer.websocket_handle(socket)
       end
     end
@@ -501,10 +503,10 @@ defmodule TestServerTest do
       end
 
       assert capture_io(fn -> ExUnit.run() end) =~
-               ~r/The test ended before the following TestServer\.Instance \#PID\<[0-9.]+\> websocket handler\(s\) received a message/
+               "did not receive a frame for these websocket handlers before the test ended:"
     end
 
-    test "when receiving unexpected message" do
+    test "when receiving unexpected frame" do
       defmodule WebSocketHandleTooManyMessagesTest do
         use ExUnit.Case
 
@@ -516,11 +518,11 @@ defmodule TestServerTest do
           assert WebSocketClient.send_message(client, "ping") == :ok
 
           assert WebSocketClient.send_message(client, "ping") =~
-                   "Unexpected message received for WebSocket"
+                   "received an unexpected WebSocket frame"
         end
       end
 
-      assert capture_io(fn -> ExUnit.run() end) =~ "Unexpected message received for WebSocket"
+      assert capture_io(fn -> ExUnit.run() end) =~ "received an unexpected WebSocket frame"
     end
 
     test "with callback function raising exception" do
@@ -593,7 +595,7 @@ defmodule TestServerTest do
       assert {:ok, socket} = TestServer.websocket_init("/ws")
       assert :ok = TestServer.stop(instance)
 
-      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         TestServer.websocket_info(socket)
       end
     end

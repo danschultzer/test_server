@@ -115,6 +115,11 @@ defmodule TestServer.Instance do
     end)
   end
 
+  @spec format_instance(pid()) :: binary()
+  def format_instance(instance) do
+    "#{inspect(__MODULE__)} #{inspect(instance)}"
+  end
+
   @spec websocket_handlers(pid()) :: [map()]
   def websocket_handlers(instance) do
     GenServer.call(instance, :websocket_handlers)

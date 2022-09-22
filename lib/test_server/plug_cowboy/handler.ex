@@ -31,14 +31,14 @@ defmodule TestServer.Plug.Cowboy.Handler do
   end
 
   @impl true
-  def websocket_handle(frame, {socket, state}) do
+  def websocket_handle(frame, {{instance, _route_ref} = socket, state}) do
     case Instance.dispatch(socket, {:websocket, {:handle, frame}, state}) do
       {:ok, result} ->
         handle_reply(result, socket)
 
       {:error, :not_found} ->
         message =
-          "Unexpected message received for WebSocket"
+          "#{Instance.format_instance(instance)} received an unexpected WebSocket frame"
           |> append_formatted_frame(frame)
           |> append_formatted_websocket_handlers(socket)
 
@@ -57,7 +57,7 @@ defmodule TestServer.Plug.Cowboy.Handler do
 
   defp append_formatted_frame(message, frame) do
     """
-    #{message} with frame:
+    #{message}:
 
     #{inspect(frame)}
     """
@@ -72,12 +72,12 @@ defmodule TestServer.Plug.Cowboy.Handler do
     """
     #{message}
 
-    #{format_websocket_handlers(websocket_handlers, instance)}
+    #{format_websocket_handlers(websocket_handlers)}
     """
   end
 
-  defp format_websocket_handlers({[], suspended_websocket_handlers}, instance) do
-    message = "No active websocket handlers for #{inspect(Instance)} #{inspect(instance)}."
+  defp format_websocket_handlers({[], suspended_websocket_handlers}) do
+    message = "No active websocket handlers."
 
     case suspended_websocket_handlers do
       [] ->
@@ -85,16 +85,16 @@ defmodule TestServer.Plug.Cowboy.Handler do
 
       websocket_handlers ->
         """
-        #{message} The following websocket handler(s) have been processed:
+        #{message} The following websocket handlers have been processed:
 
         #{Instance.format_routes(websocket_handlers)}"
         """
     end
   end
 
-  defp format_websocket_handlers({active_websocket_handlers, _}, instance) do
+  defp format_websocket_handlers({active_websocket_handlers, _}) do
     """
-    Active websocket handler(s) #{inspect(Instance)} #{inspect(instance)}:
+    Active websocket handlers:
 
     #{Instance.format_websocket_handlers(active_websocket_handlers)}
     """

@@ -88,7 +88,7 @@ defmodule TestServer do
 
       active_routes ->
         raise """
-        The test ended before the following #{inspect(Instance)} #{inspect(instance)} route(s) received a request:
+        #{Instance.format_instance(instance)} did not receive a request for these routes before the test ended:
 
         #{Instance.format_routes(active_routes)}
         """
@@ -105,7 +105,7 @@ defmodule TestServer do
 
       active_websocket_handlers ->
         raise """
-        The test ended before the following #{inspect(Instance)} #{inspect(instance)} websocket handler(s) received a message:
+        #{Instance.format_instance(instance)} did not receive a frame for these websocket handlers before the test ended:
 
         #{Instance.format_websocket_handlers(active_websocket_handlers)}
         """
@@ -131,7 +131,7 @@ defmodule TestServer do
   defp instance_alive!(instance) do
     case Process.alive?(instance) do
       true -> :ok
-      false -> raise "The #{inspect(Instance)} #{inspect(instance)} is not running"
+      false -> raise "#{Instance.format_instance(instance)} is not running"
     end
   end
 
@@ -202,17 +202,6 @@ defmodule TestServer do
       [_instance | _rest] = instances ->
         [{m, f, a, _} | _stacktrace] = get_stacktrace()
 
-        formatted_instances =
-          instances
-          |> Enum.map(&{&1, Instance.get_options(&1)})
-          |> Enum.with_index()
-          |> Enum.map_join("\n\n", fn {{instance, options}, index} ->
-            """
-            ##{index + 1}: #{inspect(instance)}
-                #{Enum.map_join(options[:stacktrace], "\n    ", &Exception.format_stacktrace_entry/1)}")}
-            """
-          end)
-
         message =
           case function_accepts_instance_arg do
             true ->
@@ -221,6 +210,17 @@ defmodule TestServer do
             false ->
               "Multiple #{inspect(Instance)}'s running."
           end
+
+        formatted_instances =
+          instances
+          |> Enum.map(&{&1, Instance.get_options(&1)})
+          |> Enum.with_index()
+          |> Enum.map_join("\n\n", fn {{instance, options}, index} ->
+            """
+            ##{index + 1}: #{Instance.format_instance(instance)}
+                #{Enum.map_join(options[:stacktrace], "\n    ", &Exception.format_stacktrace_entry/1)}")}
+            """
+          end)
 
         raise """
         #{message}
@@ -358,10 +358,10 @@ defmodule TestServer do
 
     cond do
       not (options[:scheme] == :https) ->
-        raise "The #{inspect(Instance)} is not running with `[scheme: :https]` option"
+        raise "#{Instance.format_instance(instance)} is not running with `[scheme: :https]` option"
 
       not Keyword.has_key?(options, :x509_suite) ->
-        raise "The #{inspect(Instance)} is running with custom SSL"
+        raise "#{Instance.format_instance(instance)} is running with custom SSL"
 
       true ->
         options[:x509_suite]

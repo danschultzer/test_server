@@ -18,7 +18,7 @@ defmodule TestServer.Plug.Cowboy.Plug do
 
       {:error, {:not_found, conn}} ->
         message =
-          "Unexpected #{conn.method} request received at #{conn.request_path}"
+          "#{Instance.format_instance(instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
           |> append_formatted_params(conn)
           |> append_formatted_routes(instance)
 
@@ -49,12 +49,12 @@ defmodule TestServer.Plug.Cowboy.Plug do
     """
     #{message}
 
-    #{format_routes(routes, instance)}
+    #{format_routes(routes)}
     """
   end
 
-  defp format_routes({[], suspended_routes}, instance) do
-    message = "No active routes for #{inspect(Instance)} #{inspect(instance)}."
+  defp format_routes({[], suspended_routes}) do
+    message = "No active routes."
 
     case suspended_routes do
       [] ->
@@ -62,16 +62,16 @@ defmodule TestServer.Plug.Cowboy.Plug do
 
       suspended_routes ->
         """
-        #{message} The following route(s) have been processed:
+        #{message} The following routes have been processed:
 
         #{Instance.format_routes(suspended_routes)}
         """
     end
   end
 
-  defp format_routes({active_routes, _suspended_routes}, instance) do
+  defp format_routes({active_routes, _suspended_routes}) do
     """
-    Active route(s) for #{inspect(Instance)} #{inspect(instance)}:
+    Active routes:
 
     #{Instance.format_routes(active_routes)}
     """

@@ -88,7 +88,7 @@ defmodule TestServer do
 
       active_routes ->
         raise """
-        The test ended before the following #{inspect(Instance)} route(s) received a request:
+        The test ended before the following #{inspect(Instance)} #{inspect(instance)} route(s) received a request:
 
         #{Instance.format_routes(active_routes)}
         """
@@ -105,7 +105,7 @@ defmodule TestServer do
 
       active_websocket_handlers ->
         raise """
-        The test ended before the following #{inspect(Instance)} websocket handler(s) received a message:
+        The test ended before the following #{inspect(Instance)} #{inspect(instance)} websocket handler(s) received a message:
 
         #{Instance.format_websocket_handlers(active_websocket_handlers)}
         """

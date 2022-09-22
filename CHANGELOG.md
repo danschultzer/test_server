@@ -1,3 +1,7 @@
+## v0.1.6 (2022-09-13)
+
+- Added suspended routes and web socket handlers to error messages
+
 ## v0.1.5 (2022-09-13)
 
 - `TestServer.websocket_info/2` now takes the callback function as second argument

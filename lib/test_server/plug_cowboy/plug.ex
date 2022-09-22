@@ -19,8 +19,8 @@ defmodule TestServer.Plug.Cowboy.Plug do
       {:error, {:not_found, conn}} ->
         message =
           "Unexpected #{conn.method} request received at #{conn.request_path}"
-          |> append_params(conn)
-          |> format_active_routes(instance)
+          |> append_formatted_params(conn)
+          |> append_formatted_routes(instance)
 
         resp_error(conn, instance, {RuntimeError.exception(message), []})
 
@@ -29,7 +29,7 @@ defmodule TestServer.Plug.Cowboy.Plug do
     end
   end
 
-  defp append_params(message, conn) do
+  defp append_formatted_params(message, conn) do
     conn
     |> Map.take([:query_params, :body_params])
     |> Enum.filter(fn
@@ -43,18 +43,38 @@ defmodule TestServer.Plug.Cowboy.Plug do
     end
   end
 
-  defp format_active_routes(message, instance) do
-    active_routes = Enum.reject(Instance.routes(instance), & &1.suspended)
+  defp append_formatted_routes(message, instance) do
+    routes = Enum.split_with(Instance.routes(instance), &(not &1.suspended))
 
-    format_active_routes(message, active_routes, instance)
+    """
+    #{message}
+
+    #{format_routes(routes, instance)}
+    """
   end
 
-  defp format_active_routes(message, [], instance),
-    do: message <> "\n\nNo active routes for #{inspect(Instance)} #{inspect(instance)}"
+  defp format_routes({[], suspended_routes}, instance) do
+    message = "No active routes for #{inspect(Instance)} #{inspect(instance)}."
 
-  defp format_active_routes(message, active_routes, instance) do
-    message <>
-      "\n\nActive routes for #{inspect(Instance)} #{inspect(instance)}:\n\n#{Instance.format_routes(active_routes)}"
+    case suspended_routes do
+      [] ->
+        message
+
+      suspended_routes ->
+        """
+        #{message} The following route(s) have been processed:
+
+        #{Instance.format_routes(suspended_routes)}
+        """
+    end
+  end
+
+  defp format_routes({active_routes, _suspended_routes}, instance) do
+    """
+    Active route(s) for #{inspect(Instance)} #{inspect(instance)}:
+
+    #{Instance.format_routes(active_routes)}
+    """
   end
 
   defp resp_error(conn, instance, {exception, stacktrace}) do

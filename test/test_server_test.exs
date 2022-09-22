@@ -70,7 +70,7 @@ defmodule TestServerTest do
         TestServer.stop()
       end
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -131,7 +131,7 @@ defmodule TestServerTest do
         TestServer.url()
       end
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -172,7 +172,7 @@ defmodule TestServerTest do
 
   describe "add/3" do
     test "when instance not running" do
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -263,7 +263,7 @@ defmodule TestServerTest do
       end
 
       assert capture_io(fn -> ExUnit.run() end) =~
-               "The test ended before the following TestServer.Instance route(s) received a request"
+               ~r/The test ended before the following TestServer\.Instance \#PID\<[0-9.]+\> route\(s\) received a request/
     end
 
     test "with callback plug" do
@@ -404,7 +404,7 @@ defmodule TestServerTest do
         TestServer.x509_suite()
       end
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         {:ok, instance} = TestServer.start()
 
         assert :ok = TestServer.stop()
@@ -434,7 +434,7 @@ defmodule TestServerTest do
 
       TestServer.start(scheme: :https, cowboy_options: cowboy_options)
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance is running with custom SSL/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer\.Instance is running with custom SSL/, fn ->
         TestServer.x509_suite()
       end
     end
@@ -445,7 +445,7 @@ defmodule TestServerTest do
       {:ok, instance} = TestServer.start()
       assert :ok = TestServer.stop()
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         TestServer.websocket_init(instance, "/ws")
       end
     end
@@ -474,7 +474,7 @@ defmodule TestServerTest do
       assert {:ok, socket} = TestServer.websocket_init("/ws")
       assert :ok = TestServer.stop(instance)
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         TestServer.websocket_handle(socket)
       end
     end
@@ -501,7 +501,7 @@ defmodule TestServerTest do
       end
 
       assert capture_io(fn -> ExUnit.run() end) =~
-               "The test ended before the following TestServer.Instance websocket handler(s) received a message"
+               ~r/The test ended before the following TestServer\.Instance \#PID\<[0-9.]+\> websocket handler\(s\) received a message/
     end
 
     test "when receiving unexpected message" do
@@ -593,7 +593,7 @@ defmodule TestServerTest do
       assert {:ok, socket} = TestServer.websocket_init("/ws")
       assert :ok = TestServer.stop(instance)
 
-      assert_raise RuntimeError, ~r/The TestServer.Instance \#PID\<.*\> is not running/, fn ->
+      assert_raise RuntimeError, ~r/The TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
         TestServer.websocket_info(socket)
       end
     end

@@ -37,14 +37,10 @@ defmodule TestServer.Plug.Cowboy.Handler do
         handle_reply(result, socket)
 
       {:error, :not_found} ->
-        message = """
-        Unexpected message received for WebSocket.
-
-        Frame:
-        #{inspect(frame)}
-
-        #{format_active_websocket_handlers(socket)}
-        """
+        message =
+          "Unexpected message received for WebSocket"
+          |> append_formatted_frame(frame)
+          |> append_formatted_websocket_handlers(socket)
 
         reply_with_error({socket, state}, {RuntimeError.exception(message), []})
 
@@ -59,21 +55,49 @@ defmodule TestServer.Plug.Cowboy.Handler do
     {:reply, {:text, Exception.format(:error, exception, stacktrace)}, state}
   end
 
-  defp format_active_websocket_handlers({instance, route_ref}) do
-    active_websocket_handlers =
-      Enum.filter(
-        Instance.websocket_handlers(instance),
-        &(not &1.suspended and &1.route_ref == route_ref)
-      )
+  defp append_formatted_frame(message, frame) do
+    """
+    #{message} with frame:
 
-    format_active_websocket_handlers(active_websocket_handlers)
+    #{inspect(frame)}
+    """
   end
 
-  defp format_active_websocket_handlers([]),
-    do: "\n\nNo active websocket handlers"
+  defp append_formatted_websocket_handlers(message, {instance, route_ref}) do
+    websocket_handlers =
+      Instance.websocket_handlers(instance)
+      |> Enum.filter(&(&1.route_ref == route_ref))
+      |> Enum.split_with(&(not &1.suspended))
 
-  defp format_active_websocket_handlers(active_websocket_handlers) do
-    "\n\nActive websocket handler(s):\n\n#{Instance.format_websocket_handlers(active_websocket_handlers)}"
+    """
+    #{message}
+
+    #{format_websocket_handlers(websocket_handlers, instance)}
+    """
+  end
+
+  defp format_websocket_handlers({[], suspended_websocket_handlers}, instance) do
+    message = "No active websocket handlers for #{inspect(Instance)} #{inspect(instance)}."
+
+    case suspended_websocket_handlers do
+      [] ->
+        message
+
+      websocket_handlers ->
+        """
+        #{message} The following websocket handler(s) have been processed:
+
+        #{Instance.format_routes(websocket_handlers)}"
+        """
+    end
+  end
+
+  defp format_websocket_handlers({active_websocket_handlers, _}, instance) do
+    """
+    Active websocket handler(s) #{inspect(Instance)} #{inspect(instance)}:
+
+    #{Instance.format_websocket_handlers(active_websocket_handlers)}
+    """
   end
 
   defp handle_reply({:reply, frame, state}, socket), do: {:reply, frame, {socket, state}}

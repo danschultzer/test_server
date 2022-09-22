@@ -1,4 +1,4 @@
-## v0.1.6 (2022-09-13)
+## v0.1.6 (2022-09-22)
 
 - Added suspended routes and web socket handlers to error messages
 

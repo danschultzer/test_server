@@ -49,13 +49,17 @@ defmodule TestServer.Plug.Cowboy do
         port -> {port, []}
       end
 
-    unless is_integer(port), do: raise("Invalid port, got: #{inspect(port)}")
+    unless is_integer(port) and port >= 0 and port <= 65_535,
+      do: raise("Invalid port, got: #{inspect(port)}")
 
-    {:ok, socket} = :gen_tcp.listen(port, options)
-    {:ok, port} = :inet.port(socket)
-    true = :erlang.port_close(socket)
-
-    port
+    with {:ok, socket} <- :gen_tcp.listen(port, options),
+         {:ok, port} <- :inet.port(socket),
+         true <- :erlang.port_close(socket) do
+      port
+    else
+      {:error, error} ->
+        raise("Could not listen to port #{inspect(port)}, because: #{inspect(error)}")
+    end
   end
 
   @impl true

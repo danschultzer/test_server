@@ -11,6 +11,15 @@ defmodule TestServerTest do
       assert_raise RuntimeError, ~r/Invalid port, got: :invalid/, fn ->
         TestServer.start(port: :invalid)
       end
+
+      assert_raise RuntimeError, ~r/Invalid port, got: 65536/, fn ->
+        TestServer.start(port: 65_536)
+      end
+
+      assert_raise RuntimeError, ~r/Could not listen to port 4444, because: :eaddrinuse/, fn ->
+        TestServer.start(port: 4444)
+        TestServer.start(port: 4444)
+      end
     end
 
     test "with invalid scheme" do

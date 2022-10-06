@@ -72,7 +72,7 @@ defmodule TestServer do
 
   defp raise_start_failure({:error, error}) do
     raise """
-    EXIT when starting #{__MODULE__.Instance}:
+    EXIT when starting #{inspect(__MODULE__.Instance)}:
 
     #{Exception.format_exit(error)}
     """

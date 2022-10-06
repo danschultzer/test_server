@@ -1,3 +1,7 @@
+## v0.1.7 (TBA)
+
+- The specified port is checked to ensure is in valid range
+
 ## v0.1.6 (2022-09-22)
 
 - Added suspended routes and web socket handlers to error messages

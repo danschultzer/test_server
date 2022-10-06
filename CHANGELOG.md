@@ -1,4 +1,4 @@
-## v0.1.7 (TBA)
+## v0.1.7 (2022-10-06)
 
 - The specified port is checked to ensure is in valid range
 

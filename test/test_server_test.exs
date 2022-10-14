@@ -316,7 +316,7 @@ defmodule TestServerTest do
       end
 
       assert capture_io(fn -> ExUnit.run() end) =~
-               "Do not halt a connection. All requests are has to be processed."
+               "Do not halt a connection. All requests have to be processed."
     end
 
     test "with callback function" do
@@ -403,7 +403,7 @@ defmodule TestServerTest do
       end
 
       assert capture_io(fn -> ExUnit.run() end) =~
-               "Do not halt a connection. All requests are has to be processed."
+               "Do not halt a connection. All requests have to be processed."
     end
   end
 

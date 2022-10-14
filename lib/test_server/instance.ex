@@ -334,7 +334,7 @@ defmodule TestServer.Instance do
 
   defp check_halted!(%{halted: true}, plug, stacktrace) do
     raise """
-    Do not halt a connection. All requests are has to be processed.
+    Do not halt a connection. All requests have to be processed.
 
     # #{inspect(plug)}
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}")}

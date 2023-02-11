@@ -17,7 +17,7 @@ jobs:
           - elixir: 1.13
             otp: 25.0
             deploy: true
-    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}} / ${{matrix.http_sever}}
+    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}} / ${{matrix.http_server}}
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1

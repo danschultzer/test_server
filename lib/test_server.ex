@@ -14,7 +14,7 @@ defmodule TestServer do
   @type websocket_socket :: {instance(), route()}
   @type websocket_frame :: {atom(), any()}
   @type websocket_state :: any()
-  @type websocket_reply :: {:reply, any(), websocket_state()} | {:ok, websocket_state()}
+  @type websocket_reply :: {:reply, websocket_frame(), websocket_state()} | {:ok, websocket_state()}
 
   @doc """
   Start a test server instance.
@@ -25,7 +25,7 @@ defmodule TestServer do
 
     * `:port`             - integer of port number, defaults to random port that can be opened;
     * `:scheme`           - an atom for the http scheme. Defaults to `:http`;
-    * `:cowboy_options`   - See [Cowboy docs](https://ninenines.eu/docs/en/cowboy/2.5/manual/cowboy_http/)
+    * `:http_server`      - HTTP server configuration. Defaults to `{TestServer.HTTPServer.Httpd, []}`;
   """
   @spec start(keyword()) :: {:ok, pid()}
   def start(options \\ []) do

@@ -25,7 +25,7 @@ defmodule TestServer.InstanceManager do
 
   @spec stop_instance(pid()) :: :ok | {:error, :not_found}
   def stop_instance(instance) do
-    :ok = TestServer.Plug.Cowboy.stop(Instance.get_options(instance))
+    :ok = TestServer.HTTPServer.stop(Instance.get_options(instance))
     res = DynamicSupervisor.terminate_child(InstanceSupervisor, instance)
     GenServer.call(__MODULE__, {:remove, instance})
 

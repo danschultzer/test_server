@@ -1,17 +1,16 @@
-defmodule TestServer.Plug.Cowboy.Plug do
+defmodule TestServer.Plug do
   @moduledoc false
 
   alias Plug.Conn
   alias TestServer.Instance
 
-  def init([instance]), do: instance
+  def init({http_server, args, instance}), do: {http_server, args, instance}
 
-  def call(conn, instance) do
+  def call(conn, {http_server, args, instance}) do
     case Instance.dispatch(instance, {:plug, conn}) do
-      {:ok, %{adapter: {adapter, req}, private: %{websocket: {socket, state}}} = conn} ->
-        conn
-        |> Map.put(:state, :chunked)
-        |> Map.put(:adapter, {adapter, {:websocket, req, {socket, state}}})
+      {:ok, %{private: %{websocket: {socket, state}}} = conn} ->
+        :ok = Instance.put_websocket_connection(socket, http_server.get_socket_pid(conn))
+        Plug.Conn.upgrade_adapter(conn, :websocket, {http_server, {socket, state}, args})
 
       {:ok, conn} ->
         conn

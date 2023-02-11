@@ -1,4 +1,4 @@
-## v0.1.8 (TBA)
+## v0.1.8 (2023-02-10)
 
 - Support Bandit and httpd web server
 - BREAKING CHANGE: SSL certificate settings have been moved to the `:tls` option

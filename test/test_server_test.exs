@@ -46,7 +46,6 @@ defmodule TestServerTest do
       options = TestServer.Instance.get_options(instance)
 
       assert %X509.Test.Suite{} = options[:x509_suite]
-      assert options[:cowboy_options][:key]
 
       httpc_opts = fn cacerts ->
         [
@@ -435,13 +434,13 @@ defmodule TestServerTest do
     test "when instance runs with custom SSL" do
       suite = X509.Test.Suite.new()
 
-      cowboy_options = [
+      tls_options = [
         key: {:RSAPrivateKey, X509.PrivateKey.to_der(suite.server_key)},
         cert: X509.Certificate.to_der(suite.valid),
         cacerts: suite.chain ++ suite.cacerts
       ]
 
-      TestServer.start(scheme: :https, cowboy_options: cowboy_options)
+      TestServer.start(scheme: :https, tls: tls_options)
 
       assert_raise RuntimeError,
                    ~r/TestServer\.Instance \#PID\<[0-9.]+\> is running with custom SSL/,
@@ -451,6 +450,8 @@ defmodule TestServerTest do
     end
   end
 
+  # Prevent running httpd in CI
+  unless System.get_env("HTTP_SERVER") == "Httpd" do
   describe "websocket_init/3" do
     test "when instance not running" do
       {:ok, instance} = TestServer.start()
@@ -668,6 +669,7 @@ defmodule TestServerTest do
       assert :ok = TestServer.websocket_info(socket)
       assert {:ok, "ping"} = WebSocketClient.receive_message(client)
     end
+  end
   end
 
   def request(url, opts \\ []) do

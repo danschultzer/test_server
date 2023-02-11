@@ -12,11 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        http_server: [Httpd, Plug.Cowboy, Bandit]
         include:
           - elixir: 1.13
             otp: 25.0
             deploy: true
-    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}} / ${{matrix.http_sever}}
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
@@ -24,7 +25,7 @@ jobs:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
       - run: mix deps.get
-      - run: mix test
+      - run: HTTP_SERVER=${{matrix.http_server}} mix test
       - run: MIX_ENV=test mix credo
   deploy:
     needs: test

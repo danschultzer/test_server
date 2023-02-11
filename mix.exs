@@ -35,8 +35,13 @@ defmodule TestServer.MixProject do
 
   defp deps do
     [
-      {:plug_cowboy, "~> 2.0"},
-      {:x509, "~> 0.6.0"},
+      {:plug, "~> 1.14"},
+      {:x509, "~> 0.6"},
+
+      # Optional web servers
+      {:bandit, ">= 0.6.6", optional: true},
+      {:plug_cowboy, ">= 2.0.0", optional: true},
+
       {:ssl_verify_fun, ">= 0.0.0", only: [:test]},
       {:credo, ">= 0.0.0", only: [:dev, :test]},
       {:websockex, "~> 0.4.3", only: [:test]},

@@ -72,21 +72,6 @@ TestServer.add("/", match: fn
 end)
 ```
 
-By default all routes are served as plain HTTP.
-
-HTTPS can be enabled with the `:scheme` option when starting the test server. The certificate suite is automatically generated.
-
-```elixir
-{:ok, instance} = TestServer.start(scheme: :https)
-cacerts = TestServer.x509_suite().cacerts
-```
-
-Custom SSL certificates can also be used by defining the cowboy options:
-
-```elixir
-TestServer.start(scheme: :https, cowboy_options: [keyfile: key, certfile: cert])
-```
-
 When a route is matched it'll be removed from active routes list. The route will be triggered in the order they were added:
 
 ```elixir
@@ -97,7 +82,7 @@ TestServer.add("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "second"))
 {:ok, "second"} = fetch_request()
 ```
 
-Plugs can be added to process requests before it matches any routes. If no plugs are defined `Plug.Conn.fetch_query_params/1` will run.
+Plugs can be added to process requests before it matches any routes. If no plugs are defined `Plug.Conn.fetch_query_params/1` will be used.
 
 ```elixir
 TestServer.plug(fn conn ->
@@ -112,6 +97,25 @@ end)
 
 TestServer.plug(MyPlug)
 ```
+
+### HTTPS
+
+By default all routes are served as plain HTTP. HTTPS can be enabled with the `:scheme` option when starting the test server.
+
+Custom SSL certificates can also be used by defining the cowboy options:
+
+```elixir
+TestServer.start(scheme: :https, tls: [keyfile: key, certfile: cert])
+```
+
+A certificate suite will automatically generated if you don't include certificate:
+
+```elixir
+{:ok, instance} = TestServer.start(scheme: :https)
+cacerts = TestServer.x509_suite().cacerts
+```
+
+### WebSocket
 
 WebSocket endpoint can also be set up. By default the handler will echo what was received.
 
@@ -138,6 +142,18 @@ test "WebSocketClient" do
   {:ok, "ping"} = WebSocketClient.receive(client)
 end
 ```
+
+*Note: WebSocket is not supported by the `:httpd` adapter.*
+
+### HTTP Server Adapter
+
+TestServer supports `Bandit`, `Plug.Cowboy`, and `:httpd` out of the box. The HTTP adapter will be selected in this order depending which is available in the dependencies. You can also explicitly set the http server in the configuration:
+
+```elixir
+TestServer.start(http_server: {Bandit, []})
+```
+
+You can create your own plug based HTTP Server Adapter by using the `TestServer.HTTPServer` behaviour.
 
 <!-- MDOC !-->
 

@@ -3,7 +3,7 @@ defmodule TestServer.Instance do
 
   use GenServer
 
-  alias TestServer.Plug.Cowboy
+  alias TestServer.HTTPServer
 
   def start_link(options) do
     GenServer.start_link(__MODULE__, options)
@@ -93,8 +93,8 @@ defmodule TestServer.Instance do
     GenServer.call(instance, :routes)
   end
 
-  @spec put_websocket_connection(TestServer.websocket_socket(), %{pid: pid()}) :: :ok
-  def put_websocket_connection({instance, route_ref}, %{pid: pid}) do
+  @spec put_websocket_connection(TestServer.websocket_socket(), pid()) :: :ok
+  def put_websocket_connection({instance, route_ref}, pid) do
     GenServer.cast(instance, {:put, :websocket_connection, route_ref, pid})
   end
 
@@ -162,15 +162,15 @@ defmodule TestServer.Instance do
       options: options
     }
 
-    case start_cowboy(init_state) do
+    case start_http_server(init_state) do
       {:ok, state} -> {:ok, state}
       {:error, error} -> {:stop, error}
     end
   end
 
-  defp start_cowboy(state) do
-    case Cowboy.start(self(), state.options) do
-      {:ok, _cowboy, options} ->
+  defp start_http_server(state) do
+    case HTTPServer.start(self(), state.options) do
+      {:ok, options} ->
         state = Map.merge(state, %{options: options})
 
         {:ok, state}
@@ -313,7 +313,7 @@ defmodule TestServer.Instance do
   defp run_plugs(conn, state) do
     state.plugs
     |> case do
-      [] -> [%{plug: Cowboy.Plug.default_plug(), stacktrace: nil}]
+      [] -> [%{plug: TestServer.Plug.default_plug(), stacktrace: nil}]
       plugs -> plugs
     end
     |> Enum.reduce_while(conn, fn %{plug: plug, stacktrace: stacktrace}, conn ->

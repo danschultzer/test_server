@@ -1,6 +1,7 @@
 ## v0.1.9 (TBA)
 
 - `:httpd` server adapter now parses remote ip to tuple format
+- Added `:ipfamily` option to set IP address type to use
 
 ## v0.1.8 (2023-02-10)
 

@@ -5,7 +5,7 @@ defmodule TestServer.HTTPServer.Httpd do
   @behaviour TestServer.HTTPServer
 
   @impl TestServer.HTTPServer
-  def start(instance, port, scheme, tls_options, httpd_options) do
+  def start(instance, port, scheme, options, httpd_options) do
     httpd_options =
       httpd_options
       |> Keyword.put(:port, port)
@@ -14,7 +14,8 @@ defmodule TestServer.HTTPServer.Httpd do
       |> Keyword.put_new(:document_root, '/tmp')
       |> Keyword.put_new(:server_root, '/tmp')
       |> Keyword.put_new(:handler_plug, {TestServer.Plug, {__MODULE__, [], instance}})
-      |> put_tls_options(scheme, tls_options)
+      |> Keyword.put_new(:ipfamily, options[:ipfamily])
+      |> put_tls_options(scheme, options[:tls])
 
     case :inets.start(:httpd, httpd_options) do
       {:ok, pid} -> {:ok, pid, httpd_options}

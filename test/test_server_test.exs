@@ -70,6 +70,23 @@ defmodule TestServerTest do
       assert :ok = TestServer.add("/")
       assert {:ok, _} = request(TestServer.url("/"), httpc_opts: httpc_opts.(valid_cacerts))
     end
+
+    test "starts in IPv6-only mode`" do
+      {:ok, instance} = TestServer.start(ipfamily: :inet6)
+      options = TestServer.Instance.get_options(instance)
+
+      assert options[:ipfamily] == :inet6
+
+      assert :ok = TestServer.add("/", to: fn conn ->
+        assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+
+        Plug.Conn.send_resp(conn, 200, "OK")
+      end)
+
+      assert %{host: hostname} = URI.parse(TestServer.url("/"))
+      assert {:ok, {0, 0, 0, 0, 0, 0, 0, 1}} == :inet.getaddr(String.to_charlist(hostname), :inet6)
+      assert {:ok, _} = request(TestServer.url("/"))
+    end
   end
 
   describe "stop/1" do

@@ -26,6 +26,8 @@ defmodule TestServer do
     * `:port`             - integer of port number, defaults to random port that can be opened;
     * `:scheme`           - an atom for the http scheme. Defaults to `:http`;
     * `:http_server`      - HTTP server configuration. Defaults to `{TestServer.HTTPServer.Httpd, []}`;
+    * `:tls`              - Passthru options for TLS configuration handled by the webserver;
+    * `:ipfamily`         - The IP address type to use, either `:inet` or `:inet6`. Defaults to `:inet`;
   """
   @spec start(keyword()) :: {:ok, pid()}
   def start(options \\ []) do

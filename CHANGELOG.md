@@ -1,3 +1,7 @@
+## v0.1.9 (TBA)
+
+- `:httpd` server adapter now parses remote ip to tuple format
+
 ## v0.1.8 (2023-02-10)
 
 - Support Bandit and httpd web server

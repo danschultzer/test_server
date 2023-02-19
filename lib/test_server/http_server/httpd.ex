@@ -74,6 +74,7 @@ defmodule TestServer.HTTPServer.Httpd do
     {path, qs} = request_path(data)
     {port, host} = host(data)
     {_port, remote_ip} = peer(data)
+    {:ok, remote_ip} = :inet.parse_address(remote_ip)
 
     headers = Enum.map(parsed_header(data), &{to_string(elem(&1, 0)), to_string(elem(&1, 1))})
 
@@ -84,7 +85,7 @@ defmodule TestServer.HTTPServer.Httpd do
       owner: self(),
       path_info: split_path(to_string(path)),
       port: port,
-      remote_ip: to_string(remote_ip),
+      remote_ip: remote_ip,
       query_string: qs,
       req_headers: headers,
       request_path: path,

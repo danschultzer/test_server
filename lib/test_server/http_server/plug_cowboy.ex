@@ -16,14 +16,15 @@ defmodule TestServer.HTTPServer.Plug.Cowboy do
   ]
 
   @impl TestServer.HTTPServer
-  def start(instance, port, scheme, tls_options, cowboy_options) do
+  def start(instance, port, scheme, options, cowboy_options) do
     cowboy_options =
       cowboy_options
       |> Keyword.put_new(:protocol_options, @default_protocol_options)
       |> Keyword.put(:port, port)
       |> Keyword.put(:dispatch, dispatch(instance))
       |> Keyword.put(:ref, cowboy_ref(port))
-      |> Keyword.merge(tls_options)
+      |> Keyword.put(:net, options[:ipfamily])
+      |> Keyword.merge(options[:tls])
 
     case apply(Cowboy, scheme, [TestServer.Plug, {__MODULE__, %{}, instance}, cowboy_options]) do
       {:ok, pid} -> {:ok, pid, cowboy_options}

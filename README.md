@@ -155,6 +155,14 @@ TestServer.start(http_server: {Bandit, []})
 
 You can create your own plug based HTTP Server Adapter by using the `TestServer.HTTPServer` behaviour.
 
+### IPv6
+
+Use the `:ipfamily` option to test with IPv6 when you are starting the test server:
+
+```elixir
+TestServer.start(ipfamily: :inet6)
+```
+
 <!-- MDOC !-->
 
 ## LICENSE

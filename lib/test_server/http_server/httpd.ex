@@ -5,7 +5,7 @@ defmodule TestServer.HTTPServer.Httpd do
   @behaviour TestServer.HTTPServer
 
   @impl TestServer.HTTPServer
-  def start(instance, port, scheme, tls_options, httpd_options) do
+  def start(instance, port, scheme, options, httpd_options) do
     httpd_options =
       httpd_options
       |> Keyword.put(:port, port)
@@ -14,7 +14,8 @@ defmodule TestServer.HTTPServer.Httpd do
       |> Keyword.put_new(:document_root, '/tmp')
       |> Keyword.put_new(:server_root, '/tmp')
       |> Keyword.put_new(:handler_plug, {TestServer.Plug, {__MODULE__, [], instance}})
-      |> put_tls_options(scheme, tls_options)
+      |> Keyword.put_new(:ipfamily, options[:ipfamily])
+      |> put_tls_options(scheme, options[:tls])
 
     case :inets.start(:httpd, httpd_options) do
       {:ok, pid} -> {:ok, pid, httpd_options}
@@ -74,6 +75,7 @@ defmodule TestServer.HTTPServer.Httpd do
     {path, qs} = request_path(data)
     {port, host} = host(data)
     {_port, remote_ip} = peer(data)
+    {:ok, remote_ip} = :inet.parse_address(remote_ip)
 
     headers = Enum.map(parsed_header(data), &{to_string(elem(&1, 0)), to_string(elem(&1, 1))})
 
@@ -84,7 +86,7 @@ defmodule TestServer.HTTPServer.Httpd do
       owner: self(),
       path_info: split_path(to_string(path)),
       port: port,
-      remote_ip: to_string(remote_ip),
+      remote_ip: remote_ip,
       query_string: qs,
       req_headers: headers,
       request_path: path,
@@ -106,9 +108,20 @@ defmodule TestServer.HTTPServer.Httpd do
   end
 
   defp host(data) do
-    {:init_data, _, host, _} = httpd(data, :init_data)
+    data
+    |> httpd(:parsed_header)
+    |> Enum.find(&elem(&1, 0) == 'host')
+    |> Kernel.||({'host', ''})
+    |> elem(1)
+    |> to_string()
+    |> :binary.split(":")
+    |> case do
+      [host, port] ->
+        {Integer.parse(port), host}
 
-    host
+      [host] ->
+        {nil, host}
+    end
   end
 
   defp peer(data) do

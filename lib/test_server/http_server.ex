@@ -24,10 +24,10 @@ defmodule TestServer.HTTPServer do
   @type scheme :: :http | :https
   @type instance :: pid()
   @type port_number :: :inet.port_number()
-  @type tls_options :: keyword()
+  @type options :: [tls: keyword(), ipfamily: :inet | :inet6]
   @type server_options :: keyword()
 
-  @callback start(instance(), port_number(), scheme(), tls_options(), server_options()) :: {:ok, pid(), server_options()} | {:error, any()}
+  @callback start(instance(), port_number(), scheme(), options(), server_options()) :: {:ok, pid(), server_options()} | {:error, any()}
   @callback stop(instance(), server_options()) :: :ok | {:error, any()}
   @callback get_socket_pid(Plug.Conn.t()) :: pid()
 
@@ -46,9 +46,11 @@ defmodule TestServer.HTTPServer do
     port = open_port(options)
     scheme = parse_scheme(options)
     {tls_options, x509_options} = maybe_generate_x509_suite(options, scheme)
+    ip_family = Keyword.get(options, :ipfamily, :inet)
+    test_server_options = [tls: tls_options, ipfamily: ip_family]
     {mod, server_options} = Keyword.get(options, :http_server, Application.get_env(:test_server, :http_server, @default_http_server))
 
-    case mod.start(instance, port, scheme, tls_options, server_options) do
+    case mod.start(instance, port, scheme, test_server_options, server_options) do
       {:ok, reference, server_options} ->
         options =
           options

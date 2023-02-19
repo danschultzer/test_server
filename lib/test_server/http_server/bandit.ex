@@ -8,12 +8,14 @@ defmodule TestServer.HTTPServer.Bandit do
   @behaviour WebSock
 
   @impl TestServer.HTTPServer
-  def start(instance, port, scheme, tls_options, bandit_options) do
+  def start(instance, port, scheme, options, bandit_options) do
+    opts = [options[:ipfamily]] ++ options[:tls]
+
     thousand_islands_options =
       bandit_options
       |> Keyword.get(:options, [])
       |> Keyword.put(:port, port)
-      |> Keyword.put(:transport_options, tls_options)
+      |> Keyword.update(:transport_options, opts, & &1 ++ opts)
 
     bandit_options =
       bandit_options

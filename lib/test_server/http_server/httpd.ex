@@ -108,9 +108,20 @@ defmodule TestServer.HTTPServer.Httpd do
   end
 
   defp host(data) do
-    {:init_data, _, host, _} = httpd(data, :init_data)
+    data
+    |> httpd(:parsed_header)
+    |> Enum.find(&elem(&1, 0) == 'host')
+    |> Kernel.||({'host', ''})
+    |> elem(1)
+    |> to_string()
+    |> :binary.split(":")
+    |> case do
+      [host, port] ->
+        {Integer.parse(port), host}
 
-    host
+      [host] ->
+        {nil, host}
+    end
   end
 
   defp peer(data) do

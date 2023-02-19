@@ -160,7 +160,7 @@ defmodule TestServer do
   Produces a URL for current test server.
 
   ## Options
-    * `:host` - binary host value, it'll be added to inet for IP 127.0.0.1, defaults to `"localhost"`;
+    * `:host` - binary host value, it'll be added to inet for IP `127.0.0.1` and `::1`, defaults to `"localhost"`;
   """
   @spec url(binary(), keyword()) :: binary()
   def url(uri, opts) when is_binary(uri), do: url(fetch_instance!(), uri, opts)
@@ -237,6 +237,7 @@ defmodule TestServer do
   defp maybe_enable_host(host) do
     :inet_db.set_lookup([:file, :dns])
     :inet_db.add_host({127, 0, 0, 1}, [String.to_charlist(host)])
+    :inet_db.add_host({0, 0, 0, 0, 0, 0, 0, 1}, [String.to_charlist(host)])
 
     host
   end

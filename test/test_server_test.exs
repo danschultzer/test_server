@@ -47,7 +47,7 @@ defmodule TestServerTest do
 
       assert %X509.Test.Suite{} = options[:x509_suite]
 
-      httpc_opts = fn cacerts ->
+      http_opts = fn cacerts ->
         [
           ssl: [
             verify: :verify_peer,
@@ -65,10 +65,10 @@ defmodule TestServerTest do
       invalid_cacerts = X509.Test.Suite.new().cacerts
 
       assert {:error, {:failed_connect, _}} =
-               request(TestServer.url("/"), httpc_opts: httpc_opts.(invalid_cacerts))
+               request(TestServer.url("/"), http_opts: http_opts.(invalid_cacerts))
 
       assert :ok = TestServer.add("/")
-      assert {:ok, _} = request(TestServer.url("/"), httpc_opts: httpc_opts.(valid_cacerts))
+      assert {:ok, _} = request(TestServer.url("/"), http_opts: http_opts.(valid_cacerts))
     end
 
     test "starts in IPv6-only mode`" do
@@ -165,7 +165,7 @@ defmodule TestServerTest do
       end
     end
 
-    test "invalid `:host`" do
+    test "with invalid `:host`" do
       TestServer.start()
 
       assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
@@ -179,6 +179,32 @@ defmodule TestServerTest do
       assert TestServer.url("/") =~ ~r/^http\:\/\/localhost\:[0-9]+\/$/
       refute TestServer.url("/") == TestServer.url("/path")
       refute TestServer.url("/") == TestServer.url("/", host: "bad-host")
+    end
+
+    test "with `:host`" do
+      TestServer.start()
+
+      assert :ok = TestServer.add("/", to: fn conn ->
+        assert conn.remote_ip == {127, 0, 0, 1}
+        assert conn.host == "custom-host"
+
+        Plug.Conn.send_resp(conn, 200, "OK")
+      end)
+
+      assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
+    end
+
+    test "with `:host` in IPv6-only mode" do
+      TestServer.start(ipfamily: :inet6, http_server: {TestServer.HTTPServer.Httpd, []})
+
+      assert :ok = TestServer.add("/", to: fn conn ->
+        assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+        assert conn.host == "custom-host"
+
+        Plug.Conn.send_resp(conn, 200, "OK")
+      end)
+
+      assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
     end
 
     test "with multiple instances" do
@@ -691,13 +717,14 @@ defmodule TestServerTest do
 
   def request(url, opts \\ []) do
     url = String.to_charlist(url)
-    httpc_opts = Keyword.get(opts, :httpc_opts, [])
+    httpc_http_opts = Keyword.get(opts, :http_opts, [])
+    httpc_opts = Keyword.get(opts, :opts, [])
 
     opts
     |> Keyword.get(:method, :get)
     |> case do
-      :post -> :httpc.request(:post, {url, [], 'plain/text', 'OK'}, httpc_opts, [])
-      :get -> :httpc.request(:get, {url, []}, httpc_opts, [])
+      :post -> :httpc.request(:post, {url, [], 'plain/text', 'OK'}, httpc_http_opts, httpc_opts)
+      :get -> :httpc.request(:get, {url, []}, httpc_http_opts, httpc_opts)
     end
     |> case do
       {:ok, {{_, 200, _}, _headers, body}} -> {:ok, to_string(body)}

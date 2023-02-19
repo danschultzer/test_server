@@ -1,6 +1,8 @@
 ## v0.1.9 (TBA)
 
 - `:httpd` server adapter now parses remote ip to tuple format
+- `:httpd` server adapter now parses host from host header
+- Specifying `:host` now also binds the hostname to IPv6 loopback
 - Added `:ipfamily` option to set IP address type to use
 
 ## v0.1.8 (2023-02-10)

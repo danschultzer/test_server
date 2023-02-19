@@ -1,4 +1,4 @@
-## v0.1.9 (TBA)
+## v0.1.9 (2023-02-18)
 
 - `:httpd` server adapter now parses remote ip to tuple format
 - `:httpd` server adapter now parses host from host header

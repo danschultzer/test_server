@@ -1,3 +1,7 @@
+## v0.1.10 (TBA)
+
+- `:httpd` server adapter now can read request body
+
 ## v0.1.9 (2023-02-18)
 
 - `:httpd` server adapter now parses remote ip to tuple format

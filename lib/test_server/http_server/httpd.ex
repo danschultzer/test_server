@@ -160,6 +160,9 @@ defmodule TestServer.HTTPServer.Httpd do
   @impl Plug.Conn.Adapter
   def get_http_protocol(data), do: httpd(data, :http_version)
 
+  @impl Plug.Conn.Adapter
+  def read_req_body(data, _opts), do: {:ok, to_string(httpd(data, :entity_body)), data}
+
   # Callbacks yet to be implemented
 
   @impl Plug.Conn.Adapter
@@ -170,9 +173,6 @@ defmodule TestServer.HTTPServer.Httpd do
 
   @impl Plug.Conn.Adapter
   def chunk(_, _), do: {:error, :not_implemented}
-
-  @impl Plug.Conn.Adapter
-  def read_req_body(_, _), do: {:error, :not_implemented}
 
   @impl Plug.Conn.Adapter
   def push(_, _, _), do: {:error, :not_implemented}

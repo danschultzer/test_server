@@ -394,12 +394,14 @@ defmodule TestServerTest do
     test "with plug function" do
       assert :ok =
                TestServer.plug(fn conn ->
-                 %{conn | params: %{"plug" => "anonymous function"}}
+                 assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+                 %{conn | params: %{"plug" => "anonymous function", body: body}}
                end)
 
-      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, &1.params["plug"]))
+      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, URI.encode_query(&1.params)))
 
-      assert {:ok, "anonymous function"} = request(TestServer.url("/"))
+      assert {:ok, query} = request(TestServer.url("/"))
+      assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => ""}
     end
 
     test "with plug module" do

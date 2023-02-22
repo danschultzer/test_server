@@ -1,4 +1,4 @@
-## v0.1.10 (TBA)
+## v0.1.10 (2023-02-22)
 
 - `:httpd` server adapter now can read request body
 

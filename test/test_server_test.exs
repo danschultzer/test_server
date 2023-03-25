@@ -80,7 +80,7 @@ defmodule TestServerTest do
       assert :ok = TestServer.add("/", to: fn conn ->
         assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 
-        Plug.Conn.send_resp(conn, 200, "OK")
+        Plug.Conn.resp(conn, 200, "OK")
       end)
 
       assert %{host: hostname} = URI.parse(TestServer.url("/"))
@@ -188,7 +188,7 @@ defmodule TestServerTest do
         assert conn.remote_ip == {127, 0, 0, 1}
         assert conn.host == "custom-host"
 
-        Plug.Conn.send_resp(conn, 200, "OK")
+        Plug.Conn.resp(conn, 200, "OK")
       end)
 
       assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
@@ -201,7 +201,7 @@ defmodule TestServerTest do
         assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
         assert conn.host == "custom-host"
 
-        Plug.Conn.send_resp(conn, 200, "OK")
+        Plug.Conn.resp(conn, 200, "OK")
       end)
 
       assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
@@ -321,7 +321,7 @@ defmodule TestServerTest do
       defmodule ToPlug do
         def init(opts), do: opts
 
-        def call(conn, _opts), do: Plug.Conn.send_resp(conn, 200, to_string(__MODULE__))
+        def call(conn, _opts), do: Plug.Conn.resp(conn, 200, to_string(__MODULE__))
       end
 
       assert :ok = TestServer.add("/", to: ToPlug)
@@ -364,7 +364,7 @@ defmodule TestServerTest do
     test "with callback function" do
       assert :ok =
                TestServer.add("/",
-                 to: fn conn -> Plug.Conn.send_resp(conn, 200, "function called") end
+                 to: fn conn -> Plug.Conn.resp(conn, 200, "function called") end
                )
 
       assert request(TestServer.url("/")) == {:ok, "function called"}
@@ -409,7 +409,7 @@ defmodule TestServerTest do
                  %{conn | params: %{"plug" => "anonymous function", body: body}}
                end)
 
-      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, URI.encode_query(&1.params)))
+      assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params)))
 
       assert {:ok, query} = request(TestServer.url("/"))
       assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => ""}
@@ -423,7 +423,7 @@ defmodule TestServerTest do
       end
 
       assert :ok = TestServer.plug(ModulePlug)
-      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, &1.params["plug"]))
+      assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
       assert request(TestServer.url("/")) == {:ok, to_string(ModulePlug)}
     end
 

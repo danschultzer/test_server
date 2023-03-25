@@ -315,7 +315,7 @@ defmodule TestServer do
   end
 
   defp default_response_handler(conn) do
-    Conn.send_resp(conn, 200, to_string(Conn.get_http_protocol(conn)))
+    Conn.resp(conn, 200, to_string(Conn.get_http_protocol(conn)))
   end
 
   @doc """

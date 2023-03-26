@@ -80,7 +80,7 @@ defmodule TestServerTest do
       assert :ok = TestServer.add("/", to: fn conn ->
         assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 
-        Plug.Conn.send_resp(conn, 200, "OK")
+        Plug.Conn.resp(conn, 200, "OK")
       end)
 
       assert %{host: hostname} = URI.parse(TestServer.url("/"))
@@ -188,7 +188,7 @@ defmodule TestServerTest do
         assert conn.remote_ip == {127, 0, 0, 1}
         assert conn.host == "custom-host"
 
-        Plug.Conn.send_resp(conn, 200, "OK")
+        Plug.Conn.resp(conn, 200, "OK")
       end)
 
       assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
@@ -201,7 +201,7 @@ defmodule TestServerTest do
         assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
         assert conn.host == "custom-host"
 
-        Plug.Conn.send_resp(conn, 200, "OK")
+        Plug.Conn.resp(conn, 200, "OK")
       end)
 
       assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
@@ -321,7 +321,7 @@ defmodule TestServerTest do
       defmodule ToPlug do
         def init(opts), do: opts
 
-        def call(conn, _opts), do: Plug.Conn.send_resp(conn, 200, to_string(__MODULE__))
+        def call(conn, _opts), do: Plug.Conn.resp(conn, 200, to_string(__MODULE__))
       end
 
       assert :ok = TestServer.add("/", to: ToPlug)
@@ -364,7 +364,7 @@ defmodule TestServerTest do
     test "with callback function" do
       assert :ok =
                TestServer.add("/",
-                 to: fn conn -> Plug.Conn.send_resp(conn, 200, "function called") end
+                 to: fn conn -> Plug.Conn.resp(conn, 200, "function called") end
                )
 
       assert request(TestServer.url("/")) == {:ok, "function called"}
@@ -388,6 +388,17 @@ defmodule TestServerTest do
       assert {:ok, _} = request(TestServer.url("/"))
       assert {:ok, _} = request(TestServer.url("/"), method: :post)
     end
+
+    # `:httpd` has no HTTP/2 support
+    unless System.get_env("HTTP_SERVER") == "Httpd" do
+    test "with HTTP/2 client" do
+      {:ok, _instance} = TestServer.start(scheme: :https)
+
+      assert :ok = TestServer.add("/")
+
+      assert {:ok, "HTTP/2"} = http2_request(TestServer.url())
+    end
+    end
   end
 
   describe "plug/2" do
@@ -398,7 +409,7 @@ defmodule TestServerTest do
                  %{conn | params: %{"plug" => "anonymous function", body: body}}
                end)
 
-      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, URI.encode_query(&1.params)))
+      assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params)))
 
       assert {:ok, query} = request(TestServer.url("/"))
       assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => ""}
@@ -412,7 +423,7 @@ defmodule TestServerTest do
       end
 
       assert :ok = TestServer.plug(ModulePlug)
-      assert :ok = TestServer.add("/", to: &Plug.Conn.send_resp(&1, 200, &1.params["plug"]))
+      assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
       assert request(TestServer.url("/")) == {:ok, to_string(ModulePlug)}
     end
 
@@ -495,7 +506,7 @@ defmodule TestServerTest do
     end
   end
 
-  # Prevent running httpd in CI
+  # Httpd adapter has no WebSocket support
   unless System.get_env("HTTP_SERVER") == "Httpd" do
   describe "websocket_init/3" do
     test "when instance not running" do
@@ -765,5 +776,39 @@ defmodule TestServerTest do
         100 -> {:error, :timeout}
       end
     end
+  end
+
+  # `:httpd` has no HTTP/2 support
+  unless System.get_env("HTTP_SERVER") == "Httpd" do
+  defp http2_request(url) do
+    opts = [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
+    uri = URI.parse(url)
+    scheme = String.to_atom(uri.scheme)
+
+    {:ok, conn} = Mint.HTTP2.connect(scheme, uri.host, uri.port, opts)
+    {:ok, conn, _request_ref} = Mint.HTTP2.request(conn, "GET", uri.path || "/", _headers = [], _body = "")
+
+    responses = stream_until_done(conn)
+
+    {:data, _, body} = Enum.find(responses, & elem(&1, 0) == :data)
+
+    {:ok, body}
+  end
+
+  defp stream_until_done(conn, acc \\ []) do
+    next_message =
+      receive do
+        msg -> msg
+      end
+
+    {:ok, conn, responses} = Mint.HTTP2.stream(conn, next_message)
+
+    acc = acc ++ responses
+
+    case Enum.any?(responses, & elem(&1, 0) == :done) do
+      true -> acc
+      false -> stream_until_done(conn, acc)
+    end
+  end
   end
 end

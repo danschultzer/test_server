@@ -22,6 +22,7 @@ defmodule TestServer.HTTPServer.Bandit do
       |> Keyword.put(:options, thousand_islands_options)
       |> Keyword.put(:plug, {TestServer.Plug, {__MODULE__, [], instance}})
       |> Keyword.put(:scheme, scheme)
+      |> Keyword.put_new(:startup_log, false)
 
     case Bandit.start_link(bandit_options) do
       {:ok, server_pid} -> {:ok, server_pid, bandit_options}

@@ -1,4 +1,4 @@
-## v0.1.11 (TBA)
+## v0.1.11 (2023-03-27)
 
 - Now uses `Plug.Conn.resp/3` instead of `Plug.Conn.send_resp/3` to prevent controlling process issue in Bandit
 - Silenced Bandit logs

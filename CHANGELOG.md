@@ -1,6 +1,8 @@
 ## v0.1.11 (TBA)
 
 - Now uses `Plug.Conn.resp/3` instead of `Plug.Conn.send_resp/3` to prevent controlling process issue in Bandit
+- Silenced Bandit logs
+- Silence TLS notice logs
 
 ## v0.1.10 (2023-02-22)
 

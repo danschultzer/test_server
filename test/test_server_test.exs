@@ -56,8 +56,9 @@ defmodule TestServerTest do
             verify_fun: {&:ssl_verify_hostname.verify_fun/3, check_hostname: 'localhost'},
             customize_hostname_check: [
               match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
-            ]
-          ]
+            ],
+            log_level: :warning
+          ],
         ]
       end
 

@@ -26,6 +26,8 @@ defmodule TestServer.HTTPServer.Httpd do
   defp put_tls_options(httpd_options, :http, _tls_options), do: httpd_options
 
   defp put_tls_options(httpd_options, :https, tls_options) do
+    tls_options = Keyword.put_new(tls_options, :log_level, :warning)
+
     Keyword.put(httpd_options, :socket_type, {:ssl, tls_options})
   end
 

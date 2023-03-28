@@ -24,7 +24,7 @@ defmodule TestServer.HTTPServer.Plug.Cowboy do
       |> Keyword.put(:dispatch, dispatch(instance))
       |> Keyword.put(:ref, cowboy_ref(port))
       |> Keyword.put(:net, options[:ipfamily])
-      |> Keyword.merge(options[:tls])
+      |> put_tls_options(scheme, options[:tls])
 
     case apply(Cowboy, scheme, [TestServer.Plug, {__MODULE__, %{}, instance}, cowboy_options]) do
       {:ok, pid} -> {:ok, pid, cowboy_options}
@@ -36,6 +36,12 @@ defmodule TestServer.HTTPServer.Plug.Cowboy do
     dispatches = [{:_, __MODULE__, {TestServer.Plug, {__MODULE__, %{}, instance}}}]
 
     [{:_, dispatches}]
+  end
+
+  defp put_tls_options(cowboy_options, :http, _tls_options), do: cowboy_options
+
+  defp put_tls_options(cowboy_options, :https, tls_options) do
+    Keyword.merge(cowboy_options, Keyword.put_new(tls_options, :log_level, :warning))
   end
 
   @impl TestServer.HTTPServer

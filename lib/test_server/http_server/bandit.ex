@@ -9,13 +9,16 @@ defmodule TestServer.HTTPServer.Bandit do
 
   @impl TestServer.HTTPServer
   def start(instance, port, scheme, options, bandit_options) do
-    opts = [options[:ipfamily]] ++ options[:tls]
+    transport_options =
+        bandit_options
+        |> Keyword.get(:transport_options, [])
+        |> put_tls_options(scheme, options[:tls])
 
     thousand_islands_options =
       bandit_options
       |> Keyword.get(:options, [])
       |> Keyword.put(:port, port)
-      |> Keyword.update(:transport_options, opts, & &1 ++ opts)
+      |> Keyword.put(:transport_options, [options[:ipfamily]] ++ transport_options)
 
     bandit_options =
       bandit_options
@@ -28,6 +31,12 @@ defmodule TestServer.HTTPServer.Bandit do
       {:ok, server_pid} -> {:ok, server_pid, bandit_options}
       {:error, error} -> {:error, error}
     end
+  end
+
+  defp put_tls_options(transport_options, :http, _tls_options), do: transport_options
+
+  defp put_tls_options(transport_options, :https, tls_options) do
+    Keyword.merge(transport_options, Keyword.put_new(tls_options, :log_level, :warning))
   end
 
   @impl TestServer.HTTPServer

@@ -1,3 +1,7 @@
+## v0.1.12 (TBA)
+
+- Fixed breaking change to options in Bandit 0.7.6
+
 ## v0.1.11 (2023-03-27)
 
 - Now uses `Plug.Conn.resp/3` instead of `Plug.Conn.send_resp/3` to prevent controlling process issue in Bandit

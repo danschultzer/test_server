@@ -1,4 +1,4 @@
-## v0.1.12 (TBA)
+## v0.1.12 (2023-04-29)
 
 - Fixed breaking change to options in Bandit 0.7.6
 

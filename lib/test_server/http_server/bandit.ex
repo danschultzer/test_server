@@ -10,19 +10,25 @@ defmodule TestServer.HTTPServer.Bandit do
   @impl TestServer.HTTPServer
   def start(instance, port, scheme, options, bandit_options) do
     transport_options =
-        bandit_options
-        |> Keyword.get(:transport_options, [])
-        |> put_tls_options(scheme, options[:tls])
+      bandit_options
+      |> Keyword.get(:transport_options, [])
+      |> put_tls_options(scheme, options[:tls])
+
+    ipfamily_opts =
+      case options[:ipfamily] do
+        :inet -> []
+        ipfamily -> [ipfamily]
+      end
 
     thousand_islands_options =
       bandit_options
-      |> Keyword.get(:options, [])
+      |> Keyword.get(:thousand_island_options, [])
       |> Keyword.put(:port, port)
-      |> Keyword.put(:transport_options, [options[:ipfamily]] ++ transport_options)
+      |> Keyword.put(:transport_options, ipfamily_opts ++ transport_options)
 
     bandit_options =
       bandit_options
-      |> Keyword.put(:options, thousand_islands_options)
+      |> Keyword.put(:thousand_island_options, thousand_islands_options)
       |> Keyword.put(:plug, {TestServer.Plug, {__MODULE__, [], instance}})
       |> Keyword.put(:scheme, scheme)
       |> Keyword.put_new(:startup_log, false)

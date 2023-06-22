@@ -14,9 +14,10 @@ jobs:
       matrix:
         http_server: [Httpd, Plug.Cowboy, Bandit]
         version:
+          - elixir: 1.15
+            otp: 26.0
           - elixir: 1.13
             otp: 25.0
-            deploy: true
     name: OTP ${{matrix.version.otp}} / Elixir ${{matrix.version.elixir}} / ${{matrix.http_server}}
     steps:
       - uses: actions/checkout@v2
@@ -38,7 +39,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 25.0
-          elixir-version: 1.13
+          otp-version: 26.0
+          elixir-version: 1.15
       - run: mix deps.get
       - run: mix hex.publish --yes

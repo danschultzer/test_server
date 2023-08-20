@@ -782,33 +782,22 @@ defmodule TestServerTest do
   # `:httpd` has no HTTP/2 support
   unless System.get_env("HTTP_SERVER") == "Httpd" do
   defp http2_request(url) do
-    opts = [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
-    uri = URI.parse(url)
-    scheme = String.to_atom(uri.scheme)
+    pools = %{
+      default: [
+        protocol: :http2,
+        conn_opts: [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
+      ]
+    }
 
-    {:ok, conn} = Mint.HTTP2.connect(scheme, uri.host, uri.port, opts)
-    {:ok, conn, _request_ref} = Mint.HTTP2.request(conn, "GET", uri.path || "/", _headers = [], _body = "")
+    {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
 
-    responses = stream_until_done(conn)
-
-    {:data, _, body} = Enum.find(responses, & elem(&1, 0) == :data)
-
-    {:ok, body}
-  end
-
-  defp stream_until_done(conn, acc \\ []) do
-    next_message =
-      receive do
-        msg -> msg
-      end
-
-    {:ok, conn, responses} = Mint.HTTP2.stream(conn, next_message)
-
-    acc = acc ++ responses
-
-    case Enum.any?(responses, & elem(&1, 0) == :done) do
-      true -> acc
-      false -> stream_until_done(conn, acc)
+    :get
+    |> Finch.build(url)
+    |> Finch.request(Finch)
+    |> case do
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{status: _, body: body}} -> {:error, body}
+      {:error, error} -> {:error, error}
     end
   end
   end

@@ -66,10 +66,10 @@ defmodule TestServerTest do
       invalid_cacerts = X509.Test.Suite.new().cacerts
 
       assert {:error, {:failed_connect, _}} =
-               request(TestServer.url("/"), http_opts: http_opts.(invalid_cacerts))
+               http1_request(TestServer.url("/"), http_opts: http_opts.(invalid_cacerts))
 
       assert :ok = TestServer.add("/")
-      assert {:ok, _} = request(TestServer.url("/"), http_opts: http_opts.(valid_cacerts))
+      assert {:ok, _} = http1_request(TestServer.url("/"), http_opts: http_opts.(valid_cacerts))
     end
 
     test "starts in IPv6-only mode`" do
@@ -86,7 +86,7 @@ defmodule TestServerTest do
 
       assert %{host: hostname} = URI.parse(TestServer.url("/"))
       assert {:ok, {0, 0, 0, 0, 0, 0, 0, 1}} == :inet.getaddr(String.to_charlist(hostname), :inet6)
-      assert {:ok, _} = request(TestServer.url("/"))
+      assert {:ok, _} = http1_request(TestServer.url("/"))
     end
   end
 
@@ -112,7 +112,7 @@ defmodule TestServerTest do
       assert :ok = TestServer.stop()
       refute Process.alive?(pid)
 
-      assert {:error, {:failed_connect, _}} = request(url)
+      assert {:error, {:failed_connect, _}} = http1_request(url)
     end
 
     test "with multiple instances" do
@@ -192,7 +192,7 @@ defmodule TestServerTest do
         Plug.Conn.resp(conn, 200, "OK")
       end)
 
-      assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
+      assert {:ok, _} = http1_request(TestServer.url("/", host: "custom-host"))
     end
 
     test "with `:host` in IPv6-only mode" do
@@ -205,7 +205,7 @@ defmodule TestServerTest do
         Plug.Conn.resp(conn, 200, "OK")
       end)
 
-      assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
+      assert {:ok, _} = http1_request(TestServer.url("/", host: "custom-host"))
     end
 
     test "with multiple instances" do
@@ -265,7 +265,7 @@ defmodule TestServerTest do
         test "fails" do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert :ok = TestServer.add("/")
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/path"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/path"))
         end
       end
 
@@ -280,7 +280,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", via: :post)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -295,8 +295,8 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert :ok = TestServer.add("/")
 
-          assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/?a=1"))
+          assert {:ok, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/?a=1"))
         end
       end
 
@@ -326,7 +326,7 @@ defmodule TestServerTest do
       end
 
       assert :ok = TestServer.add("/", to: ToPlug)
-      assert request(TestServer.url("/")) == {:ok, to_string(ToPlug)}
+      assert http1_request(TestServer.url("/")) == {:ok, to_string(ToPlug)}
     end
 
     test "with callback function raising exception" do
@@ -337,7 +337,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", to: fn _conn -> raise "boom" end)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -354,7 +354,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", to: fn conn -> Plug.Conn.halt(conn) end)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -368,7 +368,7 @@ defmodule TestServerTest do
                  to: fn conn -> Plug.Conn.resp(conn, 200, "function called") end
                )
 
-      assert request(TestServer.url("/")) == {:ok, "function called"}
+      assert http1_request(TestServer.url("/")) == {:ok, "function called"}
     end
 
     test "with match function" do
@@ -380,14 +380,14 @@ defmodule TestServerTest do
                  end
                )
 
-      assert {:ok, _} = request(TestServer.url("/ignore") <> "?a=1")
+      assert {:ok, _} = http1_request(TestServer.url("/ignore") <> "?a=1")
     end
 
     test "with :via method" do
       assert :ok = TestServer.add("/", via: :get)
       assert :ok = TestServer.add("/", via: :post)
-      assert {:ok, _} = request(TestServer.url("/"))
-      assert {:ok, _} = request(TestServer.url("/"), method: :post)
+      assert {:ok, _} = http1_request(TestServer.url("/"))
+      assert {:ok, _} = http1_request(TestServer.url("/"), method: :post)
     end
 
     # `:httpd` has no HTTP/2 support
@@ -412,7 +412,7 @@ defmodule TestServerTest do
 
       assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params)))
 
-      assert {:ok, query} = request(TestServer.url("/"))
+      assert {:ok, query} = http1_request(TestServer.url("/"))
       assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => ""}
     end
 
@@ -425,7 +425,7 @@ defmodule TestServerTest do
 
       assert :ok = TestServer.plug(ModulePlug)
       assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
-      assert request(TestServer.url("/")) == {:ok, to_string(ModulePlug)}
+      assert http1_request(TestServer.url("/")) == {:ok, to_string(ModulePlug)}
     end
 
     test "when plug errors" do
@@ -436,7 +436,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.plug(fn _conn -> raise "boom" end)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -454,7 +454,7 @@ defmodule TestServerTest do
 
           assert :ok = TestServer.plug(fn conn -> Plug.Conn.halt(conn) end)
           assert :ok = TestServer.add("/")
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -729,7 +729,7 @@ defmodule TestServerTest do
   end
   end
 
-  def request(url, opts \\ []) do
+  def http1_request(url, opts \\ []) do
     url = String.to_charlist(url)
     httpc_http_opts = Keyword.get(opts, :http_opts, [])
     httpc_opts = Keyword.get(opts, :opts, [])

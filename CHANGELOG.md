@@ -1,4 +1,4 @@
-## v0.1.13 (TBA)
+## v0.1.13 (2023-08-26)
 
 - Fixed controlling process issues related to using the Bandit HTTP/2 adapter calling `Plug.Conn` functions in plug callbacks
 

@@ -52,8 +52,8 @@ defmodule TestServer.Instance do
           {:ok, Plug.Conn.t()}
           | {:error, {:not_found, Plug.Conn.t()}}
           | {:error, {term(), list()}}
-  def dispatch(instance, {:plug, request}) do
-    GenServer.call(instance, {:dispatch, {:plug, request}})
+  def dispatch(instance, {:plug, conn}) do
+    GenServer.call(instance, {:dispatch, {:plug, conn}})
   end
 
   @spec dispatch(

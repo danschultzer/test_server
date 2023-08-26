@@ -392,12 +392,23 @@ defmodule TestServerTest do
 
     # `:httpd` has no HTTP/2 support
     unless System.get_env("HTTP_SERVER") == "Httpd" do
-    test "with HTTP/2 client" do
+    test "with HTTP/2" do
       {:ok, _instance} = TestServer.start(scheme: :https)
 
       assert :ok = TestServer.add("/")
-
       assert {:ok, "HTTP/2"} = http2_request(TestServer.url())
+    end
+
+    test "with HTTP/2 with plug function" do
+      {:ok, _instance} = TestServer.start(scheme: :https)
+
+      assert :ok = TestServer.add("/", to: fn conn ->
+        assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
+        assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+        Plug.Conn.resp(conn, 200, body)
+      end)
+
+      assert {:ok, "test"} = http2_request(TestServer.url(), method: :post, body: "test")
     end
     end
   end
@@ -781,7 +792,7 @@ defmodule TestServerTest do
 
   # `:httpd` has no HTTP/2 support
   unless System.get_env("HTTP_SERVER") == "Httpd" do
-  defp http2_request(url) do
+  defp http2_request(url, opts \\ []) do
     pools = %{
       default: [
         protocol: :http2,
@@ -789,10 +800,16 @@ defmodule TestServerTest do
       ]
     }
 
-    {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
+    unless Process.whereis(Finch) do
+      {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
+    end
 
-    :get
-    |> Finch.build(url)
+    headers = Keyword.get(opts, :headers, [])
+    body = Keyword.get(opts, :body, nil)
+
+    opts
+    |> Keyword.get(:method, :get)
+    |> Finch.build(url, headers, body)
     |> Finch.request(Finch)
     |> case do
       {:ok, %{status: 200, body: body}} -> {:ok, body}

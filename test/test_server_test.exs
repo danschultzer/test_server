@@ -66,10 +66,10 @@ defmodule TestServerTest do
       invalid_cacerts = X509.Test.Suite.new().cacerts
 
       assert {:error, {:failed_connect, _}} =
-               request(TestServer.url("/"), http_opts: http_opts.(invalid_cacerts))
+               http1_request(TestServer.url("/"), http_opts: http_opts.(invalid_cacerts))
 
       assert :ok = TestServer.add("/")
-      assert {:ok, _} = request(TestServer.url("/"), http_opts: http_opts.(valid_cacerts))
+      assert {:ok, _} = http1_request(TestServer.url("/"), http_opts: http_opts.(valid_cacerts))
     end
 
     test "starts in IPv6-only mode`" do
@@ -86,7 +86,7 @@ defmodule TestServerTest do
 
       assert %{host: hostname} = URI.parse(TestServer.url("/"))
       assert {:ok, {0, 0, 0, 0, 0, 0, 0, 1}} == :inet.getaddr(String.to_charlist(hostname), :inet6)
-      assert {:ok, _} = request(TestServer.url("/"))
+      assert {:ok, _} = http1_request(TestServer.url("/"))
     end
   end
 
@@ -112,7 +112,7 @@ defmodule TestServerTest do
       assert :ok = TestServer.stop()
       refute Process.alive?(pid)
 
-      assert {:error, {:failed_connect, _}} = request(url)
+      assert {:error, {:failed_connect, _}} = http1_request(url)
     end
 
     test "with multiple instances" do
@@ -192,7 +192,7 @@ defmodule TestServerTest do
         Plug.Conn.resp(conn, 200, "OK")
       end)
 
-      assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
+      assert {:ok, _} = http1_request(TestServer.url("/", host: "custom-host"))
     end
 
     test "with `:host` in IPv6-only mode" do
@@ -205,7 +205,7 @@ defmodule TestServerTest do
         Plug.Conn.resp(conn, 200, "OK")
       end)
 
-      assert {:ok, _} = request(TestServer.url("/", host: "custom-host"))
+      assert {:ok, _} = http1_request(TestServer.url("/", host: "custom-host"))
     end
 
     test "with multiple instances" do
@@ -265,7 +265,7 @@ defmodule TestServerTest do
         test "fails" do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert :ok = TestServer.add("/")
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/path"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/path"))
         end
       end
 
@@ -280,7 +280,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", via: :post)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -295,8 +295,8 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
           assert :ok = TestServer.add("/")
 
-          assert {:ok, _} = unquote(__MODULE__).request(TestServer.url("/"))
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/?a=1"))
+          assert {:ok, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/?a=1"))
         end
       end
 
@@ -326,7 +326,7 @@ defmodule TestServerTest do
       end
 
       assert :ok = TestServer.add("/", to: ToPlug)
-      assert request(TestServer.url("/")) == {:ok, to_string(ToPlug)}
+      assert http1_request(TestServer.url("/")) == {:ok, to_string(ToPlug)}
     end
 
     test "with callback function raising exception" do
@@ -337,7 +337,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", to: fn _conn -> raise "boom" end)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -354,7 +354,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.add("/", to: fn conn -> Plug.Conn.halt(conn) end)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -368,7 +368,7 @@ defmodule TestServerTest do
                  to: fn conn -> Plug.Conn.resp(conn, 200, "function called") end
                )
 
-      assert request(TestServer.url("/")) == {:ok, "function called"}
+      assert http1_request(TestServer.url("/")) == {:ok, "function called"}
     end
 
     test "with match function" do
@@ -380,24 +380,35 @@ defmodule TestServerTest do
                  end
                )
 
-      assert {:ok, _} = request(TestServer.url("/ignore") <> "?a=1")
+      assert {:ok, _} = http1_request(TestServer.url("/ignore") <> "?a=1")
     end
 
     test "with :via method" do
       assert :ok = TestServer.add("/", via: :get)
       assert :ok = TestServer.add("/", via: :post)
-      assert {:ok, _} = request(TestServer.url("/"))
-      assert {:ok, _} = request(TestServer.url("/"), method: :post)
+      assert {:ok, _} = http1_request(TestServer.url("/"))
+      assert {:ok, _} = http1_request(TestServer.url("/"), method: :post)
     end
 
     # `:httpd` has no HTTP/2 support
     unless System.get_env("HTTP_SERVER") == "Httpd" do
-    test "with HTTP/2 client" do
+    test "with HTTP/2" do
       {:ok, _instance} = TestServer.start(scheme: :https)
 
       assert :ok = TestServer.add("/")
-
       assert {:ok, "HTTP/2"} = http2_request(TestServer.url())
+    end
+
+    test "with HTTP/2 with plug function" do
+      {:ok, _instance} = TestServer.start(scheme: :https)
+
+      assert :ok = TestServer.add("/", to: fn conn ->
+        assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
+        assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+        Plug.Conn.resp(conn, 200, body)
+      end)
+
+      assert {:ok, "test"} = http2_request(TestServer.url(), method: :post, body: "test")
     end
     end
   end
@@ -412,7 +423,7 @@ defmodule TestServerTest do
 
       assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params)))
 
-      assert {:ok, query} = request(TestServer.url("/"))
+      assert {:ok, query} = http1_request(TestServer.url("/"))
       assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => ""}
     end
 
@@ -425,7 +436,7 @@ defmodule TestServerTest do
 
       assert :ok = TestServer.plug(ModulePlug)
       assert :ok = TestServer.add("/", to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
-      assert request(TestServer.url("/")) == {:ok, to_string(ModulePlug)}
+      assert http1_request(TestServer.url("/")) == {:ok, to_string(ModulePlug)}
     end
 
     test "when plug errors" do
@@ -436,7 +447,7 @@ defmodule TestServerTest do
           {:ok, _instance} = TestServer.start(suppress_warning: true)
 
           assert :ok = TestServer.plug(fn _conn -> raise "boom" end)
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -454,7 +465,7 @@ defmodule TestServerTest do
 
           assert :ok = TestServer.plug(fn conn -> Plug.Conn.halt(conn) end)
           assert :ok = TestServer.add("/")
-          assert {:error, _} = unquote(__MODULE__).request(TestServer.url("/"))
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/"))
         end
       end
 
@@ -729,7 +740,7 @@ defmodule TestServerTest do
   end
   end
 
-  def request(url, opts \\ []) do
+  def http1_request(url, opts \\ []) do
     url = String.to_charlist(url)
     httpc_http_opts = Keyword.get(opts, :http_opts, [])
     httpc_opts = Keyword.get(opts, :opts, [])
@@ -781,34 +792,29 @@ defmodule TestServerTest do
 
   # `:httpd` has no HTTP/2 support
   unless System.get_env("HTTP_SERVER") == "Httpd" do
-  defp http2_request(url) do
-    opts = [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
-    uri = URI.parse(url)
-    scheme = String.to_atom(uri.scheme)
+  defp http2_request(url, opts \\ []) do
+    pools = %{
+      default: [
+        protocol: :http2,
+        conn_opts: [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
+      ]
+    }
 
-    {:ok, conn} = Mint.HTTP2.connect(scheme, uri.host, uri.port, opts)
-    {:ok, conn, _request_ref} = Mint.HTTP2.request(conn, "GET", uri.path || "/", _headers = [], _body = "")
+    unless Process.whereis(Finch) do
+      {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
+    end
 
-    responses = stream_until_done(conn)
+    headers = Keyword.get(opts, :headers, [])
+    body = Keyword.get(opts, :body, nil)
 
-    {:data, _, body} = Enum.find(responses, & elem(&1, 0) == :data)
-
-    {:ok, body}
-  end
-
-  defp stream_until_done(conn, acc \\ []) do
-    next_message =
-      receive do
-        msg -> msg
-      end
-
-    {:ok, conn, responses} = Mint.HTTP2.stream(conn, next_message)
-
-    acc = acc ++ responses
-
-    case Enum.any?(responses, & elem(&1, 0) == :done) do
-      true -> acc
-      false -> stream_until_done(conn, acc)
+    opts
+    |> Keyword.get(:method, :get)
+    |> Finch.build(url, headers, body)
+    |> Finch.request(Finch)
+    |> case do
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{status: _, body: body}} -> {:error, body}
+      {:error, error} -> {:error, error}
     end
   end
   end

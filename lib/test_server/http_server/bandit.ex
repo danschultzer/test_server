@@ -29,7 +29,7 @@ defmodule TestServer.HTTPServer.Bandit do
     bandit_options =
       bandit_options
       |> Keyword.put(:thousand_island_options, thousand_islands_options)
-      |> Keyword.put(:plug, {TestServer.Plug, {__MODULE__, [], instance}})
+      |> Keyword.put(:plug, {TestServer.HTTPServer.Bandit.Plug, {__MODULE__, [], instance}})
       |> Keyword.put(:scheme, scheme)
       |> Keyword.put_new(:startup_log, false)
 

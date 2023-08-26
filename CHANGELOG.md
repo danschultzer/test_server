@@ -1,3 +1,7 @@
+## v0.1.13 (TBA)
+
+- Fixed controlling process issues related to using the Bandit HTTP/2 adapter calling `Plug.Conn` functions in plug callbacks
+
 ## v0.1.12 (2023-04-29)
 
 - Fixed breaking change to options in Bandit 0.7.6

@@ -45,7 +45,7 @@ defmodule TestServer.MixProject do
       {:ssl_verify_fun, ">= 0.0.0", only: [:test]},
       {:credo, ">= 0.0.0", only: [:dev, :test]},
       {:websockex, "~> 0.4.3", only: [:test]},
-      {:mint, "~> 1.0", only: [:test]},
+      {:finch, ">= 0.0.0", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end

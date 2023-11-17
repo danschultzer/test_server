@@ -28,6 +28,7 @@ jobs:
           otp-version: ${{matrix.version.otp}}
           elixir-version: ${{matrix.version.elixir}}
       - run: mix deps.get
+      - run: MIX_ENV=test mix compile --warnings-as-errors
       - run: HTTP_SERVER=${{matrix.http_server}} mix test
       - run: MIX_ENV=test mix credo
   deploy:

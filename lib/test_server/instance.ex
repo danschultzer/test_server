@@ -213,36 +213,6 @@ defmodule TestServer.Instance do
     {:reply, {:ok, plug}, %{state | plugs: state.plugs ++ [plug]}}
   end
 
-  defp build_match_function(uri, methods) do
-    {method_match, guards} =
-      case methods do
-        ["*"] ->
-          {quote(do: _), true}
-
-        methods ->
-          var = quote do: method
-          guards = quote(do: unquote(var) in unquote(methods))
-
-          {var, guards}
-      end
-
-    {_params, path_match, guards, _post_match} = Plug.Router.Utils.build_path_clause(uri, guards)
-
-    {match_fn, []} =
-      Code.eval_quoted(
-        quote do
-          fn
-            _conn, unquote(method_match), unquote(path_match), _host when unquote(guards) -> true
-            _conn, _method, _path, _host -> false
-          end
-        end
-      )
-
-    fn conn ->
-      match_fn.(conn, conn.method, Plug.Router.Utils.decode_path_info!(conn), conn.host)
-    end
-  end
-
   def handle_call(
         {:register, {:websocket, {_instance, route_ref}, {:handle, options, stacktrace}}},
         _from,
@@ -308,6 +278,36 @@ defmodule TestServer.Instance do
       end
 
     {:reply, res, state}
+  end
+
+  defp build_match_function(uri, methods) do
+    {method_match, guards} =
+      case methods do
+        ["*"] ->
+          {quote(do: _), true}
+
+        methods ->
+          var = quote do: method
+          guards = quote(do: unquote(var) in unquote(methods))
+
+          {var, guards}
+      end
+
+    {_params, path_match, guards, _post_match} = Plug.Router.Utils.build_path_clause(uri, guards)
+
+    {match_fn, []} =
+      Code.eval_quoted(
+        quote do
+          fn
+            _conn, unquote(method_match), unquote(path_match), _host when unquote(guards) -> true
+            _conn, _method, _path, _host -> false
+          end
+        end
+      )
+
+    fn conn ->
+      match_fn.(conn, conn.method, Plug.Router.Utils.decode_path_info!(conn), conn.host)
+    end
   end
 
   defp run_plugs(conn, state) do

@@ -1,3 +1,10 @@
+# Changelog
+
+## v0.1.14 (TBA)
+
+- Fixed compiler warning in `TestServer.Instance`
+
+
 ## v0.1.13 (2023-08-26)
 
 - Fixed controlling process issues related to using the Bandit HTTP/2 adapter calling `Plug.Conn` functions in plug callbacks

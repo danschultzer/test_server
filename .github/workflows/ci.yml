@@ -1,16 +1,13 @@
 name: CI
 
 on:
-  push:
+  push: 
+    branches: [ main ]
   pull_request:
-  release:
-    types:
-      - published
+  workflow_call:
 
 jobs:
   test:
-    # This ensures we run the test for only the PR or the push
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     strategy:
       matrix:
         http_server: [Httpd, Plug.Cowboy, Bandit]
@@ -21,28 +18,15 @@ jobs:
             otp: 25.0
     runs-on: ubuntu-latest
     name: OTP ${{matrix.version.otp}} / Elixir ${{matrix.version.elixir}} / ${{matrix.http_server}}
+    env:
+      MIX_ENV: test 
+      HTTP_SERVER: ${{matrix.http_server}} 
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.version.otp}}
           elixir-version: ${{matrix.version.elixir}}
-      - run: mix deps.get
-      - run: MIX_ENV=test mix compile --warnings-as-errors
-      - run: HTTP_SERVER=${{matrix.http_server}} mix test
-      - run: MIX_ENV=test mix credo
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release' && github.event.action == 'published'
-    name: Deploy published release
-    env:
-      HEX_API_KEY: ${{secrets.HEX_API_KEY}}
-    steps:
-      - uses: actions/checkout@v2
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: 26.0
-          elixir-version: 1.15
-      - run: mix deps.get
-      - run: mix hex.publish --yes
+      - run: mix deps.get mix compile --warnings-as-errors
+      - run: mix test
+      - run: mix credo

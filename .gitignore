@@ -27,3 +27,4 @@ test_server-*.tar
 
 .DS_Store
 /.elixir_ls
+/.elixir-tools

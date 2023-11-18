@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.14 (TBA)
+## v0.1.14 (2023-11-18)
 
 - Fixed compiler warning in `TestServer.Instance`
 

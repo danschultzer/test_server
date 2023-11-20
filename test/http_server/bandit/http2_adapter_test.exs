@@ -4,23 +4,31 @@ defmodule TestServer.HTTPServer.Bandit.HTTP2AdapterTest do
 
   setup do
     Application.ensure_all_started(:bandit)
-    {:ok, _instance} = TestServer.start(scheme: :https, http_server: {TestServer.HTTPServer.Bandit, []})
+
+    {:ok, _instance} =
+      TestServer.start(scheme: :https, http_server: {TestServer.HTTPServer.Bandit, []})
 
     :ok
   end
 
   test "Plug.Conn.send_resp/3" do
-    assert :ok = TestServer.add("/", to: fn conn ->
-      Plug.Conn.send_resp(conn, 200, "test")
-    end)
+    assert :ok =
+             TestServer.add("/",
+               to: fn conn ->
+                 Plug.Conn.send_resp(conn, 200, "test")
+               end
+             )
 
     assert {:ok, "test"} = http2_request(TestServer.url())
   end
 
   test "Plug.Conn.send_file/1" do
-    assert :ok = TestServer.add("/", to: fn conn ->
-      Plug.Conn.send_file(conn, 200, __ENV__.file)
-    end)
+    assert :ok =
+             TestServer.add("/",
+               to: fn conn ->
+                 Plug.Conn.send_file(conn, 200, __ENV__.file)
+               end
+             )
 
     expected = File.read!(__ENV__.file)
 
@@ -28,41 +36,53 @@ defmodule TestServer.HTTPServer.Bandit.HTTP2AdapterTest do
   end
 
   test "Plug.Conn.send_chunked/1 and Plug.Conn.chunk/1" do
-    assert :ok = TestServer.add("/", to: fn conn ->
-      conn = Plug.Conn.send_chunked(conn, 200)
-      {:ok, conn} = Plug.Conn.chunk(conn, "Hello\n")
-      {:ok, conn} = Plug.Conn.chunk(conn, "World")
+    assert :ok =
+             TestServer.add("/",
+               to: fn conn ->
+                 conn = Plug.Conn.send_chunked(conn, 200)
+                 {:ok, conn} = Plug.Conn.chunk(conn, "Hello\n")
+                 {:ok, conn} = Plug.Conn.chunk(conn, "World")
 
-      conn
-    end)
+                 conn
+               end
+             )
 
     assert {:ok, "Hello\nWorld"} = http2_request(TestServer.url())
   end
 
   test "Plug.Conn.get_peer_data/1" do
-    assert :ok = TestServer.add("/", to: fn conn ->
-      assert %{address: {127, 0, 0, 1}} = Plug.Conn.get_peer_data(conn)
+    assert :ok =
+             TestServer.add("/",
+               to: fn conn ->
+                 assert %{address: {127, 0, 0, 1}} = Plug.Conn.get_peer_data(conn)
 
-      Plug.Conn.resp(conn, 200, "OK")
-    end)
+                 Plug.Conn.resp(conn, 200, "OK")
+               end
+             )
 
     assert {:ok, "OK"} = http2_request(TestServer.url())
   end
 
   test "Plug.Conn.get_http_protocol/1" do
-    assert :ok = TestServer.add("/", to: fn conn ->
-      assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
-      Plug.Conn.send_resp(conn, 200, "OK")
-    end)
+    assert :ok =
+             TestServer.add("/",
+               to: fn conn ->
+                 assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
+                 Plug.Conn.send_resp(conn, 200, "OK")
+               end
+             )
 
     assert {:ok, "OK"} = http2_request(TestServer.url())
   end
 
   test "Plug.Conn.read_body/1" do
-    assert :ok = TestServer.add("/", to: fn conn ->
-      assert {:ok, body, _data} = Plug.Conn.read_body(conn)
-      Plug.Conn.resp(conn, 200, body)
-    end)
+    assert :ok =
+             TestServer.add("/",
+               to: fn conn ->
+                 assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+                 Plug.Conn.resp(conn, 200, body)
+               end
+             )
 
     assert {:ok, "test"} = http2_request(TestServer.url(), method: :post, body: "test")
   end

@@ -14,7 +14,8 @@ defmodule TestServer do
   @type websocket_socket :: {instance(), route()}
   @type websocket_frame :: {atom(), any()}
   @type websocket_state :: any()
-  @type websocket_reply :: {:reply, websocket_frame(), websocket_state()} | {:ok, websocket_state()}
+  @type websocket_reply ::
+          {:reply, websocket_frame(), websocket_state()} | {:ok, websocket_state()}
 
   @doc """
   Start a test server instance.

@@ -19,7 +19,7 @@ if Code.ensure_loaded?(Bandit) do
     @impl Plug.Conn.Adapter
     def read_req_body({plug_pid, payload}, opts) do
       with {:ok, data, payload} <-
-        send_and_receive(plug_pid, :read_req_body, [payload, opts]) do
+             send_and_receive(plug_pid, :read_req_body, [payload, opts]) do
         {:ok, data, {plug_pid, payload}}
       end
     end
@@ -37,7 +37,7 @@ if Code.ensure_loaded?(Bandit) do
     @impl Plug.Conn.Adapter
     def send_resp({plug_pid, payload}, status, headers, body) do
       with {:ok, sent_body, payload} <-
-        send_and_receive(plug_pid, :send_resp, [payload, status, headers, body]) do
+             send_and_receive(plug_pid, :send_resp, [payload, status, headers, body]) do
         {:ok, sent_body, {plug_pid, payload}}
       end
     end
@@ -45,7 +45,14 @@ if Code.ensure_loaded?(Bandit) do
     @impl Plug.Conn.Adapter
     def send_file({plug_pid, payload}, status, headers, path, offset, length) do
       with {:ok, sent_body, payload} <-
-        send_and_receive(plug_pid, :send_file, [payload, status, headers, path, offset, length]) do
+             send_and_receive(plug_pid, :send_file, [
+               payload,
+               status,
+               headers,
+               path,
+               offset,
+               length
+             ]) do
         {:ok, sent_body, {plug_pid, payload}}
       end
     end
@@ -53,7 +60,7 @@ if Code.ensure_loaded?(Bandit) do
     @impl Plug.Conn.Adapter
     def send_chunked({plug_pid, payload}, status, headers) do
       with {:ok, sent_body, payload} <-
-        send_and_receive(plug_pid, :send_chunked, [payload, status, headers]) do
+             send_and_receive(plug_pid, :send_chunked, [payload, status, headers]) do
         {:ok, sent_body, {plug_pid, payload}}
       end
     end
@@ -92,4 +99,4 @@ if Code.ensure_loaded?(Bandit) do
       send_and_receive(plug_pid, :get_http_protocol, [payload])
     end
   end
-  end
+end

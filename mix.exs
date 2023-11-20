@@ -42,11 +42,12 @@ defmodule TestServer.MixProject do
       {:bandit, ">= 0.7.6", optional: true},
       {:plug_cowboy, ">= 2.0.0", optional: true},
 
+      # Development and test
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:ssl_verify_fun, ">= 0.0.0", only: [:test]},
       {:credo, ">= 0.0.0", only: [:dev, :test]},
       {:websockex, "~> 0.4.3", only: [:test]},
-      {:finch, ">= 0.0.0", only: [:test]},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+      {:finch, ">= 0.0.0", only: [:test]}
     ]
   end
 

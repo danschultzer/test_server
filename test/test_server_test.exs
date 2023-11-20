@@ -53,12 +53,12 @@ defmodule TestServerTest do
             verify: :verify_peer,
             depth: 99,
             cacerts: cacerts,
-            verify_fun: {&:ssl_verify_hostname.verify_fun/3, check_hostname: 'localhost'},
+            verify_fun: {&:ssl_verify_hostname.verify_fun/3, check_hostname: ~c"localhost"},
             customize_hostname_check: [
               match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
             ],
             log_level: :warning
-          ],
+          ]
         ]
       end
 
@@ -78,14 +78,20 @@ defmodule TestServerTest do
 
       assert options[:ipfamily] == :inet6
 
-      assert :ok = TestServer.add("/", to: fn conn ->
-        assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+      assert :ok =
+               TestServer.add("/",
+                 to: fn conn ->
+                   assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 
-        Plug.Conn.resp(conn, 200, "OK")
-      end)
+                   Plug.Conn.resp(conn, 200, "OK")
+                 end
+               )
 
       assert %{host: hostname} = URI.parse(TestServer.url("/"))
-      assert {:ok, {0, 0, 0, 0, 0, 0, 0, 1}} == :inet.getaddr(String.to_charlist(hostname), :inet6)
+
+      assert {:ok, {0, 0, 0, 0, 0, 0, 0, 1}} ==
+               :inet.getaddr(String.to_charlist(hostname), :inet6)
+
       assert {:ok, _} = http1_request(TestServer.url("/"))
     end
   end
@@ -185,12 +191,15 @@ defmodule TestServerTest do
     test "with `:host`" do
       TestServer.start()
 
-      assert :ok = TestServer.add("/", to: fn conn ->
-        assert conn.remote_ip == {127, 0, 0, 1}
-        assert conn.host == "custom-host"
+      assert :ok =
+               TestServer.add("/",
+                 to: fn conn ->
+                   assert conn.remote_ip == {127, 0, 0, 1}
+                   assert conn.host == "custom-host"
 
-        Plug.Conn.resp(conn, 200, "OK")
-      end)
+                   Plug.Conn.resp(conn, 200, "OK")
+                 end
+               )
 
       assert {:ok, _} = http1_request(TestServer.url("/", host: "custom-host"))
     end
@@ -198,12 +207,15 @@ defmodule TestServerTest do
     test "with `:host` in IPv6-only mode" do
       TestServer.start(ipfamily: :inet6, http_server: {TestServer.HTTPServer.Httpd, []})
 
-      assert :ok = TestServer.add("/", to: fn conn ->
-        assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
-        assert conn.host == "custom-host"
+      assert :ok =
+               TestServer.add("/",
+                 to: fn conn ->
+                   assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+                   assert conn.host == "custom-host"
 
-        Plug.Conn.resp(conn, 200, "OK")
-      end)
+                   Plug.Conn.resp(conn, 200, "OK")
+                 end
+               )
 
       assert {:ok, _} = http1_request(TestServer.url("/", host: "custom-host"))
     end
@@ -392,24 +404,27 @@ defmodule TestServerTest do
 
     # `:httpd` has no HTTP/2 support
     unless System.get_env("HTTP_SERVER") == "Httpd" do
-    test "with HTTP/2" do
-      {:ok, _instance} = TestServer.start(scheme: :https)
+      test "with HTTP/2" do
+        {:ok, _instance} = TestServer.start(scheme: :https)
 
-      assert :ok = TestServer.add("/")
-      assert {:ok, "HTTP/2"} = http2_request(TestServer.url())
-    end
+        assert :ok = TestServer.add("/")
+        assert {:ok, "HTTP/2"} = http2_request(TestServer.url())
+      end
 
-    test "with HTTP/2 with plug function" do
-      {:ok, _instance} = TestServer.start(scheme: :https)
+      test "with HTTP/2 with plug function" do
+        {:ok, _instance} = TestServer.start(scheme: :https)
 
-      assert :ok = TestServer.add("/", to: fn conn ->
-        assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
-        assert {:ok, body, _data} = Plug.Conn.read_body(conn)
-        Plug.Conn.resp(conn, 200, body)
-      end)
+        assert :ok =
+                 TestServer.add("/",
+                   to: fn conn ->
+                     assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
+                     assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+                     Plug.Conn.resp(conn, 200, body)
+                   end
+                 )
 
-      assert {:ok, "test"} = http2_request(TestServer.url(), method: :post, body: "test")
-    end
+        assert {:ok, "test"} = http2_request(TestServer.url(), method: :post, body: "test")
+      end
     end
   end
 
@@ -520,224 +535,230 @@ defmodule TestServerTest do
 
   # Httpd adapter has no WebSocket support
   unless System.get_env("HTTP_SERVER") == "Httpd" do
-  describe "websocket_init/3" do
-    test "when instance not running" do
-      {:ok, instance} = TestServer.start()
-      assert :ok = TestServer.stop()
+    describe "websocket_init/3" do
+      test "when instance not running" do
+        {:ok, instance} = TestServer.start()
+        assert :ok = TestServer.stop()
 
-      assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
-        TestServer.websocket_init(instance, "/ws")
-      end
-    end
-
-    test "invalid options" do
-      assert_raise ArgumentError, "`:to` is an invalid option", fn ->
-        TestServer.websocket_init("/", to: MyPlug)
-      end
-    end
-
-    test "with multiple instances" do
-      {:ok, _instance_1} = TestServer.start()
-      {:ok, _instance_2} = TestServer.start()
-
-      assert_raise RuntimeError,
-                   ~r/Multiple TestServer\.Instance's running, please pass instance to `TestServer\.websocket_init\/2`/,
-                   fn ->
-                     TestServer.websocket_init("/ws")
-                   end
-    end
-  end
-
-  describe "websocket_handle/3" do
-    test "when instance not running" do
-      {:ok, instance} = TestServer.start()
-      assert {:ok, socket} = TestServer.websocket_init("/ws")
-      assert :ok = TestServer.stop(instance)
-
-      assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
-        TestServer.websocket_handle(socket)
-      end
-    end
-
-    test "invalid options" do
-      assert_raise ArgumentError, ~r/`:to` is an invalid option/, fn ->
-        TestServer.websocket_init("/", to: :invalid)
-      end
-
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.websocket_init("/", match: :invalid)
-      end
-    end
-
-    test "with no message received" do
-      defmodule WebSocketHandleNoMessageTest do
-        use ExUnit.Case
-
-        test "fails" do
-          assert {:ok, socket} = TestServer.websocket_init("/ws")
-          assert {:ok, _client} = WebSocketClient.start_link(TestServer.url("/ws"))
-          assert :ok = TestServer.websocket_handle(socket)
+        assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+          TestServer.websocket_init(instance, "/ws")
         end
       end
 
-      assert capture_io(fn -> ExUnit.run() end) =~
-               "did not receive a frame for these websocket handlers before the test ended:"
-    end
-
-    test "when receiving unexpected frame" do
-      defmodule WebSocketHandleTooManyMessagesTest do
-        use ExUnit.Case
-
-        test "fails" do
-          {:ok, _instance} = TestServer.start(suppress_warning: true)
-
-          assert {:ok, _socket} = TestServer.websocket_init("/ws")
-          assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-          assert WebSocketClient.send_message(client, "ping") == :ok
-
-          assert WebSocketClient.send_message(client, "ping") =~
-                   "received an unexpected WebSocket frame"
+      test "invalid options" do
+        assert_raise ArgumentError, "`:to` is an invalid option", fn ->
+          TestServer.websocket_init("/", to: MyPlug)
         end
       end
 
-      assert capture_io(fn -> ExUnit.run() end) =~ "received an unexpected WebSocket frame"
+      test "with multiple instances" do
+        {:ok, _instance_1} = TestServer.start()
+        {:ok, _instance_2} = TestServer.start()
+
+        assert_raise RuntimeError,
+                     ~r/Multiple TestServer\.Instance's running, please pass instance to `TestServer\.websocket_init\/2`/,
+                     fn ->
+                       TestServer.websocket_init("/ws")
+                     end
+      end
     end
 
-    test "with callback function raising exception" do
-      defmodule WebSocketHandleToFunctionRaiseTest do
-        use ExUnit.Case
+    describe "websocket_handle/3" do
+      test "when instance not running" do
+        {:ok, instance} = TestServer.start()
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert :ok = TestServer.stop(instance)
 
-        test "fails" do
-          {:ok, _instance} = TestServer.start(suppress_warning: true)
-          assert {:ok, socket} = TestServer.websocket_init("/ws")
-          assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-
-          assert :ok =
-                   TestServer.websocket_handle(socket, to: fn _frame, _state -> raise "boom" end)
-
-          assert WebSocketClient.send_message(client, "ping") =~ "(RuntimeError) boom"
+        assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+          TestServer.websocket_handle(socket)
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) boom"
-      assert io =~ "anonymous fn/2 in TestServerTest.WebSocketHandleToFunctionRaiseTest"
-    end
+      test "invalid options" do
+        assert_raise ArgumentError, ~r/`:to` is an invalid option/, fn ->
+          TestServer.websocket_init("/", to: :invalid)
+        end
 
-    test "with callback function with invalid response" do
-      defmodule WebSocketHandleToFunctionInvalidResponseTest do
-        use ExUnit.Case
-
-        test "fails" do
-          {:ok, _instance} = TestServer.start(suppress_warning: true)
-
-          assert {:ok, socket} = TestServer.websocket_init("/ws")
-          assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-          assert :ok = TestServer.websocket_handle(socket, to: fn _frame, _state -> :invalid end)
-
-          assert WebSocketClient.send_message(client, "ping") =~
-                   "(RuntimeError) Invalid callback response, got: :invalid."
+        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+          TestServer.websocket_init("/", match: :invalid)
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ " (RuntimeError) Invalid callback response, got: :invalid."
-    end
+      test "with no message received" do
+        defmodule WebSocketHandleNoMessageTest do
+          use ExUnit.Case
 
-    test "with callback function" do
-      assert {:ok, socket} = TestServer.websocket_init("/ws")
-      assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+          test "fails" do
+            assert {:ok, socket} = TestServer.websocket_init("/ws")
+            assert {:ok, _client} = WebSocketClient.start_link(TestServer.url("/ws"))
+            assert :ok = TestServer.websocket_handle(socket)
+          end
+        end
 
-      assert :ok =
-               TestServer.websocket_handle(socket,
-                 to: fn {:text, _any}, state -> {:reply, {:text, "function called"}, state} end
-               )
+        assert capture_io(fn -> ExUnit.run() end) =~
+                 "did not receive a frame for these websocket handlers before the test ended:"
+      end
 
-      assert WebSocketClient.send_message(client, "ping") == {:ok, "function called"}
-    end
+      test "when receiving unexpected frame" do
+        defmodule WebSocketHandleTooManyMessagesTest do
+          use ExUnit.Case
 
-    test "with match function" do
-      assert {:ok, socket} = TestServer.websocket_init("/ws", init_state: %{custom: true})
-      assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+          test "fails" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
 
-      assert :ok =
-               TestServer.websocket_handle(socket, match: fn _frame, %{custom: true} -> true end)
+            assert {:ok, _socket} = TestServer.websocket_init("/ws")
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+            assert WebSocketClient.send_message(client, "ping") == :ok
 
-      assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}
-    end
-  end
+            assert WebSocketClient.send_message(client, "ping") =~
+                     "received an unexpected WebSocket frame"
+          end
+        end
 
-  describe "websocket_info/2" do
-    test "when instance not running" do
-      {:ok, instance} = TestServer.start()
-      assert {:ok, socket} = TestServer.websocket_init("/ws")
-      assert :ok = TestServer.stop(instance)
+        assert capture_io(fn -> ExUnit.run() end) =~ "received an unexpected WebSocket frame"
+      end
 
-      assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
-        TestServer.websocket_info(socket)
+      test "with callback function raising exception" do
+        defmodule WebSocketHandleToFunctionRaiseTest do
+          use ExUnit.Case
+
+          test "fails" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
+            assert {:ok, socket} = TestServer.websocket_init("/ws")
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+            assert :ok =
+                     TestServer.websocket_handle(socket,
+                       to: fn _frame, _state -> raise "boom" end
+                     )
+
+            assert WebSocketClient.send_message(client, "ping") =~ "(RuntimeError) boom"
+          end
+        end
+
+        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io =~ "(RuntimeError) boom"
+        assert io =~ "anonymous fn/2 in TestServerTest.WebSocketHandleToFunctionRaiseTest"
+      end
+
+      test "with callback function with invalid response" do
+        defmodule WebSocketHandleToFunctionInvalidResponseTest do
+          use ExUnit.Case
+
+          test "fails" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+            assert {:ok, socket} = TestServer.websocket_init("/ws")
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+            assert :ok =
+                     TestServer.websocket_handle(socket, to: fn _frame, _state -> :invalid end)
+
+            assert WebSocketClient.send_message(client, "ping") =~
+                     "(RuntimeError) Invalid callback response, got: :invalid."
+          end
+        end
+
+        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io =~ " (RuntimeError) Invalid callback response, got: :invalid."
+      end
+
+      test "with callback function" do
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok =
+                 TestServer.websocket_handle(socket,
+                   to: fn {:text, _any}, state -> {:reply, {:text, "function called"}, state} end
+                 )
+
+        assert WebSocketClient.send_message(client, "ping") == {:ok, "function called"}
+      end
+
+      test "with match function" do
+        assert {:ok, socket} = TestServer.websocket_init("/ws", init_state: %{custom: true})
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok =
+                 TestServer.websocket_handle(socket,
+                   match: fn _frame, %{custom: true} -> true end
+                 )
+
+        assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}
       end
     end
 
-    test "with invalid callback response" do
-      defmodule WebSocketInfoInvalidMessageTest do
-        use ExUnit.Case
+    describe "websocket_info/2" do
+      test "when instance not running" do
+        {:ok, instance} = TestServer.start()
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert :ok = TestServer.stop(instance)
 
-        test "fails" do
-          {:ok, _instance} = TestServer.start(suppress_warning: true)
-          assert {:ok, socket} = TestServer.websocket_init("/ws")
-          assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-          assert :ok = TestServer.websocket_info(socket, fn _state -> :invalid end)
-
-          assert {:ok, message} = WebSocketClient.receive_message(client)
-          assert message =~ "(RuntimeError) Invalid callback response, got: :invalid."
+        assert_raise RuntimeError, ~r/TestServer\.Instance \#PID\<[0-9.]+\> is not running/, fn ->
+          TestServer.websocket_info(socket)
         end
       end
 
-      assert capture_io(fn -> ExUnit.run() end) =~
-               "(RuntimeError) Invalid callback response, got: :invalid."
-    end
+      test "with invalid callback response" do
+        defmodule WebSocketInfoInvalidMessageTest do
+          use ExUnit.Case
 
-    test "with callback function raising exception" do
-      defmodule WebSocketInfoToFunctionRaiseTest do
-        use ExUnit.Case
+          test "fails" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
+            assert {:ok, socket} = TestServer.websocket_init("/ws")
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+            assert :ok = TestServer.websocket_info(socket, fn _state -> :invalid end)
 
-        test "fails" do
-          {:ok, _instance} = TestServer.start(suppress_warning: true)
-          assert {:ok, socket} = TestServer.websocket_init("/ws")
-          assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-
-          assert :ok = TestServer.websocket_info(socket, fn _state -> raise "boom" end)
-
-          assert {:ok, message} = WebSocketClient.receive_message(client)
-          assert message =~ "(RuntimeError) boom"
+            assert {:ok, message} = WebSocketClient.receive_message(client)
+            assert message =~ "(RuntimeError) Invalid callback response, got: :invalid."
+          end
         end
+
+        assert capture_io(fn -> ExUnit.run() end) =~
+                 "(RuntimeError) Invalid callback response, got: :invalid."
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) boom"
-      assert io =~ "anonymous fn/1 in TestServerTest.WebSocketInfoToFunctionRaiseTest"
+      test "with callback function raising exception" do
+        defmodule WebSocketInfoToFunctionRaiseTest do
+          use ExUnit.Case
+
+          test "fails" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
+            assert {:ok, socket} = TestServer.websocket_init("/ws")
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+            assert :ok = TestServer.websocket_info(socket, fn _state -> raise "boom" end)
+
+            assert {:ok, message} = WebSocketClient.receive_message(client)
+            assert message =~ "(RuntimeError) boom"
+          end
+        end
+
+        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io =~ "(RuntimeError) boom"
+        assert io =~ "anonymous fn/1 in TestServerTest.WebSocketInfoToFunctionRaiseTest"
+      end
+
+      test "with callback function" do
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok =
+                 TestServer.websocket_info(socket, fn state ->
+                   {:reply, {:text, "pong"}, state}
+                 end)
+
+        assert {:ok, "pong"} = WebSocketClient.receive_message(client)
+      end
+
+      test "with default callback function" do
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok = TestServer.websocket_info(socket)
+        assert {:ok, "ping"} = WebSocketClient.receive_message(client)
+      end
     end
-
-    test "with callback function" do
-      assert {:ok, socket} = TestServer.websocket_init("/ws")
-      assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-
-      assert :ok =
-               TestServer.websocket_info(socket, fn state ->
-                 {:reply, {:text, "pong"}, state}
-               end)
-
-      assert {:ok, "pong"} = WebSocketClient.receive_message(client)
-    end
-
-    test "with default callback function" do
-      assert {:ok, socket} = TestServer.websocket_init("/ws")
-      assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-
-      assert :ok = TestServer.websocket_info(socket)
-      assert {:ok, "ping"} = WebSocketClient.receive_message(client)
-    end
-  end
   end
 
   def http1_request(url, opts \\ []) do
@@ -748,8 +769,11 @@ defmodule TestServerTest do
     opts
     |> Keyword.get(:method, :get)
     |> case do
-      :post -> :httpc.request(:post, {url, [], 'plain/text', 'OK'}, httpc_http_opts, httpc_opts)
-      :get -> :httpc.request(:get, {url, []}, httpc_http_opts, httpc_opts)
+      :post ->
+        :httpc.request(:post, {url, [], ~c"plain/text", ~c"OK"}, httpc_http_opts, httpc_opts)
+
+      :get ->
+        :httpc.request(:get, {url, []}, httpc_http_opts, httpc_opts)
     end
     |> case do
       {:ok, {{_, 200, _}, _headers, body}} -> {:ok, to_string(body)}
@@ -792,30 +816,30 @@ defmodule TestServerTest do
 
   # `:httpd` has no HTTP/2 support
   unless System.get_env("HTTP_SERVER") == "Httpd" do
-  defp http2_request(url, opts \\ []) do
-    pools = %{
-      default: [
-        protocol: :http2,
-        conn_opts: [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
-      ]
-    }
+    defp http2_request(url, opts \\ []) do
+      pools = %{
+        default: [
+          protocol: :http2,
+          conn_opts: [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
+        ]
+      }
 
-    unless Process.whereis(Finch) do
-      {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
+      unless Process.whereis(Finch) do
+        {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
+      end
+
+      headers = Keyword.get(opts, :headers, [])
+      body = Keyword.get(opts, :body, nil)
+
+      opts
+      |> Keyword.get(:method, :get)
+      |> Finch.build(url, headers, body)
+      |> Finch.request(Finch)
+      |> case do
+        {:ok, %{status: 200, body: body}} -> {:ok, body}
+        {:ok, %{status: _, body: body}} -> {:error, body}
+        {:error, error} -> {:error, error}
+      end
     end
-
-    headers = Keyword.get(opts, :headers, [])
-    body = Keyword.get(opts, :body, nil)
-
-    opts
-    |> Keyword.get(:method, :get)
-    |> Finch.build(url, headers, body)
-    |> Finch.request(Finch)
-    |> case do
-      {:ok, %{status: 200, body: body}} -> {:ok, body}
-      {:ok, %{status: _, body: body}} -> {:error, body}
-      {:error, error} -> {:error, error}
-    end
-  end
   end
 end

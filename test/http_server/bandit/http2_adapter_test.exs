@@ -90,7 +90,7 @@ defmodule TestServer.HTTPServer.Bandit.HTTP2AdapterTest do
   defp http2_request(url, opts \\ []) do
     pools = %{
       default: [
-        protocol: :http2,
+        protocols: [:http2],
         conn_opts: [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
       ]
     }

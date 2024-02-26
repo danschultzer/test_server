@@ -94,6 +94,12 @@ defmodule TestServerTest do
 
       assert {:ok, _} = http1_request(TestServer.url("/"))
     end
+
+    test "with invalid http server" do
+      assert_raise RuntimeError, ~r/Invalid http_server, got: :invalid/, fn ->
+        TestServer.start(http_server: :invalid)
+      end
+    end
   end
 
   describe "stop/1" do

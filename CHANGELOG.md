@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.15 (TBA)
+
+- Validates `:http_server` option
+
 ## v0.1.14 (2023-11-18)
 
 - Fixed compiler warning in `TestServer.Instance`

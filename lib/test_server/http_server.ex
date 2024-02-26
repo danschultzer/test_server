@@ -32,17 +32,6 @@ defmodule TestServer.HTTPServer do
   @callback stop(instance(), server_options()) :: :ok | {:error, any()}
   @callback get_socket_pid(Plug.Conn.t()) :: pid()
 
-  @default_http_server Enum.find_value(
-                         [
-                           {Bandit, TestServer.HTTPServer.Bandit},
-                           {Plug.Cowboy, TestServer.HTTPServer.Plug.Cowboy},
-                           {:httpd, TestServer.HTTPServer.Httpd}
-                         ],
-                         fn {dep, module} ->
-                           if Code.ensure_loaded?(dep), do: {module, []}
-                         end
-                       )
-
   @doc false
   @spec start(pid(), keyword()) :: {:ok, keyword()} | {:error, any()}
   def start(instance, options) do
@@ -51,13 +40,7 @@ defmodule TestServer.HTTPServer do
     {tls_options, x509_options} = maybe_generate_x509_suite(options, scheme)
     ip_family = Keyword.get(options, :ipfamily, :inet)
     test_server_options = [tls: tls_options, ipfamily: ip_family]
-
-    {mod, server_options} =
-      Keyword.get(
-        options,
-        :http_server,
-        Application.get_env(:test_server, :http_server, @default_http_server)
-      )
+    {mod, server_options} = http_server(options)
 
     case mod.start(instance, port, scheme, test_server_options, server_options) do
       {:ok, reference, server_options} ->
@@ -107,11 +90,8 @@ defmodule TestServer.HTTPServer do
   defp maybe_generate_x509_suite(options, :https) do
     tls_opts = Keyword.get(options, :tls, [])
 
-    case Keyword.has_key?(tls_opts, :key) || Keyword.has_key?(tls_opts, :keyfile) do
-      true ->
-        {tls_opts, []}
-
-      false ->
+    case Keyword.take(tls_opts, [:key, :keyfile]) do
+      [] ->
         suite = X509.Test.Suite.new()
 
         {[
@@ -119,11 +99,35 @@ defmodule TestServer.HTTPServer do
            cert: X509.Certificate.to_der(suite.valid),
            cacerts: suite.chain ++ suite.cacerts
          ], x509_suite: suite}
+
+      [_ | _] ->
+        {tls_opts, []}
     end
   end
 
   defp maybe_generate_x509_suite(_options, :http) do
     {[], []}
+  end
+
+  defp http_server(options) do
+    case options[:http_server] || Application.get_env(:test_server, :http_server) ||
+           default_http_server() do
+      {mod, server_options} when is_atom(mod) and is_list(server_options) -> {mod, server_options}
+      other -> raise("Invalid http_server, got: #{inspect(other)}")
+    end
+  end
+
+  defp default_http_server do
+    cond do
+      Code.ensure_loaded?(TestServer.HTTPServer.Bandit) ->
+        {TestServer.HTTPServer.Bandit, []}
+
+      Code.ensure_loaded?(TestServer.HTTPServer.Plug.Cowboy) ->
+        {TestServer.HTTPServer.Plug.Cowboy, []}
+
+      true ->
+        {TestServer.HTTPServer.Httpd, []}
+    end
   end
 
   @doc false

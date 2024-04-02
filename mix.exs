@@ -39,7 +39,7 @@ defmodule TestServer.MixProject do
       {:x509, "~> 0.6"},
 
       # Optional web servers
-      {:bandit, ">= 0.7.6", optional: true},
+      {:bandit, ">= 1.4.0", optional: true},
       {:plug_cowboy, ">= 2.0.0", optional: true},
 
       # Development and test

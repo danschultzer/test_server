@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.16 (TBA)
+## v0.1.16 (2024-04-02)
 
 - Fixed breaking changes with Bandit 1.4
 

@@ -68,6 +68,8 @@ if Code.ensure_loaded?(Bandit) do
     def handle_info({callback, stacktrace}, {socket, state}),
       do: WebSocket.handle_info({callback, stacktrace}, {socket, state})
 
+    def handle_info(_, {socket, state}), do: {:ok, {socket, state}}
+
     @impl WebSock
     def terminate(_reason, _state), do: :ok
   end

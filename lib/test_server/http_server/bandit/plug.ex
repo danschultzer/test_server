@@ -4,9 +4,9 @@ defmodule TestServer.HTTPServer.Bandit.Plug do
 
   defdelegate init(opts), to: TestServer.Plug
 
-  def call(%{adapter: {Bandit.HTTP2.Adapter, req}} = conn, {http_server, args, instance}) do
+  def call(%{adapter: {Bandit.Adapter, req}} = conn, {http_server, args, instance}) do
     plug_pid = self()
-    conn = %{conn | adapter: {TestServer.HTTPServer.Bandit.HTTP2Adapter, {plug_pid, req}}}
+    conn = %{conn | adapter: {TestServer.HTTPServer.Bandit.Adapter, {plug_pid, req}}}
 
     loop(
       Task.async(fn ->
@@ -15,7 +15,7 @@ defmodule TestServer.HTTPServer.Bandit.Plug do
         send(plug_pid, :done)
 
         %{adapter: {_, {_, req}}} = conn
-        %{conn | adapter: {Bandit.HTTP2.Adapter, req}}
+        %{conn | adapter: {Bandit.Adapter, req}}
       end)
     )
   end

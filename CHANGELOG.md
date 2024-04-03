@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.16 (TBA)
+
+- Fixed breaking changes with Bandit 1.4
+
 ## v0.1.15 (2024-02-26)
 
 - Validates `:http_server` option

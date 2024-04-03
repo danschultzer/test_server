@@ -1,17 +1,16 @@
-# Due to how Bandit HTTP2 handles streams it's necessary to encapsulate the
-# calls to ensure that the originating process triggers the plug calls.
+# Due to how Bandit handles streams and requires the same caller for all plug
+# function calls, it's necessary to encapsulate the calls to ensure that the
+# originating process triggers the plug calls.
 #
-# We'll wrap the adapter to catch requests meant for `Bandit.HTTP2.Adapter`,
+# We'll wrap the adapter to catch requests meant for `Bandit.Adapter`,
 # and send message back to the plug process to ensure all plug calls happen
 # in the same process as the initial plug.
-#
-# This may not be neessary in future releases of Bandit post 1.0.0.
 #
 # For more background:
 # https://github.com/mtrudel/bandit/issues/215
 # https://github.com/mtrudel/bandit/issues/101
 if Code.ensure_loaded?(Bandit) do
-  defmodule TestServer.HTTPServer.Bandit.HTTP2Adapter do
+  defmodule TestServer.HTTPServer.Bandit.Adapter do
     @moduledoc false
 
     @behaviour Plug.Conn.Adapter
@@ -25,7 +24,7 @@ if Code.ensure_loaded?(Bandit) do
     end
 
     defp send_and_receive(plug_pid, f, a) do
-      mfa = {Bandit.HTTP2.Adapter, f, a}
+      mfa = {Bandit.Adapter, f, a}
 
       send(plug_pid, {self(), mfa})
 

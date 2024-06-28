@@ -152,7 +152,7 @@ defmodule TestServer do
   @spec url() :: binary()
   def url, do: url("")
 
-  @spec url(binary() | keyword()) :: binary()
+  @spec url(binary() | keyword() | pid()) :: binary()
   def url(uri) when is_binary(uri), do: url(uri, [])
   def url(opts) when is_list(opts), do: url("", opts)
   def url(instance) when is_pid(instance), do: url(instance, "", [])

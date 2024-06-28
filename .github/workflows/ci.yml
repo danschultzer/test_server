@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  push: 
+  push:
     branches: [ main ]
   pull_request:
   workflow_call:
@@ -13,11 +13,11 @@ jobs:
     env:
       MIX_ENV: test
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 26.0
-          elixir-version: 1.16
+          otp-version: 27.0
+          elixir-version: 1.17
       - run: mix deps.get
       - run: mix compile --warnings-as-errors
       - run: mix credo --strict --ignore design.alias
@@ -28,6 +28,8 @@ jobs:
       matrix:
         http_server: [Httpd, Plug.Cowboy, Bandit]
         version:
+          - elixir: 1.17
+            otp: 27.0
           - elixir: 1.16
             otp: 26.0
           - elixir: 1.13
@@ -35,10 +37,10 @@ jobs:
     runs-on: ubuntu-latest
     name: OTP ${{matrix.version.otp}} / Elixir ${{matrix.version.elixir}} / ${{matrix.http_server}}
     env:
-      MIX_ENV: test 
-      HTTP_SERVER: ${{matrix.http_server}} 
+      MIX_ENV: test
+      HTTP_SERVER: ${{matrix.http_server}}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.version.otp}}

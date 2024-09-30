@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.17 (TBA)
+
+- Fixed invalid spec for `TestServer.url/1`
+
 ## v0.1.16 (2024-04-02)
 
 - Fixed breaking changes with Bandit 1.4

@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.17 (TBA)
+## v0.1.17 (2023-09-30)
 
 - Fixed invalid spec for `TestServer.url/1`
 

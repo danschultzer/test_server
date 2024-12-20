@@ -28,7 +28,7 @@ jobs:
       matrix:
         http_server: [Httpd, Plug.Cowboy, Bandit]
         version:
-          - elixir: 1.17
+          - elixir: 1.18
             otp: 27.0
           - elixir: 1.16
             otp: 26.0

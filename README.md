@@ -163,8 +163,6 @@ Use the `:ipfamily` option to test with IPv6 when you are starting the test serv
 TestServer.start(ipfamily: :inet6)
 ```
 
-<!-- MDOC !-->
-
 ## LICENSE
 
 (The MIT License)

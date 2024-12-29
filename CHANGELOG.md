@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.18 (TBA)
+
+- Limit number of Bandit acceptors to 1 to improve performance
+
 ## v0.1.17 (2023-09-30)
 
 - Fixed invalid spec for `TestServer.url/1`

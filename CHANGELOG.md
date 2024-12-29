@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.18 (TBA)
+## v0.1.18 (2024-12-29)
 
 - Limit number of Bandit acceptors to 1 to improve performance
 

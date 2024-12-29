@@ -23,6 +23,9 @@ if Code.ensure_loaded?(Bandit) do
       thousand_islands_options =
         bandit_options
         |> Keyword.get(:thousand_island_options, [])
+        # For tests it is not necessary to open the default 100 acceptor
+        # processes
+        |> Keyword.put(:num_acceptors, 1)
         |> Keyword.put(:port, port)
         |> Keyword.put(:transport_options, ipfamily_opts ++ transport_options)
 

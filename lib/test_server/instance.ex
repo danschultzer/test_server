@@ -16,7 +16,7 @@ defmodule TestServer.Instance do
   @spec register(pid(), {:plug_router_to, {binary(), keyword(), TestServer.stacktrace()}}) ::
           {:ok, %{ref: reference()}}
   def register(instance, {:plug_router_to, {uri, options, stacktrace}}) do
-    options[:to] != :websocket && ensure_plug!(options[:to])
+    ensure_plug!(options[:to])
     options[:match] && ensure_function!(options[:match])
 
     GenServer.call(instance, {:register, {:plug_router_to, {uri, options, stacktrace}}})
@@ -319,16 +319,16 @@ defmodule TestServer.Instance do
       plugs -> plugs
     end
     |> Enum.reduce_while(conn, fn %{plug: plug, stacktrace: stacktrace}, conn ->
-      case try_run_plug(plug, stacktrace, conn) do
+      case try_run_plug(conn, plug, stacktrace) do
         {:ok, conn} -> {:cont, conn}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp try_run_plug(plug, stacktrace, conn) do
-    plug
-    |> run_plug(conn)
+  defp try_run_plug(conn, plug, stacktrace) do
+    conn
+    |> run_plug(plug)
     |> check_halted!(plug, stacktrace)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
@@ -345,11 +345,11 @@ defmodule TestServer.Instance do
 
   defp check_halted!(conn, _plug, _stacktrace), do: {:ok, conn}
 
-  defp run_plug(plug, conn) when is_function(plug) do
+  defp run_plug(conn, plug) when is_function(plug) do
     plug.(conn)
   end
 
-  defp run_plug(plug, conn) when is_atom(plug) do
+  defp run_plug(conn, plug) when is_atom(plug) do
     options = plug.init([])
     plug.call(conn, options)
   end
@@ -367,16 +367,12 @@ defmodule TestServer.Instance do
         {{:error, {:not_found, conn}}, state}
 
       index ->
-        result =
-          case Enum.at(state.routes, index) do
-            %{to: :websocket, options: options} = route ->
-              websocket = {{self(), route.ref}, Keyword.get(options, :init_state)}
-              conn = Map.put(conn, :private, %{websocket: websocket})
-              {:ok, conn}
+        %{to: plug, stacktrace: stacktrace} = route = Enum.at(state.routes, index)
 
-            %{to: plug, stacktrace: stacktrace} ->
-              try_run_plug(plug, stacktrace, conn)
-          end
+        result =
+          conn
+          |> maybe_put_websocket(route)
+          |> try_run_plug(plug, stacktrace)
 
         routes =
           List.update_at(state.routes, index, fn route ->
@@ -391,6 +387,17 @@ defmodule TestServer.Instance do
     apply(match, args)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
+  end
+
+  def maybe_put_websocket(conn, route) do
+    case route.options[:websocket] do
+      true ->
+        websocket = {{self(), route.ref}, Keyword.get(route.options, :init_state)}
+        Map.put(conn, :private, %{websocket: websocket})
+
+      _false ->
+        conn
+    end
   end
 
   defp run_websocket_handlers({_instance, route_ref}, frame, websocket_state, state) do

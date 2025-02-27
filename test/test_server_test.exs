@@ -558,8 +558,12 @@ defmodule TestServerTest do
       end
 
       test "invalid options" do
-        assert_raise ArgumentError, "`:to` is an invalid option", fn ->
-          TestServer.websocket_init("/", to: MyPlug)
+        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+          TestServer.websocket_init("/", to: :invalid)
+        end
+
+        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+          TestServer.websocket_init("/", match: :invalid)
         end
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
@@ -576,6 +580,31 @@ defmodule TestServerTest do
                      fn ->
                        TestServer.websocket_init("/ws")
                      end
+      end
+
+      test "with handshake callback function with set conn" do
+        assert {:ok, _socket} =
+                 TestServer.websocket_init("/ws",
+                   to: fn conn ->
+                     Plug.Conn.resp(conn, 403, "Forbidden")
+                   end
+                 )
+
+        assert {:error, %WebSockex.RequestError{code: 403}} =
+                 WebSocketClient.start_link(TestServer.url("/ws"))
+      end
+
+      test "with handshake callback function with unset conn" do
+        assert {:ok, _socket} =
+                 TestServer.websocket_init("/ws",
+                   to: fn conn ->
+                     assert Plug.Conn.get_req_header(conn, "upgrade") == ["websocket"]
+
+                     conn
+                   end
+                 )
+
+        assert {:ok, _client} = WebSocketClient.start_link(TestServer.url("/ws"))
       end
     end
 

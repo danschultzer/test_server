@@ -324,8 +324,8 @@ defmodule TestServer do
 
   This plug will be called for all requests before route is matched.
   """
-  @spec plug(atom() | function()) :: :ok
-  def plug(plug) when is_atom(plug) or is_function(plug) do
+  @spec plug(module() | function()) :: :ok
+  def plug(plug) do
     {:ok, instance} = autostart()
 
     plug(instance, plug)
@@ -336,7 +336,7 @@ defmodule TestServer do
 
   See `plug/1` for options.
   """
-  @spec plug(pid(), atom() | function()) :: :ok
+  @spec plug(pid(), module() | function()) :: :ok
   def plug(instance, plug) do
     [_first_module_entry | stacktrace] = get_stacktrace()
 

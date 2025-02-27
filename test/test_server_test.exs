@@ -256,8 +256,8 @@ defmodule TestServerTest do
         TestServer.add("/", match: :invalid)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: "not a plug"/, fn ->
-        TestServer.add("/", to: "not a plug")
+      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+        TestServer.add("/", to: :invalid)
       end
     end
 
@@ -435,6 +435,12 @@ defmodule TestServerTest do
   end
 
   describe "plug/2" do
+    test "with invalid plug" do
+      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+        TestServer.plug(:invalid)
+      end
+    end
+
     test "with plug function" do
       assert :ok =
                TestServer.plug(fn conn ->
@@ -555,6 +561,10 @@ defmodule TestServerTest do
         assert_raise ArgumentError, "`:to` is an invalid option", fn ->
           TestServer.websocket_init("/", to: MyPlug)
         end
+
+        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+          TestServer.websocket_init("/", match: :invalid)
+        end
       end
 
       test "with multiple instances" do
@@ -581,13 +591,17 @@ defmodule TestServerTest do
       end
 
       test "invalid options" do
-        assert_raise ArgumentError, ~r/`:to` is an invalid option/, fn ->
-          TestServer.websocket_init("/", to: :invalid)
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+
+        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+          TestServer.websocket_handle(socket, to: :invalid)
         end
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-          TestServer.websocket_init("/", match: :invalid)
+          TestServer.websocket_handle(socket, match: :invalid)
         end
+
+        TestServer.stop()
       end
 
       test "with no message received" do
@@ -687,7 +701,9 @@ defmodule TestServerTest do
 
         assert :ok =
                  TestServer.websocket_handle(socket,
-                   match: fn _frame, %{custom: true} -> true end
+                   match: fn _frame, %{custom: true} ->
+                     true
+                   end
                  )
 
         assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}

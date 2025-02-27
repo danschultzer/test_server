@@ -16,19 +16,15 @@ defmodule TestServer.Instance do
   @spec register(pid(), {:plug_router_to, {binary(), keyword(), TestServer.stacktrace()}}) ::
           {:ok, %{ref: reference()}}
   def register(instance, {:plug_router_to, {uri, options, stacktrace}}) do
-    unless is_atom(options[:to]) or is_function(options[:to]),
-      do: raise(BadFunctionError, term: options[:to])
-
-    unless is_nil(options[:match]) or is_function(options[:match]),
-      do: raise(BadFunctionError, term: options[:match])
+    options[:to] != :websocket && ensure_plug!(options[:to])
+    options[:match] && ensure_function!(options[:match])
 
     GenServer.call(instance, {:register, {:plug_router_to, {uri, options, stacktrace}}})
   end
 
   @spec register(pid(), {:plug, {atom() | function(), TestServer.stacktrace()}}) :: {:ok, map()}
   def register(instance, {:plug, {plug, stacktrace}}) do
-    unless is_atom(plug) or is_function(plug),
-      do: raise(BadFunctionError, term: plug)
+    ensure_plug!(plug)
 
     GenServer.call(instance, {:register, {:plug, {plug, stacktrace}}})
   end
@@ -39,14 +35,20 @@ defmodule TestServer.Instance do
         ) ::
           {:ok, map()}
   def register({instance, _router_ref} = socket, {:websocket, {:handle, options, stacktrace}}) do
-    unless is_nil(options[:match]) or is_function(options[:match]),
-      do: raise(BadFunctionError, term: options[:match])
-
-    unless is_function(options[:to]),
-      do: raise(BadFunctionError, term: options[:to])
+    options[:match] && ensure_function!(options[:match])
+    ensure_function!(options[:to])
 
     GenServer.call(instance, {:register, {:websocket, socket, {:handle, options, stacktrace}}})
   end
+
+  defp ensure_plug!(plug) do
+    unless is_function(plug) or (is_atom(plug) and function_exported?(plug, :init, 1)) do
+      raise BadFunctionError, term: plug
+    end
+  end
+
+  defp ensure_function!(fun) when is_function(fun), do: :ok
+  defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
 
   @spec dispatch(pid(), {:plug, Plug.Conn.t()}) ::
           {:ok, Plug.Conn.t()}

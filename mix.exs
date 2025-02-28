@@ -75,6 +75,14 @@ defmodule TestServer.MixProject do
       ],
       skip_undefined_reference_warnings_on: [
         "CHANGELOG.md"
+      ],
+      groups_for_modules: [
+        HTTPServer: [
+          TestServer.HTTPServer,
+          TestServer.HTTPServer.Httpd,
+          TestServer.HTTPServer.Bandit,
+          TestServer.HTTPServer.Plug.Cowboy
+        ]
       ]
     ]
   end

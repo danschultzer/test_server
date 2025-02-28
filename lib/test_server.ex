@@ -429,7 +429,7 @@ defmodule TestServer do
   @doc """
   Adds a route to a test server instance.
 
-  See `plug/1` for options.
+  See `plug/1` for more.
   """
   @spec plug(pid(), module() | function()) :: :ok
   def plug(instance, plug) do
@@ -459,6 +459,8 @@ defmodule TestServer do
 
   @doc """
   Fetches the generated x509 suite for a test server instance.
+
+  See `x509_suite/0` for more.
   """
   @spec x509_suite(pid()) :: term()
   def x509_suite(instance) do

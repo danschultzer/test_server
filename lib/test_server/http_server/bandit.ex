@@ -1,11 +1,22 @@
 if Code.ensure_loaded?(Bandit) do
   defmodule TestServer.HTTPServer.Bandit do
-    @moduledoc false
+    @moduledoc """
+    HTTP server adapter using `Bandit`.
 
-    alias TestServer.WebSocket
+    By default only one acceptor process is started which is enough for
+    testing. This adapter will be used by default if `Bandit` is loaded in the
+    project.
 
+    ## Usage
+
+        TestServer.start(
+          http_server: {TestServer.HTTPServer.Bandit, bandit_options}
+        )
+    """
     @behaviour TestServer.HTTPServer
     @behaviour WebSock
+
+    alias TestServer.WebSocket
 
     @impl TestServer.HTTPServer
     def start(instance, port, scheme, options, bandit_options) do

@@ -1,6 +1,17 @@
 if Code.ensure_loaded?(Plug.Cowboy) do
   defmodule TestServer.HTTPServer.Plug.Cowboy do
-    @moduledoc false
+    @moduledoc """
+    HTTP server adapter using `Plug.Cowboy`.
+
+    This adapter will be used by default if `Bandit` is not loaded and
+    `Plug.Cowboy` is loaded in the project.
+
+    ## Usage
+
+        TestServer.start(
+          http_server: {TestServer.HTTPServer.Plug.Cowboy, cowboy_options}
+        )
+    """
 
     # Server
 

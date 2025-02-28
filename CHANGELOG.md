@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.19 (TBA)
+## v0.1.19 (2025-02-27)
 
 - Allow `:to` plug to be set for `TestServer.websocket_init/3` for handshake
 

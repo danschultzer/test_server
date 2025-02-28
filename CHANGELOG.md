@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.20 (TBA)
+## v0.1.20 (2025-02-28)
 
 - Include `:inets` in `:extra_applications` to prevent compilation issue with `TestServer.HTTPServer.Httpd`
 

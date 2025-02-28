@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.20 (TBA)
+
+- Include `:inets` in `:extra_applications` to prevent compilation issue with `TestServer.HTTPServer.Httpd`
+
 ## v0.1.19 (2025-02-27)
 
 - Allow `:to` plug to be set for `TestServer.websocket_init/3` for handshake

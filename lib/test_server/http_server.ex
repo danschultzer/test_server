@@ -7,18 +7,24 @@ defmodule TestServer.HTTPServer do
       defmodule MyApp.MyHTTPServer do
         @behaviour TestServer.HTTPServer
 
-        @impl true
+        @impl TestServer.HTTPServer
         def start(instance, port, scheme, tls_options, server_options) do
-          # ...
+          my_http_server_options =
+            server_options
+            |> Keyword.put(:port, port)
+            |> Keyword.put_new(:ipfamily, options[:ipfamily])
+
+          case MyHTTPServer.start(my_http_server_options) do
+            {:ok, pid} -> {:ok, pid, my_http_server_options}
+            {:error, error} -> {:error, error}
+          end
         end
 
-        def stop(instance, server_options) do
-          # ...
-        end
+        @impl TestServer.HTTPServer
+        def stop(instance, server_options), do: MyHTTPServer.stop()
 
-        def get_socket_pid(conn) do
-          # ...
-        end
+        @impl TestServer.HTTPServer
+        def get_socket_pid(conn), do: conn.owner
       end
   """
   @type scheme :: :http | :https

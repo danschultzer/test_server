@@ -15,21 +15,9 @@ Features:
 - Built-in TLS with self-signed certificates
 - Plug route matching
 
-<!-- MDOC !-->
-
-## Installation
-
-Add `test_server` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:test_server, "~> 0.1.18", only: [:test]}
-  ]
-end
-```
-
 ## Usage
+
+Add route request expectations with `TestServer.add/2`:
 
 ```elixir
 test "fetch_url/0" do
@@ -43,21 +31,17 @@ test "fetch_url/0" do
 end
 ```
 
-The `TestServer.add/2` function can route a request to an anonymous function:
+`TestServer.add/2` can route a request to an anonymous function or plug with `:to` option.
 
 ```elixir
 TestServer.add("/", to: fn conn ->
-  Plug.Conn.send_resp(conn, 200, "success")
+  Plug.Conn.send_resp(conn, 200, "OK")
 end)
-```
 
-It can also route to a plug:
-
-```elixir
 TestServer.add("/", to: MyPlug)
 ```
 
-The method to listen to can be defined with `:via`, by default it'll match any method:
+The method listened to can be defined with `:via` option. By default any method is matched.
 
 ```elixir
 TestServer.add("/", via: :post)
@@ -67,7 +51,7 @@ A custom match function can be set with `:match` option:
 
 ```elixir
 TestServer.add("/", match: fn
-  %{params: %{"a" => 1}} = _conn -> true
+  %{params: %{"a" => "1"}} = _conn -> true
   _conn -> false
 end)
 ```
@@ -82,7 +66,7 @@ TestServer.add("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "second"))
 {:ok, "second"} = fetch_request()
 ```
 
-Plugs can be added to process requests before it matches any routes. If no plugs are defined `Plug.Conn.fetch_query_params/1` will be used.
+Plugs can be added to the pipeline with `TestServer.plug/1`. All plugs will run before any routes are matched. `Plug.Conn.fetch_query_params/1` is used if no plugs are set.
 
 ```elixir
 TestServer.plug(fn conn ->
@@ -100,24 +84,33 @@ TestServer.plug(MyPlug)
 
 ### HTTPS
 
-By default all routes are served as plain HTTP. HTTPS can be enabled with the `:scheme` option when starting the test server.
+By default the test server is set up to serve plain HTTP. HTTPS can be enabled with the `:scheme` option when calling `TestServer.start/1`.
 
-Custom SSL certificates can also be used by defining the cowboy options:
+Custom SSL certificates can also be used by defining the `:tls` option:
 
 ```elixir
 TestServer.start(scheme: :https, tls: [keyfile: key, certfile: cert])
 ```
 
-A certificate suite will automatically generated if you don't include certificate:
+A self-signed certificate suite is automatically generated if you don't set the `:tls` options:
 
 ```elixir
-{:ok, instance} = TestServer.start(scheme: :https)
-cacerts = TestServer.x509_suite().cacerts
+TestServer.start(scheme: :https)
+
+req_opts = [
+  connect_options: [
+    transport_opts: [cacerts: TestServer.x509_suite().cacerts],
+    protocols: [:http2]
+  ]
+]
+
+assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
+        Req.get(TestServer.url(), req_opts)
 ```
 
 ### WebSocket
 
-WebSocket endpoint can also be set up. By default the handler will echo what was received.
+WebSocket endpoint can be set up by calling `TestServer.websocket_init/2`. By default, `TestServer.websocket_handle/2` will echo the message received. Messages can be send from the test server with `TestServer.websocket_info/2`.
 
 ```elixir
 test "WebSocketClient" do
@@ -147,20 +140,43 @@ end
 
 ### HTTP Server Adapter
 
-TestServer supports `Bandit`, `Plug.Cowboy`, and `:httpd` out of the box. The HTTP adapter will be selected in this order depending which is available in the dependencies. You can also explicitly set the http server in the configuration:
+TestServer supports `Bandit`, `Plug.Cowboy`, and `:httpd` out of the box. The HTTP adapter will be selected in this order depending which is available in the dependencies. You can also explicitly set the http server in the configuration when calling `TestServer.start/1`:
 
 ```elixir
-TestServer.start(http_server: {Bandit, []})
+TestServer.start(http_server: {TestServer.HTTPServer.Bandit, []})
 ```
 
 You can create your own plug based HTTP Server Adapter by using the `TestServer.HTTPServer` behaviour.
 
 ### IPv6
 
-Use the `:ipfamily` option to test with IPv6 when you are starting the test server:
+Use the `:ipfamily` option to test with IPv6 when starting the test server with `TestServer.start/1`:
 
 ```elixir
 TestServer.start(ipfamily: :inet6)
+
+assert :ok =
+          TestServer.add("/",
+            to: fn conn ->
+              assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+
+              Plug.Conn.resp(conn, 200, "OK")
+            end
+          )
+```
+
+<!-- MDOC !-->
+
+## Installation
+
+Add `test_server` to your list of dependencies in `mix.exs`:
+
+```elixir
+def deps do
+  [
+    {:test_server, "~> 0.1.18", only: [:test]}
+  ]
+end
 ```
 
 ## LICENSE

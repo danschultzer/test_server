@@ -24,11 +24,44 @@ defmodule TestServer do
 
   ## Options
 
-    * `:port`             - integer of port number, defaults to random port that can be opened;
+    * `:port`             - integer of port number, defaults to random port
+      that can be opened;
     * `:scheme`           - an atom for the http scheme. Defaults to `:http`;
-    * `:http_server`      - HTTP server configuration. Defaults to `{TestServer.HTTPServer.Httpd, []}`;
-    * `:tls`              - Passthru options for TLS configuration handled by the webserver;
-    * `:ipfamily`         - The IP address type to use, either `:inet` or `:inet6`. Defaults to `:inet`;
+    * `:http_server`      - HTTP server configuration. Defaults to
+      `{TestServer.HTTPServer.Bandit, []}`,
+      `{TestServer.HTTPServer.Plug.Cowboy, []}`, or
+      `{TestServer.HTTPServer.Httpd, []}` depending on which web server is
+      available in the project dependencies;
+    * `:tls`              - Passthru options for TLS configuration handled by
+      the webserver;
+    * `:ipfamily`         - The IP address type to use, either `:inet` or
+      `:inet6`. Defaults to `:inet`;
+
+  ## Examples
+
+      TestServer.start(
+        scheme: :https,
+        ipfamily: :inet6,
+        http_server: {TestServer.HTTPServer.Bandit, [ip: :any]}
+      )
+
+      TestServer.add("/",
+        to: fn conn ->
+          assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+
+          Plug.Conn.resp(conn, 200, to_string(Plug.Conn.get_http_protocol(conn)))
+        end
+      )
+
+      req_opts = [
+        connect_options: [
+          transport_opts: [cacerts: TestServer.x509_suite().cacerts],
+          protocols: [:http2]
+        ]
+      ]
+
+      assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
+              Req.get(TestServer.url(), req_opts)
   """
   @spec start(keyword()) :: {:ok, pid()}
   def start(options \\ []) do
@@ -117,6 +150,14 @@ defmodule TestServer do
 
   @doc """
   Shuts down the current test server.
+
+  ## Examples
+
+      TestServer.start()
+      url = TestServer.url()
+      TestServer.stop()
+
+      assert {:error, %Req.TransportError{}} = Req.get(url, retry: false)
   """
   @spec stop() :: :ok | {:error, term()}
   def stop, do: stop(fetch_instance!())
@@ -140,6 +181,14 @@ defmodule TestServer do
 
   @doc """
   Gets current test server instance if running.
+
+  ## Examples
+
+      refute TestServer.get_instance()
+
+      {:ok, instance} = TestServer.start()
+
+      assert TestServer.get_instance() == instance
   """
   @spec get_instance() :: pid() | nil
   def get_instance do
@@ -162,6 +211,14 @@ defmodule TestServer do
 
   ## Options
     * `:host` - binary host value, it'll be added to inet for IP `127.0.0.1` and `::1`, defaults to `"localhost"`;
+
+  ## Examples
+
+      TestServer.start(port: 4444)
+
+      assert TestServer.url() == "http://localhost:4444"
+      assert TestServer.url("/test") == "http://localhost:4444/test"
+      assert TestServer.url(host: "example.com") == "http://example.com:4444"
   """
   @spec url(binary(), keyword()) :: binary()
   def url(uri, opts) when is_binary(uri), do: url(fetch_instance!(), uri, opts)
@@ -249,11 +306,35 @@ defmodule TestServer do
   @doc """
   Adds a route to the current test server.
 
+  Matching routes are handled FIFO (first in, first out). Any requests to
+  routes not added to the TestServer and any routes that isn't matched will
+  raise an error in the test case.
+
   ## Options
 
-    * `:via`       - matches the route against some specific HTTP method(s) specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`.
-    * `:match`     - an anonymous function that will be called to see if a route matches, defaults to matching with arguments of uri and `:via` option.
-    * `:to`        - a Plug or anonymous function that will be called when the route matches, defaults to return the http scheme.
+    * `:via`       - matches the route against some specific HTTP method(s)
+      specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`.
+    * `:match`     - an anonymous function that will be called to see if a
+      route matches, defaults to matching with arguments of uri and `:via` option.
+    * `:to`        - a Plug or anonymous function that will be called when the
+      route matches, defaults to return the http scheme.
+
+  ## Examples
+
+      TestServer.add("/",
+        match: fn conn ->
+          conn.query_params["a"] == "1"
+        end,
+        to: fn conn ->
+          Plug.Conn.resp(conn, 200, "a = 1")
+        end)
+
+      TestServer.add("/", to: &Plug.Conn.resp(&1, 200, "PONG"))
+      TestServer.add("/")
+
+      assert {:ok, %Req.Response{status: 200, body: "PONG"}} = Req.get(TestServer.url("/"))
+      assert {:ok, %Req.Response{status: 200, body: "HTTP/1.1"}} = Req.post(TestServer.url("/"))
+      assert {:ok, %Req.Response{status: 200, body: "a = 1"}} = Req.get(TestServer.url("/?a=1"))
   """
   @spec add(binary(), keyword()) :: :ok
   def add(uri, options) when is_binary(uri) do
@@ -323,6 +404,16 @@ defmodule TestServer do
   Adds a plug to the current test server.
 
   This plug will be called for all requests before route is matched.
+
+  ## Examples
+
+      TestServer.plug(MyPlug)
+
+      TestServer.plug(fn conn ->
+        {:ok, body, _conn} = Plug.Conn.read_body(conn, [])
+
+        %{conn | body_params: Jason.decode!(body)}
+      end)
   """
   @spec plug(module() | function()) :: :ok
   def plug(plug) do
@@ -347,6 +438,17 @@ defmodule TestServer do
 
   @doc """
   Fetches the generated x509 suite for the current test server.
+
+  ## Examples
+
+      TestServer.start(scheme: :https)
+      TestServer.add("/")
+
+      cacerts = TestServer.x509_suite().cacerts
+      req_opts = [connect_options: [transport_opts: [cacerts: cacerts]]]
+
+      assert {:ok, %Req.Response{status: 200, body: "HTTP/1.1"}} =
+              Req.get(TestServer.url(), req_opts)
   """
   @spec x509_suite() :: term()
   def x509_suite, do: x509_suite(fetch_instance!())
@@ -381,6 +483,22 @@ defmodule TestServer do
   ## Options
 
   Takes the same options as `add/2`, except `:to`.
+
+  ## Examples
+
+      {:ok, socket} = TestServer.websocket_init("/ws")
+      TestServer.websocket_handle(socket)
+
+      assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+      assert WebSocketClient.send_message(client, "echo") == {:ok, "echo"}
+
+  `:via` and `:match` are called during the HTTP handshake:
+
+      TestServer.websocket_init("/ws", via: :get, match: fn conn ->
+        conn.params["token"] == "secret"
+      end)
+
+      assert {:ok, _client} = WebSocketClient.start_link(TestServer.url("/ws?token=secret"))
   """
   @spec websocket_init(binary(), keyword()) :: {:ok, websocket_socket()}
   def websocket_init(uri, options) when is_binary(uri) do
@@ -421,10 +539,36 @@ defmodule TestServer do
   @doc """
   Adds a message handler to a websocket instance.
 
+  Messages are matched FIFO (first in, first out). Any messages not expected by
+  TestServer or any message expectations not receiving a message will raise an
+  error in the test case.
+
   ## Options
 
-    * `:match`     - an anonymous function that will be called to see if a message matches, defaults to matching anything.
-    * `:to`        - an anonymous function that will be called when the message matches, defaults to returning received message.
+    * `:match`     - an anonymous function that will be called to see if a
+      message matches, defaults to matching anything.
+    * `:to`        - an anonymous function that will be called when the message
+      matches, defaults to returning received message.
+
+  ## Examples
+
+      {:ok, socket} = TestServer.websocket_init("/ws")
+
+      TestServer.websocket_handle(
+        socket,
+        to: fn _frame, state ->
+          {:reply, {:text, "pong"}, state}
+        end,
+        match: fn frame, _state ->
+          frame == {:text, "ping"}
+        end)
+
+      TestServer.websocket_handle(socket)
+
+      {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+      assert WebSocketClient.send_message(client, "echo") == {:ok, "echo"}
+      assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
   """
   @spec websocket_handle(websocket_socket(), keyword()) :: :ok
   def websocket_handle({instance, _route_ref} = socket, options) do
@@ -444,6 +588,17 @@ defmodule TestServer do
 
   @doc """
   Sends an message to a websocket instance.
+
+  ## Examples
+
+      {:ok, socket} = TestServer.websocket_init("/ws")
+      {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+      assert TestServer.websocket_info(socket, fn state ->
+        {:reply, {:text, "hello"}, state}
+      end) == :ok
+
+      assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """
   @spec websocket_info(websocket_socket(), function() | nil) :: :ok
   def websocket_info({instance, _route_ref} = socket, callback \\ nil)

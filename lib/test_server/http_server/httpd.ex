@@ -1,7 +1,17 @@
 if Code.ensure_loaded?(:httpd) do
   defmodule TestServer.HTTPServer.Httpd do
-    @moduledoc false
+    @moduledoc """
+    HTTP server adapter using `:httpd`.
 
+    This adapter will be used by default if there is no `Bandit` or
+    `Plug.Cowboy` loaded in the project.
+
+    ## Usage
+
+        TestServer.start(
+          http_server: {TestServer.HTTPServer.Httpd, httpd_options}
+        )
+    """
     @behaviour TestServer.HTTPServer
 
     @impl TestServer.HTTPServer
@@ -42,12 +52,13 @@ if Code.ensure_loaded?(:httpd) do
     # :httpd record handler
     require Record
 
-    Record.defrecord(
+    Record.defrecordp(
       :httpd,
       Record.extract(:mod, from_lib: "inets/include/httpd.hrl") ++
         [handler_plug: :undefined, websocket: :undefined]
     )
 
+    @doc false
     def unquote(:do)(data) do
       {plug, opts} = :httpd_util.lookup(httpd(data, :config_db), :handler_plug)
 

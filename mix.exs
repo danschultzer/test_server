@@ -67,11 +67,10 @@ defmodule TestServer.MixProject do
   defp docs do
     [
       source_ref: "v#{@version}",
-      main: "README",
+      main: "TestServer",
       canonical: "http://hexdocs.pm/test_server",
       source_url: @source_url,
       extras: [
-        "README.md": [filename: "README"],
         "CHANGELOG.md": [filename: "CHANGELOG"]
       ],
       skip_undefined_reference_warnings_on: [

@@ -353,15 +353,19 @@ defmodule TestServer do
   """
   @spec add(pid(), binary(), keyword()) :: :ok
   def add(instance, uri, options) when is_pid(instance) and is_binary(uri) and is_list(options) do
-    instance_alive!(instance)
-
-    [_first_module_entry | stacktrace] = get_stacktrace()
-
     options = Keyword.put_new(options, :to, &default_response_handler/1)
 
-    {:ok, _route} = Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
+    {:ok, _route} = register_route(instance, uri, options)
 
     :ok
+  end
+
+  defp register_route(instance, uri, options) do
+    instance_alive!(instance)
+
+    [_register_route, _first_module_entry | stacktrace] = get_stacktrace()
+
+    Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
   end
 
   defp get_stacktrace do
@@ -480,6 +484,10 @@ defmodule TestServer do
   @doc """
   Adds a websocket route to current test server.
 
+  The `:to` option can be overridden the same way as for `add/2`, and will be
+  called during the HTTP handshake. If the `conn.state` is `:unset` the
+  websocket will be initiated otherwise response is returned as-is.
+
   ## Options
 
   Takes the same options as `add/2`, except `:to`.
@@ -499,6 +507,17 @@ defmodule TestServer do
       end)
 
       assert {:ok, _client} = WebSocketClient.start_link(TestServer.url("/ws?token=secret"))
+
+  `:to` option is also called during the HTTP handshake:
+
+      TestServer.websocket_init("/ws",
+        to: fn conn ->
+          Plug.Conn.send_resp(conn, 403, "Forbidden")
+        end
+      )
+
+      assert {:error, %WebSockex.RequestError{code: 403}} =
+              WebSocketClient.start_link(TestServer.url("/ws"))
   """
   @spec websocket_init(binary(), keyword()) :: {:ok, websocket_socket()}
   def websocket_init(uri, options) when is_binary(uri) do
@@ -519,16 +538,12 @@ defmodule TestServer do
   """
   @spec websocket_init(pid(), binary(), keyword()) :: {:ok, websocket_socket()}
   def websocket_init(instance, uri, options) do
-    instance_alive!(instance)
+    options =
+      options
+      |> Keyword.put(:websocket, true)
+      |> Keyword.put_new(:to, & &1)
 
-    if Keyword.has_key?(options, :to), do: raise(ArgumentError, "`:to` is an invalid option")
-
-    [_first_module_entry | stacktrace] = get_stacktrace()
-
-    options = Keyword.put(options, :to, :websocket)
-
-    {:ok, %{ref: ref}} =
-      Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
+    {:ok, %{ref: ref}} = register_route(instance, uri, options)
 
     {:ok, {instance, ref}}
   end

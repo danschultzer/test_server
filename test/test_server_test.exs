@@ -812,6 +812,322 @@ defmodule TestServerTest do
     end
   end
 
+  describe "times option for HTTP routes" do
+    test "defaults to times: 1 (single use)" do
+      defmodule DefaultSingleUseTest do
+        use ExUnit.Case
+
+        test "passes" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          assert :ok = TestServer.add("/single", to: &Plug.Conn.resp(&1, 200, "first"))
+
+          # First request should succeed
+          assert {:ok, "first"} = unquote(__MODULE__).http1_request(TestServer.url("/single"))
+
+          # Second request should fail as route is now inactive
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/single"))
+        end
+      end
+
+      capture_io(fn -> ExUnit.run() end)
+    end
+
+    test "with times: 0 makes route immediately inactive" do
+      defmodule TimesZeroTest do
+        use ExUnit.Case
+
+        test "passes" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          assert :ok = TestServer.add("/never", times: 0, to: &Plug.Conn.resp(&1, 200, "never"))
+
+          # Route should be inactive from the start
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/never"))
+        end
+      end
+
+      capture_io(fn -> ExUnit.run() end)
+    end
+
+    test "with times: 2 allows multiple uses" do
+      defmodule TimesTwoTest do
+        use ExUnit.Case
+
+        test "passes" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          assert :ok = TestServer.add("/twice", times: 2, to: &Plug.Conn.resp(&1, 200, "twice"))
+
+          # First two requests should succeed
+          assert {:ok, "twice"} = unquote(__MODULE__).http1_request(TestServer.url("/twice"))
+          assert {:ok, "twice"} = unquote(__MODULE__).http1_request(TestServer.url("/twice"))
+
+          # Third request should fail
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/twice"))
+        end
+      end
+
+      capture_io(fn -> ExUnit.run() end)
+    end
+
+    test "with times: :infinity allows unlimited uses" do
+      TestServer.start()
+
+      assert :ok = TestServer.add("/forever", times: :infinity, to: &Plug.Conn.resp(&1, 200, "forever"))
+
+      # Should work multiple times
+      for _ <- 1..5 do
+        assert {:ok, "forever"} = http1_request(TestServer.url("/forever"))
+      end
+    end
+
+    test "routes are matched FIFO with times consideration" do
+      defmodule FIFOOrderTest do
+        use ExUnit.Case
+
+        test "passes" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          # First route with times: 1
+          assert :ok = TestServer.add("/order", times: 1, to: &Plug.Conn.resp(&1, 200, "first"))
+          # Second route with times: 1
+          assert :ok = TestServer.add("/order", times: 1, to: &Plug.Conn.resp(&1, 200, "second"))
+
+          # First request matches first route
+          assert {:ok, "first"} = unquote(__MODULE__).http1_request(TestServer.url("/order"))
+          # Second request matches second route (first is now inactive)
+          assert {:ok, "second"} = unquote(__MODULE__).http1_request(TestServer.url("/order"))
+          # Third request fails (both routes now inactive)
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/order"))
+        end
+      end
+
+      capture_io(fn -> ExUnit.run() end)
+    end
+
+    test "unused routes with finite times cause test failure" do
+      defmodule UnusedRouteTimesTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+          TestServer.add("/unused", times: 2, to: &Plug.Conn.resp(&1, 200, "unused"))
+          # Route is not called, should cause test failure
+        end
+      end
+
+      assert capture_io(fn -> ExUnit.run() end) =~
+               "did not receive a request for these routes before the test ended"
+    end
+
+    test "unused routes with times: :infinity do not cause test failure" do
+      defmodule UnusedInfiniteRouteTest do
+        use ExUnit.Case
+
+        test "passes" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+          TestServer.add("/unused", times: :infinity, to: &Plug.Conn.resp(&1, 200, "unused"))
+          # Route is not called, but should not cause test failure
+        end
+      end
+
+      output = capture_io(fn -> ExUnit.run() end)
+      refute output =~ "did not receive a request for these routes before the test ended"
+    end
+
+    test "times counter decrements on each matching request" do
+      defmodule TimesCounterTest do
+        use ExUnit.Case
+
+        test "passes" do
+          {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+          # Add a route that tracks how many times it's called
+          call_count = Agent.start_link(fn -> 0 end)
+          {:ok, agent} = call_count
+
+          assert :ok = TestServer.add("/counter", times: 3, to: fn conn ->
+            Agent.update(agent, &(&1 + 1))
+            count = Agent.get(agent, & &1)
+            Plug.Conn.resp(conn, 200, "call #{count}")
+          end)
+
+          # Make 3 requests, each should work and increment counter
+          assert {:ok, "call 1"} = unquote(__MODULE__).http1_request(TestServer.url("/counter"))
+          assert {:ok, "call 2"} = unquote(__MODULE__).http1_request(TestServer.url("/counter"))
+          assert {:ok, "call 3"} = unquote(__MODULE__).http1_request(TestServer.url("/counter"))
+
+          # 4th request should fail
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.url("/counter"))
+
+          # Verify we called exactly 3 times
+          assert Agent.get(agent, & &1) == 3
+        end
+      end
+
+      capture_io(fn -> ExUnit.run() end)
+    end
+  end
+
+  unless System.get_env("HTTP_SERVER") == "Httpd" do
+    describe "times option for WebSocket handlers" do
+      test "defaults to times: 1 (single use)" do
+        TestServer.start()
+
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok = TestServer.websocket_handle(socket, to: fn _frame, state ->
+          {:reply, {:text, "single"}, state}
+        end)
+
+        # First message should work
+        assert WebSocketClient.send_message(client, "test") == {:ok, "single"}
+      end
+
+      test "with times: 2 allows multiple uses" do
+        TestServer.start()
+
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok = TestServer.websocket_handle(socket, times: 2, to: fn _frame, state ->
+          {:reply, {:text, "twice"}, state}
+        end)
+
+        assert WebSocketClient.send_message(client, "test1") == {:ok, "twice"}
+        assert WebSocketClient.send_message(client, "test2") == {:ok, "twice"}
+      end
+
+      test "with times: :infinity allows unlimited uses" do
+        TestServer.start()
+
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok = TestServer.websocket_handle(socket, times: :infinity, to: fn _frame, state ->
+          {:reply, {:text, "forever"}, state}
+        end)
+
+        # Should work multiple times
+        for i <- 1..5 do
+          assert WebSocketClient.send_message(client, "test#{i}") == {:ok, "forever"}
+        end
+      end
+
+      test "handlers are matched FIFO with times consideration" do
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok = TestServer.websocket_handle(socket, times: 1, to: fn _frame, state ->
+          {:reply, {:text, "first"}, state}
+        end)
+
+        assert :ok = TestServer.websocket_handle(socket, times: 1, to: fn _frame, state ->
+          {:reply, {:text, "second"}, state}
+        end)
+
+        assert WebSocketClient.send_message(client, "test1") == {:ok, "first"}
+        assert WebSocketClient.send_message(client, "test2") == {:ok, "second"}
+      end
+
+      test "unused handlers with finite times cause test failure" do
+        defmodule UnusedWebSocketHandlerTimesTest do
+          use ExUnit.Case
+
+          test "fails" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
+            {:ok, socket} = TestServer.websocket_init("/ws")
+            {:ok, _client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+            TestServer.websocket_handle(socket, times: 2, to: fn _frame, state ->
+              {:reply, {:text, "unused"}, state}
+            end)
+            # Handler is not called, should cause test failure
+          end
+        end
+
+        assert capture_io(fn -> ExUnit.run() end) =~
+                 "did not receive a frame for these websocket handlers before the test ended"
+      end
+
+      test "unused handlers with times: :infinity do not cause test failure" do
+        defmodule UnusedInfiniteWebSocketHandlerTest do
+          use ExUnit.Case
+
+          test "passes" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
+            {:ok, socket} = TestServer.websocket_init("/ws")
+            {:ok, _client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+            TestServer.websocket_handle(socket, times: :infinity, to: fn _frame, state ->
+              {:reply, {:text, "unused"}, state}
+            end)
+            # Handler is not called, but should not cause test failure
+          end
+        end
+
+        output = capture_io(fn -> ExUnit.run() end)
+        refute output =~ "did not receive a frame for these websocket handlers before the test ended"
+      end
+
+      test "times counter decrements on each matching frame" do
+        TestServer.start()
+
+        # Create agent to track call count
+        call_count = Agent.start_link(fn -> 0 end)
+        {:ok, agent} = call_count
+
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        assert :ok = TestServer.websocket_handle(socket, times: 3, to: fn _frame, state ->
+          Agent.update(agent, &(&1 + 1))
+          count = Agent.get(agent, & &1)
+          {:reply, {:text, "call #{count}"}, state}
+        end)
+
+        # Make 3 messages, each should work and increment counter
+        assert WebSocketClient.send_message(client, "test1") == {:ok, "call 1"}
+        assert WebSocketClient.send_message(client, "test2") == {:ok, "call 2"}
+        assert WebSocketClient.send_message(client, "test3") == {:ok, "call 3"}
+
+        # Verify we called exactly 3 times
+        assert Agent.get(agent, & &1) == 3
+      end
+
+      test "times with match function" do
+        TestServer.start()
+
+        assert {:ok, socket} = TestServer.websocket_init("/ws")
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+
+        # Handler that only matches "ping" messages, limited to 2 times
+        assert :ok = TestServer.websocket_handle(socket,
+          times: 2,
+          match: fn {:text, "ping"}, _state -> true; _, _ -> false end,
+          to: fn _frame, state -> {:reply, {:text, "pong"}, state} end
+        )
+
+        # Default handler for other messages (unlimited)
+        assert :ok = TestServer.websocket_handle(socket, times: :infinity, to: fn frame, state ->
+          {:reply, frame, state}
+        end)
+
+        # "ping" should work twice
+        assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
+        assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
+
+        # Third "ping" should fall through to default handler (echo)
+        assert WebSocketClient.send_message(client, "ping") == {:ok, "ping"}
+
+        # Other messages should always work with default handler
+        assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}
+      end
+    end
+  end
+
   def http1_request(url, opts \\ []) do
     url = String.to_charlist(url)
     httpc_http_opts = Keyword.get(opts, :http_opts, [])

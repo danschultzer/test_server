@@ -39,7 +39,7 @@ defmodule TestServer.WebSocket do
     websocket_handlers =
       Instance.websocket_handlers(instance)
       |> Enum.filter(&(&1.route_ref == route_ref))
-      |> Enum.split_with(&(not &1.suspended))
+      |> Enum.split_with(&Instance.active_websocket_handler?/1)
 
     """
     #{message}
@@ -48,10 +48,10 @@ defmodule TestServer.WebSocket do
     """
   end
 
-  defp format_websocket_handlers({[], suspended_websocket_handlers}) do
+  defp format_websocket_handlers({[], exhausted_websocket_handlers}) do
     message = "No active websocket handlers."
 
-    case suspended_websocket_handlers do
+    case exhausted_websocket_handlers do
       [] ->
         message
 
@@ -59,7 +59,7 @@ defmodule TestServer.WebSocket do
         """
         #{message} The following websocket handlers have been processed:
 
-        #{Instance.format_routes(websocket_handlers)}"
+        #{Instance.format_websocket_handlers(websocket_handlers)}"
         """
     end
   end

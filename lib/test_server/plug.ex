@@ -43,7 +43,7 @@ defmodule TestServer.Plug do
   end
 
   defp append_formatted_routes(message, instance) do
-    routes = Enum.split_with(Instance.routes(instance), &(not &1.suspended))
+    routes = Enum.split_with(Instance.routes(instance), &Instance.active_route?/1)
 
     """
     #{message}
@@ -52,23 +52,23 @@ defmodule TestServer.Plug do
     """
   end
 
-  defp format_routes({[], suspended_routes}) do
+  defp format_routes({[], exhausted_routes}) do
     message = "No active routes."
 
-    case suspended_routes do
+    case exhausted_routes do
       [] ->
         message
 
-      suspended_routes ->
+      exhausted_routes ->
         """
         #{message} The following routes have been processed:
 
-        #{Instance.format_routes(suspended_routes)}
+        #{Instance.format_routes(exhausted_routes)}
         """
     end
   end
 
-  defp format_routes({active_routes, _suspended_routes}) do
+  defp format_routes({active_routes, _exhausted_routes}) do
     """
     Active routes:
 

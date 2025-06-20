@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.21 (TBA)
+## v0.1.21 (2025-06-20)
 
 - Fixed bug with message emitted in Bandit 1.7.0
 

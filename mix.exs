@@ -2,7 +2,7 @@ defmodule TestServer.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/danschultzer/test_server"
-  @version "0.1.20"
+  @version "0.1.21"
 
   def project do
     [

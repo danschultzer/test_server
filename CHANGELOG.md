@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.21 (TBA)
+
+- Fixed bug with message emitted in Bandit 1.7.0
+
 ## v0.1.20 (2025-02-28)
 
 - Include `:inets` in `:extra_applications` to prevent compilation issue with `TestServer.HTTPServer.Httpd`

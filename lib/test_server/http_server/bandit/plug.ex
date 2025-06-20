@@ -29,7 +29,7 @@ defmodule TestServer.HTTPServer.Bandit.Plug do
       :done ->
         Task.await(task)
 
-      {caller, {m, f, a}} ->
+      {caller, {m, f, a}} when is_atom(m) and is_atom(f) and is_list(a) ->
         send(caller, {:ok, {m, f, a}, apply(m, f, a)})
 
         loop(task)

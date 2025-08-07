@@ -26,11 +26,18 @@ if Code.ensure_loaded?(Plug.Cowboy) do
       request_timeout: :timer.seconds(1)
     ]
 
+    @default_transport_options [
+      num_acceptors: 1
+    ]
+
     @impl TestServer.HTTPServer
     def start(instance, port, scheme, options, cowboy_options) do
       cowboy_options =
         cowboy_options
         |> Keyword.put_new(:protocol_options, @default_protocol_options)
+        # For tests it is not necessary to open the default 100 acceptor
+        # processes
+        |> Keyword.put_new(:transport_options, @default_transport_options)
         |> Keyword.put(:port, port)
         |> Keyword.put(:dispatch, dispatch(instance))
         |> Keyword.put(:ref, cowboy_ref(port))

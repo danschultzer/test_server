@@ -118,7 +118,7 @@ test "WebSocketClient" do
 
   :ok = TestServer.websocket_handle(socket)
   :ok = TestServer.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
-  :ok = TestServer.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi")
+  :ok = TestServer.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi" end)
 
   {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
 

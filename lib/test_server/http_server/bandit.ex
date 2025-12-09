@@ -65,7 +65,9 @@ if Code.ensure_loaded?(Bandit) do
     end
 
     @impl TestServer.HTTPServer
-    def get_socket_pid(conn), do: conn.owner
+    def get_socket_pid(%{adapter: {TestServer.HTTPServer.Bandit.Adapter, {_plug_pid, req}}}) do
+      req.owner_pid
+    end
 
     # WebSocket
 

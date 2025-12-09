@@ -47,7 +47,7 @@ if Code.ensure_loaded?(:httpd) do
     end
 
     @impl TestServer.HTTPServer
-    def get_socket_pid(conn), do: conn.owner
+    def get_socket_pid(%{adapter: {_, _data}}), do: self()
 
     # :httpd record handler
     require Record
@@ -100,7 +100,6 @@ if Code.ensure_loaded?(:httpd) do
         adapter: {__MODULE__, data},
         host: to_string(host),
         method: to_string(method(data)),
-        owner: self(),
         path_info: split_path(to_string(path)),
         port: port,
         remote_ip: remote_ip,

@@ -1,12 +1,12 @@
-# See TestServer.HTTPServer.Bandit.HTTP2Adapter for why this is required.
-defmodule TestServer.HTTPServer.Bandit.Plug do
+# See TestServer.HTTP.Server.Bandit.Adapter for why this is required.
+defmodule TestServer.HTTP.Server.Bandit.Plug do
   @moduledoc false
 
-  defdelegate init(opts), to: TestServer.Plug
+  defdelegate init(opts), to: TestServer.HTTP.Plug
 
   def call(%{adapter: {Bandit.Adapter, req}} = conn, {http_server, args, instance}) do
     plug_pid = self()
-    conn = %{conn | adapter: {TestServer.HTTPServer.Bandit.Adapter, {plug_pid, req}}}
+    conn = %{conn | adapter: {TestServer.HTTP.Server.Bandit.Adapter, {plug_pid, req}}}
 
     loop(
       Task.async(fn ->
@@ -21,7 +21,7 @@ defmodule TestServer.HTTPServer.Bandit.Plug do
   end
 
   def call(conn, {http_server, args, instance}) do
-    TestServer.Plug.call(conn, {http_server, args, instance})
+    TestServer.HTTP.Plug.call(conn, {http_server, args, instance})
   end
 
   defp loop(task) do

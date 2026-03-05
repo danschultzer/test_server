@@ -1,7 +1,7 @@
-defmodule TestServer.WebSocket do
+defmodule TestServer.HTTP.WebSocket do
   @moduledoc false
 
-  alias TestServer.Instance
+  alias TestServer.HTTP.Instance
 
   def handle_frame(frame, {{instance, _route_ref} = socket, state}) do
     case Instance.dispatch(socket, {:websocket, {:handle, frame}, state}) do
@@ -10,7 +10,7 @@ defmodule TestServer.WebSocket do
 
       {:error, :not_found} ->
         message =
-          "#{Instance.format_instance(instance)} received an unexpected WebSocket frame"
+          "#{TestServer.format_instance(TestServer.HTTP, instance)} received an unexpected WebSocket frame"
           |> append_formatted_frame(frame)
           |> append_formatted_websocket_handlers(socket)
 

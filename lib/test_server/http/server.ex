@@ -1,13 +1,13 @@
-defmodule TestServer.HTTPServer do
+defmodule TestServer.HTTP.Server do
   @moduledoc """
-  HTTP server adapter module.
+  HTTP server adapter behaviour.
 
   ## Usage
 
       defmodule MyApp.MyHTTPServer do
-        @behaviour TestServer.HTTPServer
+        @behaviour TestServer.HTTP.Server
 
-        @impl TestServer.HTTPServer
+        @impl TestServer.HTTP.Server
         def start(instance, port, scheme, tls_options, server_options) do
           my_http_server_options =
             server_options
@@ -20,10 +20,10 @@ defmodule TestServer.HTTPServer do
           end
         end
 
-        @impl TestServer.HTTPServer
+        @impl TestServer.HTTP.Server
         def stop(instance, server_options), do: MyHTTPServer.stop()
 
-        @impl TestServer.HTTPServer
+        @impl TestServer.HTTP.Server
         def get_socket_pid(%{adapter: {_, data}}), do: data.pid # or however your adapter provides the pid
       end
   """
@@ -125,14 +125,14 @@ defmodule TestServer.HTTPServer do
 
   defp default_http_server do
     cond do
-      Code.ensure_loaded?(TestServer.HTTPServer.Bandit) ->
-        {TestServer.HTTPServer.Bandit, []}
+      Code.ensure_loaded?(TestServer.HTTP.Server.Bandit) ->
+        {TestServer.HTTP.Server.Bandit, []}
 
-      Code.ensure_loaded?(TestServer.HTTPServer.Plug.Cowboy) ->
-        {TestServer.HTTPServer.Plug.Cowboy, []}
+      Code.ensure_loaded?(TestServer.HTTP.Server.Plug.Cowboy) ->
+        {TestServer.HTTP.Server.Plug.Cowboy, []}
 
       true ->
-        {TestServer.HTTPServer.Httpd, []}
+        {TestServer.HTTP.Server.Httpd, []}
     end
   end
 

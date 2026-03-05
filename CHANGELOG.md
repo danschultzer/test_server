@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- BREAKING CHANGE: Moved HTTP and WebSocket API to `TestServer.HTTP` and server adapters to `TestServer.HTTP.Server.*`
+
 ## v0.1.22 (2026-03-05)
 
 Requires Elixir 1.14 or higher.

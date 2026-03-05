@@ -1,8 +1,8 @@
-defmodule TestServer.Plug do
+defmodule TestServer.HTTP.Plug do
   @moduledoc false
 
   alias Plug.Conn
-  alias TestServer.Instance
+  alias TestServer.HTTP.Instance
 
   def init({http_server, args, instance}), do: {http_server, args, instance}
 

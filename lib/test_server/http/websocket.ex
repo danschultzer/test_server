@@ -1,7 +1,7 @@
-defmodule TestServer.WebSocket do
+defmodule TestServer.HTTP.WebSocket do
   @moduledoc false
 
-  alias TestServer.Instance
+  alias TestServer.HTTP.Instance
 
   def handle_frame(frame, {{instance, _route_ref} = socket, state}) do
     case Instance.dispatch(socket, {:websocket, {:handle, frame}, state}) do

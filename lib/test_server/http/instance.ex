@@ -1,9 +1,9 @@
-defmodule TestServer.Instance do
+defmodule TestServer.HTTP.Instance do
   @moduledoc false
 
   use GenServer
 
-  alias TestServer.HTTPServer
+  alias TestServer.HTTP.Server
 
   def start_link(options) do
     GenServer.start_link(__MODULE__, options)
@@ -22,7 +22,8 @@ defmodule TestServer.Instance do
     GenServer.call(instance, {:register, {:plug_router_to, {uri, options, stacktrace}}})
   end
 
-  @spec register(pid(), {:plug, {atom() | function(), TestServer.stacktrace()}}) :: {:ok, map()}
+  @spec register(pid(), {:plug, {atom() | function(), TestServer.stacktrace()}}) ::
+          {:ok, map()}
   def register(instance, {:plug, {plug, stacktrace}}) do
     ensure_plug!(plug)
 
@@ -30,7 +31,7 @@ defmodule TestServer.Instance do
   end
 
   @spec register(
-          TestServer.websocket_socket(),
+          TestServer.HTTP.websocket_socket(),
           {:websocket, {:handle, keyword(), TestServer.stacktrace()}}
         ) ::
           {:ok, map()}
@@ -59,10 +60,11 @@ defmodule TestServer.Instance do
   end
 
   @spec dispatch(
-          TestServer.websocket_socket(),
-          {:websocket, {:handle, TestServer.websocket_frame()}, TestServer.websocket_state()}
+          TestServer.HTTP.websocket_socket(),
+          {:websocket, {:handle, TestServer.HTTP.websocket_frame()},
+           TestServer.HTTP.websocket_state()}
         ) ::
-          {:ok, TestServer.websocket_reply()}
+          {:ok, TestServer.HTTP.websocket_reply()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch({instance, _router_ref} = socket, {:websocket, {:handle, frame}, state}) do
@@ -70,10 +72,11 @@ defmodule TestServer.Instance do
   end
 
   @spec dispatch(
-          TestServer.websocket_socket(),
-          {:websocket, {:info, function(), TestServer.stacktrace()}, TestServer.websocket_state()}
+          TestServer.HTTP.websocket_socket(),
+          {:websocket, {:info, function(), TestServer.stacktrace()},
+           TestServer.HTTP.websocket_state()}
         ) ::
-          {:ok, TestServer.websocket_reply()}
+          {:ok, TestServer.HTTP.websocket_reply()}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(
         {instance, _router_ref} = socket,
@@ -95,12 +98,12 @@ defmodule TestServer.Instance do
     GenServer.call(instance, :routes)
   end
 
-  @spec put_websocket_connection(TestServer.websocket_socket(), pid()) :: :ok
+  @spec put_websocket_connection(TestServer.HTTP.websocket_socket(), pid()) :: :ok
   def put_websocket_connection({instance, route_ref}, pid) do
     GenServer.cast(instance, {:put, :websocket_connection, route_ref, pid})
   end
 
-  @spec active_websocket_connections(TestServer.websocket_socket()) :: [pid()]
+  @spec active_websocket_connections(TestServer.HTTP.websocket_socket()) :: [pid()]
   def active_websocket_connections({instance, route_ref}) do
     GenServer.call(instance, {:get, :websocket_connections, route_ref})
   end
@@ -156,6 +159,10 @@ defmodule TestServer.Instance do
 
   @impl true
   def init(options) do
+    Process.flag(:trap_exit, true)
+
+    options = Keyword.put(options, :protocol, :http)
+
     init_state = %{
       routes: [],
       plugs: [],
@@ -171,7 +178,7 @@ defmodule TestServer.Instance do
   end
 
   defp start_http_server(state) do
-    case HTTPServer.start(self(), state.options) do
+    case Server.start(self(), state.options) do
       {:ok, options} ->
         state = Map.merge(state, %{options: options})
 
@@ -315,7 +322,7 @@ defmodule TestServer.Instance do
   defp run_plugs(conn, state) do
     state.plugs
     |> case do
-      [] -> [%{plug: TestServer.Plug.default_plug(), stacktrace: nil}]
+      [] -> [%{plug: TestServer.HTTP.Plug.default_plug(), stacktrace: nil}]
       plugs -> plugs
     end
     |> Enum.reduce_while(conn, fn %{plug: plug, stacktrace: stacktrace}, conn ->
@@ -456,9 +463,17 @@ defmodule TestServer.Instance do
   end
 
   @impl true
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+
+  @impl true
   def handle_cast({:put, :websocket_connection, route_ref, pid}, state) do
     connections = state.websocket_connections ++ [{route_ref, pid}]
 
     {:noreply, %{state | websocket_connections: connections}}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    Server.stop(state.options)
   end
 end

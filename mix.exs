@@ -77,11 +77,12 @@ defmodule TestServer.MixProject do
         "CHANGELOG.md"
       ],
       groups_for_modules: [
-        HTTPServer: [
-          TestServer.HTTPServer,
-          TestServer.HTTPServer.Httpd,
-          TestServer.HTTPServer.Bandit,
-          TestServer.HTTPServer.Plug.Cowboy
+        HTTP: [
+          TestServer.HTTP,
+          TestServer.HTTP.Server,
+          TestServer.HTTP.Server.Httpd,
+          TestServer.HTTP.Server.Bandit,
+          TestServer.HTTP.Server.Plug.Cowboy
         ]
       ]
     ]

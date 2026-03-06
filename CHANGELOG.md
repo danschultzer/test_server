@@ -2,7 +2,10 @@
 
 ## Unreleased
 
+Requires Elixir 1.14 or higher.
+
 - Fixed incorrect formatting of websocket handlers
+- Fixed breaking change with plug 1.19
 
 ## v0.1.21 (2025-06-20)
 

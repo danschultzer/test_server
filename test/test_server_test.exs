@@ -657,14 +657,39 @@ defmodule TestServerTest do
 
             assert {:ok, _socket} = TestServer.websocket_init("/ws")
             assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
-            assert WebSocketClient.send_message(client, "ping") == :ok
 
-            assert WebSocketClient.send_message(client, "ping") =~
-                     "received an unexpected WebSocket frame"
+            assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
+            assert msg =~ "received an unexpected WebSocket frame"
           end
         end
 
-        assert capture_io(fn -> ExUnit.run() end) =~ "received an unexpected WebSocket frame"
+        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io =~ "received an unexpected WebSocket frame"
+        refute io =~ "The following websocket handlers have been processed:"
+      end
+
+      test "when receiving unexpected frame after processed handlers" do
+        defmodule WebSocketHandleUnexpectedAfterProcessedTest do
+          use ExUnit.Case
+
+          test "fails" do
+            {:ok, _instance} = TestServer.start(suppress_warning: true)
+
+            assert {:ok, socket} = TestServer.websocket_init("/ws")
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.url("/ws"))
+            assert :ok = TestServer.websocket_handle(socket)
+
+            assert WebSocketClient.send_message(client, "ping") == {:ok, "ping"}
+
+            assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
+            assert msg =~ "received an unexpected WebSocket frame"
+            assert msg =~ "The following websocket handlers have been processed:"
+          end
+        end
+
+        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io =~ "received an unexpected WebSocket frame"
+        assert io =~ "The following websocket handlers have been processed:"
       end
 
       test "with callback function raising exception" do
@@ -681,7 +706,8 @@ defmodule TestServerTest do
                        to: fn _frame, _state -> raise "boom" end
                      )
 
-            assert WebSocketClient.send_message(client, "ping") =~ "(RuntimeError) boom"
+            assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
+            assert msg =~ "(RuntimeError) boom"
           end
         end
 
@@ -703,8 +729,8 @@ defmodule TestServerTest do
             assert :ok =
                      TestServer.websocket_handle(socket, to: fn _frame, _state -> :invalid end)
 
-            assert WebSocketClient.send_message(client, "ping") =~
-                     "(RuntimeError) Invalid callback response, got: :invalid."
+            assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
+            assert msg =~ "(RuntimeError) Invalid callback response, got: :invalid."
           end
         end
 

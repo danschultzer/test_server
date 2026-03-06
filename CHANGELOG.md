@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.22 (2026-03-05)
 
 Requires Elixir 1.14 or higher.
 

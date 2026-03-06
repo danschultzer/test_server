@@ -1,5 +1,8 @@
 ExUnit.start()
 
+# Suppress verbose SSH application logs (debug KEX ordering, notice disconnect messages)
+Logger.configure(level: :warning)
+
 http_server = System.get_env("HTTP_SERVER", "Bandit")
 
 # This ensures that `Bandit.Clock` has started and prevents

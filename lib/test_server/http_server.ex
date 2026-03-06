@@ -24,7 +24,7 @@ defmodule TestServer.HTTPServer do
         def stop(instance, server_options), do: MyHTTPServer.stop()
 
         @impl TestServer.HTTPServer
-        def get_socket_pid(conn), do: conn.owner
+        def get_socket_pid(%{adapter: {_, data}}), do: data.pid # or however your adapter provides the pid
       end
   """
   @type scheme :: :http | :https

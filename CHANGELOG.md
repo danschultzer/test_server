@@ -6,6 +6,7 @@ Requires Elixir 1.14 or higher.
 
 - Fixed incorrect formatting of websocket handlers
 - Fixed breaking change with plug 1.19
+- Limit number of Cowboy acceptors to 1 to improve performance
 
 ## v0.1.21 (2025-06-20)
 

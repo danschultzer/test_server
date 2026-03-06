@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed incorrect formatting of websocket handlers
+
 ## v0.1.21 (2025-06-20)
 
 - Fixed bug with message emitted in Bandit 1.7.0

@@ -3,8 +3,9 @@ if Code.ensure_loaded?(Plug.Cowboy) do
     @moduledoc """
     HTTP server adapter using `Plug.Cowboy`.
 
-    This adapter will be used by default if `Bandit` is not loaded and
-    `Plug.Cowboy` is loaded in the project.
+    By default only one acceptor process is started which is enough for
+    testing.  This adapter will be used by default if `Bandit` is not loaded
+    and `Plug.Cowboy` is loaded in the project.
 
     ## Usage
 
@@ -31,6 +32,9 @@ if Code.ensure_loaded?(Plug.Cowboy) do
       cowboy_options =
         cowboy_options
         |> Keyword.put_new(:protocol_options, @default_protocol_options)
+        # For tests it is not necessary to open the default 100 acceptor
+        # processes
+        |> Keyword.put_new(:transport_options, num_acceptors: 1)
         |> Keyword.put(:port, port)
         |> Keyword.put(:dispatch, dispatch(instance))
         |> Keyword.put(:ref, cowboy_ref(port))

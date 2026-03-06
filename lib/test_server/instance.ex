@@ -193,6 +193,7 @@ defmodule TestServer.Instance do
     match = Keyword.get_lazy(options, :match, fn -> build_match_function(uri, methods) end)
 
     to = Keyword.fetch!(options, :to)
+    times = Keyword.get(options, :times, 1)
 
     route = %{
       ref: make_ref(),
@@ -200,10 +201,10 @@ defmodule TestServer.Instance do
       methods: methods,
       match: match,
       to: to,
-      options: Keyword.drop(options, [:via, :match, :to]),
+      options: Keyword.drop(options, [:via, :match, :to, :times]),
       requests: [],
       stacktrace: stacktrace,
-      suspended: false
+      times: times
     }
 
     {:reply, {:ok, route}, %{state | routes: state.routes ++ [route]}}
@@ -220,14 +221,16 @@ defmodule TestServer.Instance do
         _from,
         state
       ) do
+    times = Keyword.get(options, :times, 1)
+
     handler = %{
       route_ref: route_ref,
       match: Keyword.get(options, :match),
       to: Keyword.fetch!(options, :to),
-      options: Keyword.drop(options, [:match, :to]),
+      options: Keyword.drop(options, [:match, :to, :times]),
       received: [],
       stacktrace: stacktrace,
-      suspended: false
+      times: times
     }
 
     {:reply, {:ok, handler}, %{state | websocket_handlers: state.websocket_handlers ++ [handler]}}
@@ -281,6 +284,9 @@ defmodule TestServer.Instance do
 
     {:reply, res, state}
   end
+
+  def active_route?(route), do: route.times == :infinity or route.times > 0
+  def active_websocket_handler?(handler), do: handler.times == :infinity or handler.times > 0
 
   defp build_match_function(uri, methods) do
     {method_match, guards} =
@@ -359,7 +365,7 @@ defmodule TestServer.Instance do
   defp run_routes(conn, state) do
     state.routes
     |> Enum.find_index(fn
-      %{suspended: true} -> false
+      %{times: 0} -> false
       %{match: match} -> try_run_match(match, [conn])
     end)
     |> case do
@@ -367,7 +373,7 @@ defmodule TestServer.Instance do
         {{:error, {:not_found, conn}}, state}
 
       index ->
-        %{to: plug, stacktrace: stacktrace} = route = Enum.at(state.routes, index)
+        %{to: plug, stacktrace: stacktrace, times: times} = route = Enum.at(state.routes, index)
 
         result =
           conn
@@ -376,7 +382,8 @@ defmodule TestServer.Instance do
 
         routes =
           List.update_at(state.routes, index, fn route ->
-            %{route | suspended: true, requests: route.requests ++ [result]}
+            new_times = if times == :infinity, do: :infinity, else: times - 1
+            %{route | times: new_times, requests: route.requests ++ [result]}
           end)
 
         {result, %{state | routes: routes}}
@@ -405,7 +412,7 @@ defmodule TestServer.Instance do
     |> Enum.map(&{&1.route_ref == route_ref, &1})
     |> Enum.find_index(fn
       {false, _} -> false
-      {true, %{suspended: true}} -> false
+      {true, %{times: 0}} -> false
       {true, %{match: nil}} -> true
       {true, %{match: match}} -> try_run_match(match, [frame, websocket_state])
     end)
@@ -414,13 +421,14 @@ defmodule TestServer.Instance do
         {{:error, :not_found}, state}
 
       index ->
-        %{to: handler, stacktrace: stacktrace} = Enum.at(state.websocket_handlers, index)
+        %{to: handler, stacktrace: stacktrace, times: times} = Enum.at(state.websocket_handlers, index)
 
         result = try_run_websocket_handler(frame, websocket_state, stacktrace, handler)
 
         websocket_handlers =
           List.update_at(state.websocket_handlers, index, fn websocket_handle ->
-            %{websocket_handle | suspended: true, received: websocket_handle.received ++ [frame]}
+            new_times = if times == :infinity, do: :infinity, else: times - 1
+            %{websocket_handle | times: new_times, received: websocket_handle.received ++ [frame]}
           end)
 
         {result, %{state | websocket_handlers: websocket_handlers}}

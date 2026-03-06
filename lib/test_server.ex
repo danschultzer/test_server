@@ -117,7 +117,8 @@ defmodule TestServer do
   defp verify_routes!(instance) do
     instance
     |> Instance.routes()
-    |> Enum.reject(& &1.suspended)
+    |> Enum.filter(&Instance.active_route?/1)
+    |> Enum.reject(&(&1.times == :infinity))
     |> case do
       [] ->
         :ok
@@ -134,7 +135,8 @@ defmodule TestServer do
   defp verify_websocket_handlers!(instance) do
     instance
     |> Instance.websocket_handlers()
-    |> Enum.reject(& &1.suspended)
+    |> Enum.filter(&Instance.active_websocket_handler?/1)
+    |> Enum.reject(&(&1.times == :infinity))
     |> case do
       [] ->
         :ok

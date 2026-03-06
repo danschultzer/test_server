@@ -28,7 +28,7 @@ defmodule TestServer.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :crypto, :public_key, :inets],
+      extra_applications: [:logger, :crypto, :public_key, :inets, :ssh],
       mod: {TestServer.Application, []}
     ]
   end
@@ -88,6 +88,12 @@ defmodule TestServer.MixProject do
           TestServer.HTTP.Server.Httpd,
           TestServer.HTTP.Server.Bandit,
           TestServer.HTTP.Server.Cowboy
+        ],
+        SSH: [
+          TestServer.SSH,
+          TestServer.SSH.Instance,
+          TestServer.SSH.KeyAPI,
+          TestServer.SSH.Channel
         ]
       ]
     ]

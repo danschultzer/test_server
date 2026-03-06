@@ -12,6 +12,7 @@ Features:
 - HTTP/1
 - HTTP/2
 - WebSocket
+- SSH
 - Built-in TLS with self-signed certificates
 - Plug route matching
 
@@ -139,6 +140,51 @@ end
 ```
 
 *Note: WebSocket is not supported by the `:httpd` adapter.*
+
+### SSH
+
+SSH exec and shell handlers can be registered with `TestServer.SSH.exec/1` and `TestServer.SSH.shell/1`. The server autostarts on first use and is torn down when the test exits.
+
+```elixir
+test "run remote command" do
+  TestServer.SSH.exec(to: fn _cmd, state ->
+    {:reply, {0, "file1\nfile2\n", ""}, state}
+  end)
+
+  {host, port} = TestServer.SSH.address()
+  {:ok, conn} = :ssh.connect(String.to_charlist(host), port,
+    user: ~c"test",
+    silently_accept_hosts: true,
+    user_interaction: false
+  )
+
+  {:ok, ch} = :ssh_connection.session_channel(conn, :infinity)
+  :success = :ssh_connection.exec(conn, ch, ~c"ls", :infinity)
+  # collect stdout, exit_status, closed messages...
+end
+```
+
+Password and public key credentials can be set with the `:credentials` option:
+
+```elixir
+# Password auth
+TestServer.SSH.start(credentials: [{"alice", "secret"}])
+
+# Public key auth
+TestServer.SSH.start(credentials: [{"bob", :public_key, pem_binary}])
+
+# No auth (default — accepts any connection)
+TestServer.SSH.start()
+```
+
+Handlers are matched FIFO and can be filtered with `:match`:
+
+```elixir
+TestServer.SSH.exec(
+  match: fn cmd, _state -> cmd == "ls" end,
+  to: fn _cmd, state -> {:reply, {0, "file1\n", ""}, state} end
+)
+```
 
 ### HTTP Server Adapter
 

@@ -37,6 +37,7 @@ defmodule TestServer.MixProject do
     [
       {:plug, "~> 1.14"},
       {:x509, "~> 0.6"},
+      {:gen_smtp, "~> 1.2"},
 
       # Optional web servers
       {:bandit, ">= 1.4.0", optional: true},
@@ -94,6 +95,12 @@ defmodule TestServer.MixProject do
           TestServer.SSH.Instance,
           TestServer.SSH.KeyAPI,
           TestServer.SSH.Channel
+        ],
+        SMTP: [
+          TestServer.SMTP,
+          TestServer.SMTP.Instance,
+          TestServer.SMTP.Session,
+          TestServer.SMTP.Email
         ]
       ]
     ]

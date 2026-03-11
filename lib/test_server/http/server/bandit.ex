@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(Bandit) do
-  defmodule TestServer.HTTPServer.Bandit do
+  defmodule TestServer.HTTP.Server.Bandit do
     @moduledoc """
     HTTP server adapter using `Bandit`.
 
@@ -9,16 +9,16 @@ if Code.ensure_loaded?(Bandit) do
 
     ## Usage
 
-        TestServer.start(
-          http_server: {TestServer.HTTPServer.Bandit, bandit_options}
+        TestServer.HTTP.start(
+          http_server: {TestServer.HTTP.Server.Bandit, bandit_options}
         )
     """
-    @behaviour TestServer.HTTPServer
+    @behaviour TestServer.HTTP.Server
     @behaviour WebSock
 
-    alias TestServer.WebSocket
+    alias TestServer.HTTP.WebSocket
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def start(instance, port, scheme, options, bandit_options) do
       transport_options =
         bandit_options
@@ -43,7 +43,7 @@ if Code.ensure_loaded?(Bandit) do
       bandit_options =
         bandit_options
         |> Keyword.put(:thousand_island_options, thousand_islands_options)
-        |> Keyword.put(:plug, {TestServer.HTTPServer.Bandit.Plug, {__MODULE__, [], instance}})
+        |> Keyword.put(:plug, {TestServer.HTTP.Server.Bandit.Plug, {__MODULE__, [], instance}})
         |> Keyword.put(:scheme, scheme)
         |> Keyword.put_new(:startup_log, false)
 
@@ -59,13 +59,13 @@ if Code.ensure_loaded?(Bandit) do
       Keyword.merge(transport_options, Keyword.put_new(tls_options, :log_level, :warning))
     end
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def stop(server_pid, _bandit_options) do
       ThousandIsland.stop(server_pid)
     end
 
-    @impl TestServer.HTTPServer
-    def get_socket_pid(%{adapter: {TestServer.HTTPServer.Bandit.Adapter, {_plug_pid, req}}}) do
+    @impl TestServer.HTTP.Server
+    def get_socket_pid(%{adapter: {TestServer.HTTP.Server.Bandit.Adapter, {_plug_pid, req}}}) do
       req.owner_pid
     end
 

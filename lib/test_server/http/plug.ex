@@ -1,8 +1,8 @@
-defmodule TestServer.Plug do
+defmodule TestServer.HTTP.Plug do
   @moduledoc false
 
   alias Plug.Conn
-  alias TestServer.Instance
+  alias TestServer.HTTP.Instance
 
   def init({http_server, args, instance}), do: {http_server, args, instance}
 
@@ -17,7 +17,7 @@ defmodule TestServer.Plug do
 
       {:error, {:not_found, conn}} ->
         message =
-          "#{Instance.format_instance(instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
+          "#{TestServer.format_instance(TestServer.HTTP, instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
           |> append_formatted_params(conn)
           |> append_formatted_routes(instance)
 

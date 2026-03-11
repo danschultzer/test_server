@@ -10,7 +10,7 @@
 # https://github.com/mtrudel/bandit/issues/215
 # https://github.com/mtrudel/bandit/issues/101
 if Code.ensure_loaded?(Bandit) do
-  defmodule TestServer.HTTPServer.Bandit.Adapter do
+  defmodule TestServer.HTTP.Server.Bandit.Adapter do
     @moduledoc false
 
     @behaviour Plug.Conn.Adapter

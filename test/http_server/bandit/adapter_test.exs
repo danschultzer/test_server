@@ -1,30 +1,29 @@
-defmodule TestServer.HTTPServer.Bandit.HTTP2AdapterTest do
+defmodule TestServer.HTTP.Server.Bandit.HTTP2AdapterTest do
   use ExUnit.Case
-  doctest TestServer
 
   setup do
     Application.ensure_all_started(:bandit)
 
     {:ok, _instance} =
-      TestServer.start(scheme: :https, http_server: {TestServer.HTTPServer.Bandit, []})
+      TestServer.HTTP.start(scheme: :https, http_server: {TestServer.HTTP.Server.Bandit, []})
 
     :ok
   end
 
   test "Plug.Conn.send_resp/3" do
     assert :ok =
-             TestServer.add("/",
+             TestServer.HTTP.add("/",
                to: fn conn ->
                  Plug.Conn.send_resp(conn, 200, "test")
                end
              )
 
-    assert {:ok, "test"} = http2_request(TestServer.url())
+    assert {:ok, "test"} = http2_request(TestServer.HTTP.url())
   end
 
   test "Plug.Conn.send_file/1" do
     assert :ok =
-             TestServer.add("/",
+             TestServer.HTTP.add("/",
                to: fn conn ->
                  Plug.Conn.send_file(conn, 200, __ENV__.file)
                end
@@ -32,12 +31,12 @@ defmodule TestServer.HTTPServer.Bandit.HTTP2AdapterTest do
 
     expected = File.read!(__ENV__.file)
 
-    assert {:ok, ^expected} = http2_request(TestServer.url())
+    assert {:ok, ^expected} = http2_request(TestServer.HTTP.url())
   end
 
   test "Plug.Conn.send_chunked/1 and Plug.Conn.chunk/1" do
     assert :ok =
-             TestServer.add("/",
+             TestServer.HTTP.add("/",
                to: fn conn ->
                  conn = Plug.Conn.send_chunked(conn, 200)
                  {:ok, conn} = Plug.Conn.chunk(conn, "Hello\n")
@@ -47,12 +46,12 @@ defmodule TestServer.HTTPServer.Bandit.HTTP2AdapterTest do
                end
              )
 
-    assert {:ok, "Hello\nWorld"} = http2_request(TestServer.url())
+    assert {:ok, "Hello\nWorld"} = http2_request(TestServer.HTTP.url())
   end
 
   test "Plug.Conn.get_peer_data/1" do
     assert :ok =
-             TestServer.add("/",
+             TestServer.HTTP.add("/",
                to: fn conn ->
                  assert %{address: {127, 0, 0, 1}} = Plug.Conn.get_peer_data(conn)
 
@@ -60,38 +59,38 @@ defmodule TestServer.HTTPServer.Bandit.HTTP2AdapterTest do
                end
              )
 
-    assert {:ok, "OK"} = http2_request(TestServer.url())
+    assert {:ok, "OK"} = http2_request(TestServer.HTTP.url())
   end
 
   test "Plug.Conn.get_http_protocol/1" do
     assert :ok =
-             TestServer.add("/",
+             TestServer.HTTP.add("/",
                to: fn conn ->
                  assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
                  Plug.Conn.send_resp(conn, 200, "OK")
                end
              )
 
-    assert {:ok, "OK"} = http2_request(TestServer.url())
+    assert {:ok, "OK"} = http2_request(TestServer.HTTP.url())
   end
 
   test "Plug.Conn.read_body/1" do
     assert :ok =
-             TestServer.add("/",
+             TestServer.HTTP.add("/",
                to: fn conn ->
                  assert {:ok, body, _data} = Plug.Conn.read_body(conn)
                  Plug.Conn.resp(conn, 200, body)
                end
              )
 
-    assert {:ok, "test"} = http2_request(TestServer.url(), method: :post, body: "test")
+    assert {:ok, "test"} = http2_request(TestServer.HTTP.url(), method: :post, body: "test")
   end
 
   defp http2_request(url, opts \\ []) do
     pools = %{
       default: [
         protocols: [:http2],
-        conn_opts: [transport_opts: [cacerts: TestServer.x509_suite().cacerts]]
+        conn_opts: [transport_opts: [cacerts: TestServer.HTTP.x509_suite().cacerts]]
       ]
     }
 

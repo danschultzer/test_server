@@ -1,5 +1,7 @@
 ExUnit.start()
 
+Logger.configure(level: :warning)
+
 http_server = System.get_env("HTTP_SERVER", "Bandit")
 
 # This ensures that `Bandit.Clock` has started and prevents

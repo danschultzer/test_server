@@ -41,7 +41,7 @@ defmodule TestServer.HTTP.Server do
   @doc false
   @spec start(pid(), keyword()) :: {:ok, keyword()} | {:error, any()}
   def start(instance, options) do
-    port = open_port(options)
+    port = TestServer.open_port(options)
     scheme = parse_scheme(options)
     {tls_options, x509_options} = maybe_generate_x509_suite(options, scheme)
     ip_family = Keyword.get(options, :ipfamily, :inet)
@@ -62,26 +62,6 @@ defmodule TestServer.HTTP.Server do
 
       {:error, error} ->
         {:error, error}
-    end
-  end
-
-  defp open_port(options) do
-    {port, options} =
-      case Keyword.get(options, :port, 0) do
-        {port, options} -> {port, options}
-        port -> {port, []}
-      end
-
-    unless is_integer(port) and port >= 0 and port <= 65_535,
-      do: raise("Invalid port, got: #{inspect(port)}")
-
-    with {:ok, socket} <- :gen_tcp.listen(port, options),
-         {:ok, port} <- :inet.port(socket),
-         true <- :erlang.port_close(socket) do
-      port
-    else
-      {:error, error} ->
-        raise("Could not listen to port #{inspect(port)}, because: #{inspect(error)}")
     end
   end
 

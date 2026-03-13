@@ -12,12 +12,14 @@ Features:
 - HTTP/1
 - HTTP/2
 - WebSocket
+- SSH
 - Built-in TLS with self-signed certificates
 - Plug route matching
 
 ## Protocols
 
 - `TestServer.HTTP` - HTTP/1, HTTP/2, and WebSocket.
+- `TestServer.SSH` - SSH exec and shell.
 
 <!-- MDOC !-->
 

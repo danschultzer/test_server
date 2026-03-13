@@ -103,12 +103,53 @@ defmodule TestServer do
   end
 
   @doc false
+  def open_port(options) do
+    {port, options} =
+      case Keyword.get(options, :port, 0) do
+        {port, options} -> {port, options}
+        port -> {port, []}
+      end
+
+    unless is_integer(port) and port >= 0 and port <= 65_535,
+      do: raise("Invalid port, got: #{inspect(port)}")
+
+    with {:ok, socket} <- :gen_tcp.listen(port, options),
+         {:ok, port} <- :inet.port(socket),
+         true <- :erlang.port_close(socket) do
+      port
+    else
+      {:error, error} ->
+        raise("Could not listen to port #{inspect(port)}, because: #{inspect(error)}")
+    end
+  end
+
+  @doc false
   def fetch_instance!(protocol_module) do
     instance_module = Module.concat(protocol_module, Instance)
 
     case InstanceManager.fetch_instance(self(), protocol_module) do
       :error -> raise "No current #{inspect(instance_module)} running"
       {:ok, instance} -> instance
+    end
+  end
+
+  @doc false
+  def get_host(options) do
+    host = Keyword.get(options, :host)
+
+    unless is_nil(host) or is_binary(host),
+      do: raise("Invalid host, got: #{inspect(host)}")
+
+    case host do
+      nil ->
+        "localhost"
+
+      host ->
+        :inet_db.set_lookup([:file, :dns])
+        :inet_db.add_host({127, 0, 0, 1}, [String.to_charlist(host)])
+        :inet_db.add_host({0, 0, 0, 0, 0, 0, 0, 1}, [String.to_charlist(host)])
+
+        host
     end
   end
 end

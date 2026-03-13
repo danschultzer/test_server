@@ -169,23 +169,10 @@ defmodule TestServer.HTTP do
   def url(instance, uri, opts) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    unless is_nil(opts[:host]) or is_binary(opts[:host]),
-      do: raise("Invalid host, got: #{inspect(opts[:host])}")
-
-    domain = maybe_enable_host(opts[:host])
+    domain = TestServer.get_host(opts)
     options = Instance.get_options(instance)
 
     "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{uri}"
-  end
-
-  defp maybe_enable_host(nil), do: "localhost"
-
-  defp maybe_enable_host(host) do
-    :inet_db.set_lookup([:file, :dns])
-    :inet_db.add_host({127, 0, 0, 1}, [String.to_charlist(host)])
-    :inet_db.add_host({0, 0, 0, 0, 0, 0, 0, 1}, [String.to_charlist(host)])
-
-    host
   end
 
   @spec add(binary()) :: :ok

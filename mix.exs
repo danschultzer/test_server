@@ -91,6 +91,9 @@ defmodule TestServer.MixProject do
         ],
         SSH: [
           TestServer.SSH
+        ],
+        SMTP: [
+          TestServer.SMTP
         ]
       ]
     ]

@@ -3,6 +3,8 @@
 ## Unreleased
 
 - BREAKING CHANGE: Moved HTTP and WebSocket API to `TestServer.HTTP` and server adapters to `TestServer.HTTP.Server.*`
+- Added `TestServer.SSH` for mocking SSH endpoints with command expectations, authentication, and interactive sessions
+- Added `TestServer.SMTP` for mocking SMTP servers with STARTTLS, AUTH PLAIN/LOGIN, and FIFO handler dispatch
 
 ## v0.1.22 (2026-03-05)
 

@@ -13,6 +13,7 @@ Features:
 - HTTP/2
 - WebSocket
 - SSH
+- SMTP
 - Built-in TLS with self-signed certificates
 - Plug route matching
 
@@ -20,6 +21,7 @@ Features:
 
 - `TestServer.HTTP` - HTTP/1, HTTP/2, and WebSocket.
 - `TestServer.SSH` - SSH commands, authentication, and interactive sessions.
+- `TestServer.SMTP` - SMTP email, STARTTLS, and AUTH PLAIN/LOGIN.
 
 <!-- MDOC !-->
 

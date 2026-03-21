@@ -90,12 +90,6 @@ defmodule TestServer.InstanceManager do
     {:reply, instances, state}
   end
 
-  def handle_call({:alive?, instance}, _from, state) do
-    instance = Enum.find(state.instances, &(&1.instance == instance))
-
-    {:reply, not is_nil(instance)}
-  end
-
   def handle_call({:remove, instance}, _from, state) do
     state = %{state | instances: Enum.reject(state.instances, &(&1.instance == instance))}
 

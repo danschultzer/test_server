@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(:httpd) do
-  defmodule TestServer.HTTPServer.Httpd do
+  defmodule TestServer.HTTP.Server.Httpd do
     @moduledoc """
     HTTP server adapter using `:httpd`.
 
@@ -8,13 +8,13 @@ if Code.ensure_loaded?(:httpd) do
 
     ## Usage
 
-        TestServer.start(
-          http_server: {TestServer.HTTPServer.Httpd, httpd_options}
+        TestServer.HTTP.start(
+          http_server: {TestServer.HTTP.Server.Httpd, httpd_options}
         )
     """
-    @behaviour TestServer.HTTPServer
+    @behaviour TestServer.HTTP.Server
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def start(instance, port, scheme, options, httpd_options) do
       httpd_options =
         httpd_options
@@ -23,7 +23,7 @@ if Code.ensure_loaded?(:httpd) do
         |> Keyword.put_new(:server_name, ~c"Httpd Test Server")
         |> Keyword.put_new(:document_root, ~c"/tmp")
         |> Keyword.put_new(:server_root, ~c"/tmp")
-        |> Keyword.put_new(:handler_plug, {TestServer.Plug, {__MODULE__, [], instance}})
+        |> Keyword.put_new(:handler_plug, {TestServer.HTTP.Plug, {__MODULE__, [], instance}})
         |> Keyword.put_new(:ipfamily, options[:ipfamily])
         |> put_tls_options(scheme, options[:tls])
 
@@ -41,12 +41,12 @@ if Code.ensure_loaded?(:httpd) do
       Keyword.put(httpd_options, :socket_type, {:ssl, tls_options})
     end
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def stop(pid, _httpd_options) do
       :inets.stop(:httpd, pid)
     end
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def get_socket_pid(%{adapter: {_, _data}}), do: self()
 
     # :httpd record handler

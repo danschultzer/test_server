@@ -103,6 +103,27 @@ defmodule TestServer do
   end
 
   @doc false
+  def open_port(options) do
+    {port, options} =
+      case Keyword.get(options, :port, 0) do
+        {port, options} -> {port, options}
+        port -> {port, []}
+      end
+
+    unless is_integer(port) and port >= 0 and port <= 65_535,
+      do: raise("Invalid port, got: #{inspect(port)}")
+
+    with {:ok, socket} <- :gen_tcp.listen(port, options),
+         {:ok, port} <- :inet.port(socket),
+         true <- :erlang.port_close(socket) do
+      port
+    else
+      {:error, error} ->
+        raise("Could not listen to port #{inspect(port)}, because: #{inspect(error)}")
+    end
+  end
+
+  @doc false
   def fetch_instance!(protocol_module) do
     instance_module = Module.concat(protocol_module, Instance)
 

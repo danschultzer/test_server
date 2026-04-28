@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(Plug.Cowboy) do
-  defmodule TestServer.HTTPServer.Plug.Cowboy do
+  defmodule TestServer.HTTP.Server.Plug.Cowboy do
     @moduledoc """
     HTTP server adapter using `Plug.Cowboy`.
 
@@ -9,25 +9,25 @@ if Code.ensure_loaded?(Plug.Cowboy) do
 
     ## Usage
 
-        TestServer.start(
-          http_server: {TestServer.HTTPServer.Plug.Cowboy, cowboy_options}
+        TestServer.HTTP.start(
+          http_server: {TestServer.HTTP.Server.Plug.Cowboy, cowboy_options}
         )
     """
 
     # Server
 
-    @behaviour TestServer.HTTPServer
+    @behaviour TestServer.HTTP.Server
     @behaviour :cowboy_websocket
 
     alias Plug.{Cowboy, Cowboy.Handler}
-    alias TestServer.WebSocket
+    alias TestServer.HTTP.WebSocket
 
     @default_protocol_options [
       idle_timeout: :timer.seconds(1),
       request_timeout: :timer.seconds(1)
     ]
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def start(instance, port, scheme, options, cowboy_options) do
       cowboy_options =
         cowboy_options
@@ -41,14 +41,18 @@ if Code.ensure_loaded?(Plug.Cowboy) do
         |> Keyword.put(:net, options[:ipfamily])
         |> put_tls_options(scheme, options[:tls])
 
-      case apply(Cowboy, scheme, [TestServer.Plug, {__MODULE__, %{}, instance}, cowboy_options]) do
+      case apply(Cowboy, scheme, [
+             TestServer.HTTP.Plug,
+             {__MODULE__, %{}, instance},
+             cowboy_options
+           ]) do
         {:ok, pid} -> {:ok, pid, cowboy_options}
         {:error, error} -> {:error, error}
       end
     end
 
     defp dispatch(instance) do
-      dispatches = [{:_, __MODULE__, {TestServer.Plug, {__MODULE__, %{}, instance}}}]
+      dispatches = [{:_, __MODULE__, {TestServer.HTTP.Plug, {__MODULE__, %{}, instance}}}]
 
       [{:_, dispatches}]
     end
@@ -59,7 +63,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
       Keyword.merge(cowboy_options, Keyword.put_new(tls_options, :log_level, :warning))
     end
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def stop(_pid, cowboy_options) do
       port = Keyword.fetch!(cowboy_options, :port)
 
@@ -70,7 +74,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
       {__MODULE__, port}
     end
 
-    @impl TestServer.HTTPServer
+    @impl TestServer.HTTP.Server
     def get_socket_pid(%{adapter: {_, req}}), do: req.pid
 
     # Dispatch handling

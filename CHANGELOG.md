@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+*This release contains breaking changes.*
+
+All public functions in `TestServer` have been moved to `TestServer.HTTP`. The
+HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
+`TestServer.HTTP.Server.*`.
+
 ## v0.1.22 (2026-03-05)
 
 Requires Elixir 1.14 or higher.

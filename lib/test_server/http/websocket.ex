@@ -59,7 +59,7 @@ defmodule TestServer.HTTP.WebSocket do
         """
         #{message} The following websocket handlers have been processed:
 
-        #{Instance.format_websocket_handlers(websocket_handlers)}"
+        #{Instance.format_websocket_handlers(websocket_handlers)}
         """
     end
   end

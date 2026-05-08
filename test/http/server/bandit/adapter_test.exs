@@ -1,4 +1,4 @@
-defmodule TestServer.HTTP.Server.Bandit.HTTP2AdapterTest do
+defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
   use ExUnit.Case
 
   setup do

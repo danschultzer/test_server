@@ -69,7 +69,7 @@ if Code.ensure_loaded?(:httpd) do
     end
 
     defp handle_websocket(%Plug.Conn{adapter: {_adapter, {:websocket, _opts, _data}}}) do
-      {:proceed, response: {422, ~c"WebSocket is not supported with httpd!"}}
+      {:proceed, response: {501, ~c"WebSocket is not supported with httpd!"}}
     end
 
     defp handle_websocket(conn) do
@@ -119,7 +119,7 @@ if Code.ensure_loaded?(:httpd) do
       |> String.split("?")
       |> case do
         [request_path] -> {request_path, ""}
-        [request_path, qs] -> {request_path, qs}
+        [request_path, qs | _] -> {request_path, qs}
       end
     end
 
@@ -130,13 +130,26 @@ if Code.ensure_loaded?(:httpd) do
       |> Kernel.||({~c"host", ~c""})
       |> elem(1)
       |> to_string()
-      |> :binary.split(":")
+      |> case do
+        "[" <> _host = host -> :binary.split(host, "]:")
+        host -> :binary.split(host, ":")
+      end
       |> case do
         [host, port] ->
-          {Integer.parse(port), host}
+          [
+            host,
+            case Integer.parse(port) do
+              {port, ""} -> port
+              _ -> nil
+            end
+          ]
 
         [host] ->
-          {nil, host}
+          [host, nil]
+      end
+      |> case do
+        ["[" <> host, port] -> {port, String.trim_trailing(host, "]")}
+        [host, port] -> {port, host}
       end
     end
 
@@ -155,11 +168,11 @@ if Code.ensure_loaded?(:httpd) do
 
     @impl Plug.Conn.Adapter
     def send_resp(_data, status, headers, body) do
-      body = String.to_charlist(body)
+      body = IO.iodata_to_binary(body)
 
       headers =
         headers
-        |> Kernel.++([{"content-length", to_string(length(body))}])
+        |> Kernel.++([{"content-length", to_string(byte_size(body))}])
         |> Enum.map(&{String.to_charlist(elem(&1, 0)), String.to_charlist(elem(&1, 1))})
         |> Kernel.++([{:code, status}])
 

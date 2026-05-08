@@ -337,7 +337,7 @@ defmodule TestServer.HTTP.Instance do
     Do not halt a connection. All requests have to be processed.
 
     # #{inspect(plug)}
-        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}")}
+        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
     """
   end
 
@@ -356,15 +356,18 @@ defmodule TestServer.HTTP.Instance do
 
   defp run_routes(conn, state) do
     state.routes
-    |> Enum.find_index(fn
+    |> fetch_match_index([conn], fn
       %{suspended: true} -> false
-      %{match: match} -> try_run_match(match, [conn])
+      %{suspended: false} -> true
     end)
     |> case do
-      nil ->
+      {:error, :not_found} ->
         {{:error, {:not_found, conn}}, state}
 
-      index ->
+      {:error, {error, stacktrace}} ->
+        {{:error, {error, stacktrace}}, state}
+
+      {:ok, index} ->
         %{to: plug, stacktrace: stacktrace} = route = Enum.at(state.routes, index)
 
         result =
@@ -381,8 +384,15 @@ defmodule TestServer.HTTP.Instance do
     end
   end
 
-  defp try_run_match(match, args) do
-    apply(match, args)
+  defp fetch_match_index(items, args, callback) do
+    items
+    |> Enum.find_index(fn %{match: match} = item ->
+      callback.(item) && (is_nil(match) || apply(match, args))
+    end)
+    |> case do
+      nil -> {:error, :not_found}
+      index -> {:ok, index}
+    end
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
@@ -400,18 +410,19 @@ defmodule TestServer.HTTP.Instance do
 
   defp run_websocket_handlers({_instance, route_ref}, frame, websocket_state, state) do
     state.websocket_handlers
-    |> Enum.map(&{&1.route_ref == route_ref, &1})
-    |> Enum.find_index(fn
-      {false, _} -> false
-      {true, %{suspended: true}} -> false
-      {true, %{match: nil}} -> true
-      {true, %{match: match}} -> try_run_match(match, [frame, websocket_state])
+    |> fetch_match_index([frame, websocket_state], fn
+      %{route_ref: ^route_ref, suspended: true} -> false
+      %{route_ref: ^route_ref, suspended: false} -> true
+      %{route_ref: _other_route_ref, suspended: _any} -> false
     end)
     |> case do
-      nil ->
+      {:error, :not_found} ->
         {{:error, :not_found}, state}
 
-      index ->
+      {:error, {error, stacktrace}} ->
+        {{:error, {error, stacktrace}}, state}
+
+      {:ok, index} ->
         %{to: handler, stacktrace: stacktrace} = Enum.at(state.websocket_handlers, index)
 
         result = try_run_websocket_handler(frame, websocket_state, stacktrace, handler)

@@ -108,8 +108,8 @@ test "WebSocketClient" do
   {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
 
   :ok = TestServer.HTTP.websocket_handle(socket)
-  :ok = TestServer.HTTP.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
   :ok = TestServer.HTTP.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi" end)
+  :ok = TestServer.HTTP.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
 
   {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
@@ -119,7 +119,7 @@ test "WebSocketClient" do
   :ok = WebSocketClient.send(client, "ping")
   {:ok, "pong"} = WebSocketClient.receive(client)
 
-  :ok = WebSocketClient.send("hi")
+  :ok = WebSocketClient.send(client, "hi")
   {:ok, "hi"} = WebSocketClient.receive(client)
 
   :ok = TestServer.HTTP.websocket_info(socket, fn state -> {:reply, {:text, "ping"}, state} end)

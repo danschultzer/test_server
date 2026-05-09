@@ -88,7 +88,7 @@ A self-signed certificate suite is automatically generated if you don't set the 
 ```elixir
 TestServer.HTTP.start(scheme: :https)
 
-req_opts = [
+req_options = [
   connect_options: [
     transport_opts: [cacerts: TestServer.HTTP.x509_suite().cacerts],
     protocols: [:http2]
@@ -96,7 +96,7 @@ req_opts = [
 ]
 
 assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
-        Req.get(TestServer.HTTP.url(), req_opts)
+        Req.get(TestServer.HTTP.url(), req_options)
 ```
 
 ### WebSocket

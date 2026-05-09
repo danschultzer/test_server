@@ -164,13 +164,13 @@ defmodule TestServer.HTTP.Server.HttpdTest do
     end
   end
 
-  defp http_request(method, url, headers \\ [], opts \\ []) do
+  defp http_request(method, url, headers \\ [], options \\ []) do
     url = String.to_charlist(url)
 
     headers =
       Enum.map(headers, &{String.to_charlist(elem(&1, 0)), String.to_charlist(elem(&1, 1))})
 
-    case :httpc.request(method, {url, headers}, opts, []) do
+    case :httpc.request(method, {url, headers}, options, []) do
       {:ok, {{_, status_code, _}, response_headers, body}} ->
         response_headers =
           Enum.map(response_headers, &{to_string(elem(&1, 0)), to_string(elem(&1, 1))})

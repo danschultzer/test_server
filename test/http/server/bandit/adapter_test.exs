@@ -86,7 +86,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
     assert {:ok, "test"} = http2_request(TestServer.HTTP.url(), method: :post, body: "test")
   end
 
-  defp http2_request(url, opts \\ []) do
+  defp http2_request(url, options \\ []) do
     pools = %{
       default: [
         protocols: [:http2],
@@ -98,10 +98,10 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
       {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
     end
 
-    headers = Keyword.get(opts, :headers, [])
-    body = Keyword.get(opts, :body, nil)
+    headers = Keyword.get(options, :headers, [])
+    body = Keyword.get(options, :body, nil)
 
-    opts
+    options
     |> Keyword.get(:method, :get)
     |> Finch.build(url, headers, body)
     |> Finch.request(Finch)

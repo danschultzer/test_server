@@ -25,7 +25,7 @@ if Code.ensure_loaded?(Bandit) do
         |> Keyword.get(:transport_options, [])
         |> put_tls_options(scheme, options[:tls])
 
-      ipfamily_opts =
+      ipfamily_options =
         case options[:ipfamily] do
           :inet -> []
           ipfamily -> [ipfamily]
@@ -38,7 +38,7 @@ if Code.ensure_loaded?(Bandit) do
         # processes
         |> Keyword.put(:num_acceptors, 1)
         |> Keyword.put(:port, port)
-        |> Keyword.put(:transport_options, ipfamily_opts ++ transport_options)
+        |> Keyword.put(:transport_options, ipfamily_options ++ transport_options)
 
       bandit_options =
         bandit_options

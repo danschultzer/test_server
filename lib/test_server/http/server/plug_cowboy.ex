@@ -84,8 +84,8 @@ if Code.ensure_loaded?(Plug.Cowboy) do
       req
       |> Handler.init({plug, instance})
       |> case do
-        {:ok, req, opts} ->
-          {:ok, req, opts}
+        {:ok, req, options} ->
+          {:ok, req, options}
 
         {Plug.Cowboy.Handler, req, {_http_server, {socket, state}}, _} ->
           {:cowboy_websocket, req, {socket, state}}

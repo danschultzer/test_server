@@ -60,15 +60,15 @@ if Code.ensure_loaded?(:httpd) do
 
     @doc false
     def unquote(:do)(data) do
-      {plug, opts} = :httpd_util.lookup(httpd(data, :config_db), :handler_plug)
+      {plug, options} = :httpd_util.lookup(httpd(data, :config_db), :handler_plug)
 
       data
       |> conn()
-      |> plug.call(opts)
+      |> plug.call(options)
       |> handle_websocket()
     end
 
-    defp handle_websocket(%Plug.Conn{adapter: {_adapter, {:websocket, _opts, _data}}}) do
+    defp handle_websocket(%Plug.Conn{adapter: {_adapter, {:websocket, _options, _data}}}) do
       {:proceed, response: {501, ~c"WebSocket is not supported with httpd!"}}
     end
 
@@ -180,17 +180,17 @@ if Code.ensure_loaded?(:httpd) do
     end
 
     @impl Plug.Conn.Adapter
-    def upgrade(data, :websocket, opts) do
-      {:ok, {:websocket, opts, data}}
+    def upgrade(data, :websocket, options) do
+      {:ok, {:websocket, options, data}}
     end
 
-    def upgrade(_data, _upgrade, _opts), do: {:error, :not_supported}
+    def upgrade(_data, _upgrade, _options), do: {:error, :not_supported}
 
     @impl Plug.Conn.Adapter
     def get_http_protocol(data), do: httpd(data, :http_version)
 
     @impl Plug.Conn.Adapter
-    def read_req_body(data, _opts), do: {:ok, to_string(httpd(data, :entity_body)), data}
+    def read_req_body(data, _options), do: {:ok, to_string(httpd(data, :entity_body)), data}
 
     # Callbacks yet to be implemented
 

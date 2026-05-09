@@ -2,7 +2,7 @@
 defmodule TestServer.HTTP.Server.Bandit.Plug do
   @moduledoc false
 
-  defdelegate init(opts), to: TestServer.HTTP.Plug
+  defdelegate init(options), to: TestServer.HTTP.Plug
 
   def call(%{adapter: {Bandit.Adapter, req}} = conn, {http_server, args, instance}) do
     plug_pid = self()

@@ -94,9 +94,9 @@ defmodule TestServer.HTTP.Server do
   end
 
   defp maybe_generate_x509_suite(options, :https) do
-    tls_opts = Keyword.get(options, :tls, [])
+    tls_options = Keyword.get(options, :tls, [])
 
-    case Keyword.take(tls_opts, [:key, :keyfile]) do
+    case Keyword.take(tls_options, [:key, :keyfile]) do
       [] ->
         suite = X509.Test.Suite.new()
 
@@ -107,7 +107,7 @@ defmodule TestServer.HTTP.Server do
          ], x509_suite: suite}
 
       [_ | _] ->
-        {tls_opts, []}
+        {tls_options, []}
     end
   end
 

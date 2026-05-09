@@ -16,9 +16,9 @@ if Code.ensure_loaded?(Bandit) do
     @behaviour Plug.Conn.Adapter
 
     @impl Plug.Conn.Adapter
-    def read_req_body({plug_pid, payload}, opts) do
+    def read_req_body({plug_pid, payload}, options) do
       with {:ok, data, payload} <-
-             send_and_receive(plug_pid, :read_req_body, [payload, opts]) do
+             send_and_receive(plug_pid, :read_req_body, [payload, options]) do
         {:ok, data, {plug_pid, payload}}
       end
     end
@@ -77,8 +77,8 @@ if Code.ensure_loaded?(Bandit) do
     end
 
     @impl Plug.Conn.Adapter
-    def upgrade({plug_pid, payload}, upgrade, opts) do
-      with {:ok, payload} <- send_and_receive(plug_pid, :upgrade, [payload, upgrade, opts]) do
+    def upgrade({plug_pid, payload}, upgrade, options) do
+      with {:ok, payload} <- send_and_receive(plug_pid, :upgrade, [payload, upgrade, options]) do
         {:ok, {plug_pid, payload}}
       end
     end

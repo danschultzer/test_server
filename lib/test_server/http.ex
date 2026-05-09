@@ -51,7 +51,7 @@ defmodule TestServer.HTTP do
         end
       )
 
-      req_opts = [
+      req_options = [
         connect_options: [
           transport_opts: [cacerts: TestServer.HTTP.x509_suite().cacerts],
           protocols: [:http2]
@@ -59,7 +59,7 @@ defmodule TestServer.HTTP do
       ]
 
       assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
-              Req.get(TestServer.HTTP.url(), req_opts)
+              Req.get(TestServer.HTTP.url(), req_options)
   """
   @spec start(keyword()) :: {:ok, pid()}
   def start(options \\ []) do
@@ -136,7 +136,7 @@ defmodule TestServer.HTTP do
 
   @spec url(binary() | keyword() | pid()) :: binary()
   def url(uri) when is_binary(uri), do: url(uri, [])
-  def url(opts) when is_list(opts), do: url("", opts)
+  def url(options) when is_list(options), do: url("", options)
   def url(instance) when is_pid(instance), do: url(instance, "", [])
 
   @doc """
@@ -156,8 +156,8 @@ defmodule TestServer.HTTP do
       assert TestServer.HTTP.url(host: "example.com") == "http://example.com:4444"
   """
   @spec url(binary(), keyword()) :: binary()
-  def url(uri, opts) when is_binary(uri),
-    do: url(TestServer.fetch_instance!(__MODULE__), uri, opts)
+  def url(uri, options) when is_binary(uri),
+    do: url(TestServer.fetch_instance!(__MODULE__), uri, options)
 
   @spec url(pid(), binary()) :: binary()
   def url(instance, uri) when is_pid(instance), do: url(instance, uri, [])
@@ -168,13 +168,13 @@ defmodule TestServer.HTTP do
   See `url/2` for options.
   """
   @spec url(pid(), binary(), keyword()) :: binary()
-  def url(instance, uri, opts) do
+  def url(instance, uri, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    unless is_nil(opts[:host]) or is_binary(opts[:host]),
-      do: raise("Invalid host, got: #{inspect(opts[:host])}")
+    unless is_nil(options[:host]) or is_binary(options[:host]),
+      do: raise("Invalid host, got: #{inspect(options[:host])}")
 
-    domain = maybe_enable_host(opts[:host])
+    domain = maybe_enable_host(options[:host])
     options = Instance.get_options(instance)
 
     "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{uri}"
@@ -308,10 +308,10 @@ defmodule TestServer.HTTP do
       TestServer.HTTP.add("/")
 
       cacerts = TestServer.HTTP.x509_suite().cacerts
-      req_opts = [connect_options: [transport_opts: [cacerts: cacerts]]]
+      req_options = [connect_options: [transport_opts: [cacerts: cacerts]]]
 
       assert {:ok, %Req.Response{status: 200, body: "HTTP/1.1"}} =
-              Req.get(TestServer.HTTP.url(), req_opts)
+              Req.get(TestServer.HTTP.url(), req_options)
   """
   @spec x509_suite() :: term()
   def x509_suite, do: x509_suite(TestServer.fetch_instance!(__MODULE__))

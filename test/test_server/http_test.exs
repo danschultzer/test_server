@@ -47,31 +47,34 @@ defmodule TestServer.HTTPTest do
 
       assert %X509.Test.Suite{} = options[:x509_suite]
 
-      http_opts = fn cacerts ->
-        [
-          ssl: [
-            verify: :verify_peer,
-            depth: 99,
-            cacerts: cacerts,
-            verify_fun: {&:ssl_verify_hostname.verify_fun/3, check_hostname: ~c"localhost"},
-            customize_hostname_check: [
-              match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
-            ],
-            log_level: :warning
+      http_options =
+        fn cacerts ->
+          [
+            ssl: [
+              verify: :verify_peer,
+              depth: 99,
+              cacerts: cacerts,
+              verify_fun: {&:ssl_verify_hostname.verify_fun/3, check_hostname: ~c"localhost"},
+              customize_hostname_check: [
+                match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+              ],
+              log_level: :warning
+            ]
           ]
-        ]
-      end
+        end
 
       valid_cacerts = TestServer.HTTP.x509_suite().cacerts
       invalid_cacerts = X509.Test.Suite.new().cacerts
 
       assert {:error, {:failed_connect, _}} =
-               http1_request(TestServer.HTTP.url("/"), http_opts: http_opts.(invalid_cacerts))
+               http1_request(TestServer.HTTP.url("/"),
+                 http_options: http_options.(invalid_cacerts)
+               )
 
       assert :ok = TestServer.HTTP.add("/")
 
       assert {:ok, _} =
-               http1_request(TestServer.HTTP.url("/"), http_opts: http_opts.(valid_cacerts))
+               http1_request(TestServer.HTTP.url("/"), http_options: http_options.(valid_cacerts))
     end
 
     test "starts in IPv6-only mode" do
@@ -326,9 +329,9 @@ defmodule TestServer.HTTPTest do
 
     test "with `:to` plug" do
       defmodule ToPlug do
-        def init(opts), do: opts
+        def init(options), do: options
 
-        def call(conn, _opts), do: Plug.Conn.resp(conn, 200, to_string(__MODULE__))
+        def call(conn, _options), do: Plug.Conn.resp(conn, 200, to_string(__MODULE__))
       end
 
       assert :ok = TestServer.HTTP.add("/", to: ToPlug)
@@ -466,9 +469,9 @@ defmodule TestServer.HTTPTest do
 
     test "with plug module" do
       defmodule ModulePlug do
-        def init(opts), do: opts
+        def init(options), do: options
 
-        def call(conn, _opts), do: %{conn | params: %{"plug" => to_string(__MODULE__)}}
+        def call(conn, _options), do: %{conn | params: %{"plug" => to_string(__MODULE__)}}
       end
 
       assert :ok = TestServer.HTTP.plug(ModulePlug)
@@ -918,20 +921,20 @@ defmodule TestServer.HTTPTest do
     end
   end
 
-  def http1_request(url, opts \\ []) do
+  def http1_request(url, options \\ []) do
     url = String.to_charlist(url)
-    httpc_http_opts = Keyword.get(opts, :http_opts, [])
-    httpc_opts = Keyword.get(opts, :opts, [])
 
-    opts
+    options
     |> Keyword.get(:method, :get)
     |> case do
-      :post ->
-        :httpc.request(:post, {url, [], ~c"plain/text", ~c"OK"}, httpc_http_opts, httpc_opts)
-
-      :get ->
-        :httpc.request(:get, {url, []}, httpc_http_opts, httpc_opts)
+      :post -> {:post, {url, [], ~c"plain/text", ~c"OK"}}
+      :get -> {:get, {url, []}}
     end
+    |> then(fn {method, request} ->
+      httpc_http_options = Keyword.get(options, :http_options, [])
+
+      :httpc.request(method, request, httpc_http_options, [])
+    end)
     |> case do
       {:ok, {{_, 200, _}, _headers, body}} -> {:ok, IO.iodata_to_binary(body)}
       {:ok, {{_, _, _}, _headers, body}} -> {:error, IO.iodata_to_binary(body)}
@@ -973,7 +976,7 @@ defmodule TestServer.HTTPTest do
 
   # `:httpd` has no HTTP/2 support
   unless System.get_env("HTTP_SERVER") == "Httpd" do
-    defp http2_request(url, opts \\ []) do
+    defp http2_request(url, options \\ []) do
       pools = %{
         default: [
           protocols: [:http2],
@@ -985,10 +988,10 @@ defmodule TestServer.HTTPTest do
         {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
       end
 
-      headers = Keyword.get(opts, :headers, [])
-      body = Keyword.get(opts, :body, nil)
+      headers = Keyword.get(options, :headers, [])
+      body = Keyword.get(options, :body, nil)
 
-      opts
+      options
       |> Keyword.get(:method, :get)
       |> Finch.build(url, headers, body)
       |> Finch.request(Finch)

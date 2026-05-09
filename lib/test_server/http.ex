@@ -143,7 +143,9 @@ defmodule TestServer.HTTP do
   Produces a URL for current test server.
 
   ## Options
-    * `:host` - binary host value, it'll be added to inet for IP `127.0.0.1` and `::1`, defaults to `"localhost"`;
+
+    * `:host` - binary host value, it'll be added to inet for IP `127.0.0.1`
+      and `::1`, defaults to `"localhost"`;
 
   ## Examples
 
@@ -201,11 +203,11 @@ defmodule TestServer.HTTP do
   ## Options
 
     * `:via`       - matches the route against some specific HTTP method(s)
-      specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`.
+      specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`;
     * `:match`     - an anonymous function that will be called to see if a
-      route matches, defaults to matching with arguments of uri and `:via` option.
+      route matches, defaults to matching with arguments of uri and `:via` option;
     * `:to`        - a Plug or anonymous function that will be called when the
-      route matches, defaults to return the http scheme.
+      route matches, defaults to return the http scheme;
 
   ## Examples
 
@@ -420,9 +422,9 @@ defmodule TestServer.HTTP do
   ## Options
 
     * `:match`     - an anonymous function that will be called to see if a
-      message matches, defaults to matching anything.
+      message matches, defaults to matching anything;
     * `:to`        - an anonymous function that will be called when the message
-      matches, defaults to returning received message.
+      matches, defaults to returning received message;
 
   ## Examples
 

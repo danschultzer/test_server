@@ -16,7 +16,7 @@ defmodule TestServer.HTTP do
           {:reply, websocket_frame(), websocket_state()} | {:ok, websocket_state()}
 
   @doc """
-  Start a test server instance.
+  Start a test server HTTP instance.
 
   The instance will be terminated when the test case finishes.
 

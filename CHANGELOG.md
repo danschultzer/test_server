@@ -10,7 +10,7 @@ All public functions in `TestServer` have been moved to `TestServer.HTTP`. The
 HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
 `TestServer.HTTP.Server.*`. `add/2` has been renamed to `handle/2`, `websocket_init/3` has been renamed to `websocket/3` and now returns the websocket directly instead of `{:ok, websocket}`, and `websocket_info/2` has been renamed to `websocket_send/2` and now takes options as second argument.
 
-TestServer now has SSH support with `TestServer.SSH`.
+TestServer now has SSH support with `TestServer.SSH` and TCP support with `TestServer.TCP`.
 
 - `TestServer.HTTP.start/1` now returns `{:error, reason}` instead of raising
 - Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.handle/2` and `TestServer.HTTP.websocket_handle/2`

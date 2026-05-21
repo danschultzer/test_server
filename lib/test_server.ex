@@ -115,17 +115,26 @@ defmodule TestServer do
   end
 
   @doc false
+  def validate_port!(options) do
+    port = Keyword.get(options, :port, 0)
+
+    unless is_integer(port) and port >= 0 and port <= 65_535,
+      do: raise(ArgumentError, "expected a port, got: #{inspect(port)}")
+
+    port
+  end
+
+  @doc false
   def open_port(options) do
-    {port, options} =
+    {port, listen_options} =
       case Keyword.get(options, :port, 0) do
         {port, options} -> {port, options}
         port -> {port, []}
       end
 
-    unless is_integer(port) and port >= 0 and port <= 65_535,
-      do: raise(ArgumentError, "expected a port, got: #{inspect(port)}")
+    port = validate_port!(port: port)
 
-    with {:ok, socket} <- :gen_tcp.listen(port, options),
+    with {:ok, socket} <- :gen_tcp.listen(port, listen_options),
          {:ok, port} <- :inet.port(socket),
          true <- :erlang.port_close(socket) do
       {:ok, port}

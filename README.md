@@ -13,6 +13,7 @@ Features:
 - HTTP/2
 - WebSocket
 - SSH
+- TCP
 - Built-in TLS with self-signed certificates
 - Plug route matching
 
@@ -20,6 +21,7 @@ Features:
 
 - [`TestServer.HTTP`](lib/test_server/http/README.md) - HTTP/1, HTTP/2, and WebSocket.
 - [`TestServer.SSH`](lib/test_server/ssh/README.md) - SSH exec and shell.
+- [`TestServer.TCP`](lib/test_server/tcp/README.md) - TCP socket endpoints.
 
 <!-- MDOC !-->
 

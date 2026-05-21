@@ -85,6 +85,9 @@ defmodule TestServer.MixProject do
         ],
         SSH: [
           TestServer.SSH
+        ],
+        TCP: [
+          TestServer.TCP
         ]
       ]
     ]

@@ -4,6 +4,8 @@
 
 *This release contains breaking changes.*
 
+Requires Elixir 1.15 or higher.
+
 All public functions in `TestServer` have been moved to `TestServer.HTTP`. The
 HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
 `TestServer.HTTP.Server.*`.

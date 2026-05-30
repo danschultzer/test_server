@@ -105,6 +105,18 @@ defmodule TestServer.HTTPTest do
         TestServer.HTTP.start(http_server: :invalid)
       end
     end
+
+    test "when test stop" do
+      port = TestServer.open_port([])
+
+      on_exit(fn ->
+        refute :gen_tcp.listen(port, []) == {:error, :eaddrinuse},
+               "Port #{port} must be released after test ends"
+      end)
+
+      assert {:ok, _instance} = TestServer.HTTP.start(port: port)
+      assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+    end
   end
 
   describe "stop/1" do

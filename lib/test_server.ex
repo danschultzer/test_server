@@ -48,7 +48,7 @@ defmodule TestServer do
 
     case InstanceManager.start_instance(caller, protocol_module, options) do
       {:ok, instance} ->
-        put_ex_unit_on_exit_callback(instance, verify_fn)
+        put_ex_unit_on_exit_callback(protocol_module, instance, verify_fn)
         {:ok, instance}
 
       {:error, error} ->
@@ -56,11 +56,14 @@ defmodule TestServer do
     end
   end
 
-  defp put_ex_unit_on_exit_callback(instance, verify_fn) do
+  defp put_ex_unit_on_exit_callback(protocol_module, instance, verify_fn) do
     ExUnit.Callbacks.on_exit(fn ->
       if Process.alive?(instance) do
-        verify_fn.(instance)
-        InstanceManager.stop_instance(instance)
+        try do
+          verify_fn.(instance)
+        after
+          protocol_module.stop(instance)
+        end
       end
     end)
   end

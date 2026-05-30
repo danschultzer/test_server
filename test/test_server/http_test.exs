@@ -996,9 +996,19 @@ defmodule TestServer.HTTPTest do
       |> Finch.build(url, headers, body)
       |> Finch.request(Finch)
       |> case do
-        {:ok, %{status: 200, body: body}} -> {:ok, body}
-        {:ok, %{status: _, body: body}} -> {:error, body}
-        {:error, error} -> {:error, error}
+        {:ok, %{status: 200, body: body}} ->
+          {:ok, body}
+
+        {:ok, %{status: _, body: body}} ->
+          {:error, body}
+
+        {:error, %Finch.Error{reason: :pool_not_available}} ->
+          :timer.sleep(10)
+
+          http2_request(url, options)
+
+        {:error, error} ->
+          {:error, error}
       end
     end
   end

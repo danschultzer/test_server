@@ -99,7 +99,7 @@ defmodule TestServer.SSHTest do
                             fingerprint == other_host_key_fingerprint
                           end
                         )
-             end) =~ "ECDH reply failed. Verify host key: {error,fingerprint_check_failed}"
+             end) =~ "Verify host key: {error,fingerprint_check_failed}"
 
       assert capture_log(fn ->
                assert {:error, "Key exchange failed"} =

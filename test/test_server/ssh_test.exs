@@ -302,6 +302,18 @@ defmodule TestServer.SSHTest do
                assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
              end) =~ "server will use strict KEX ordering"
     end
+
+    test "when test stop" do
+      port = TestServer.open_port([])
+
+      on_exit(fn ->
+        refute :gen_tcp.listen(port, []) == {:error, :eaddrinuse},
+               "Port #{port} must be released after test ends"
+      end)
+
+      assert {:ok, _instance} = TestServer.SSH.start(port: port)
+      assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+    end
   end
 
   defp write_user_dir_pem!(context, key) do

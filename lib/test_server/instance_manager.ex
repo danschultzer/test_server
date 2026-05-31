@@ -9,7 +9,8 @@ defmodule TestServer.InstanceManager do
     GenServer.start_link(__MODULE__, options, name: __MODULE__)
   end
 
-  @spec start_instance(pid(), module(), keyword()) :: {:ok, pid()} | {:error, term()}
+  @spec start_instance(pid(), module(), keyword()) ::
+          {:ok, TestServer.instance()} | {:error, term()}
   def start_instance(caller, protocol_module, options) do
     [_first | stacktrace] = TestServer.get_pruned_stacktrace(protocol_module)
 
@@ -29,7 +30,7 @@ defmodule TestServer.InstanceManager do
     end
   end
 
-  @spec stop_instance(pid()) :: :ok | {:error, :not_found}
+  @spec stop_instance(TestServer.instance()) :: :ok | {:error, :not_found}
   def stop_instance(instance) do
     res = DynamicSupervisor.terminate_child(InstanceSupervisor, instance)
     GenServer.call(__MODULE__, {:remove, instance})
@@ -37,7 +38,7 @@ defmodule TestServer.InstanceManager do
     res
   end
 
-  @spec fetch_instance(pid(), module()) :: {:ok, pid()} | :error
+  @spec fetch_instance(pid(), module()) :: {:ok, TestServer.instance()} | :error
   def fetch_instance(caller, protocol_module) do
     case GenServer.call(__MODULE__, {:get_by_caller, caller, protocol_module}) do
       [] -> :error

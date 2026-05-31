@@ -13,7 +13,10 @@ defmodule TestServer.HTTP.Instance do
     GenServer.stop(instance)
   end
 
-  @spec register(pid(), {:plug_router_to, {binary(), keyword(), TestServer.stacktrace()}}) ::
+  @spec register(
+          TestServer.instance(),
+          {:plug_router_to, {binary(), keyword(), TestServer.stacktrace()}}
+        ) ::
           {:ok, %{ref: reference()}}
   def register(instance, {:plug_router_to, {uri, options, stacktrace}}) do
     ensure_plug!(options[:to])
@@ -22,7 +25,7 @@ defmodule TestServer.HTTP.Instance do
     GenServer.call(instance, {:register, {:plug_router_to, {uri, options, stacktrace}}})
   end
 
-  @spec register(pid(), {:plug, {atom() | function(), TestServer.stacktrace()}}) ::
+  @spec register(TestServer.instance(), {:plug, {atom() | function(), TestServer.stacktrace()}}) ::
           {:ok, map()}
   def register(instance, {:plug, {plug, stacktrace}}) do
     ensure_plug!(plug)
@@ -51,7 +54,7 @@ defmodule TestServer.HTTP.Instance do
   defp ensure_function!(fun) when is_function(fun), do: :ok
   defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
 
-  @spec dispatch(pid(), {:plug, Plug.Conn.t()}) ::
+  @spec dispatch(TestServer.instance(), {:plug, Plug.Conn.t()}) ::
           {:ok, Plug.Conn.t()}
           | {:error, {:not_found, Plug.Conn.t()}}
           | {:error, {term(), list()}}
@@ -88,12 +91,12 @@ defmodule TestServer.HTTP.Instance do
     )
   end
 
-  @spec get_options(pid()) :: keyword()
+  @spec get_options(TestServer.instance()) :: keyword()
   def get_options(instance) do
     GenServer.call(instance, :options)
   end
 
-  @spec routes(pid()) :: [map()]
+  @spec routes(TestServer.instance()) :: [map()]
   def routes(instance) do
     GenServer.call(instance, :routes)
   end
@@ -120,7 +123,7 @@ defmodule TestServer.HTTP.Instance do
     end)
   end
 
-  @spec websocket_handlers(pid()) :: [map()]
+  @spec websocket_handlers(TestServer.instance()) :: [map()]
   def websocket_handlers(instance) do
     GenServer.call(instance, :websocket_handlers)
   end
@@ -137,7 +140,7 @@ defmodule TestServer.HTTP.Instance do
     end)
   end
 
-  @spec report_error(pid(), {struct(), TestServer.stacktrace()}) :: :ok
+  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
   def report_error(instance, {exception, stacktrace}) do
     options = get_options(instance)
     caller = Keyword.fetch!(options, :caller)

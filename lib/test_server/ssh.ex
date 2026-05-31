@@ -7,7 +7,7 @@ defmodule TestServer.SSH do
 
   alias TestServer.SSH.{Instance, Server}
 
-  @type channel :: {pid(), channel_ref()}
+  @type channel :: {TestServer.instance(), channel_ref()}
   @type channel_ref :: reference()
   @type channel_id :: :ssh.channel_id()
   @type state :: term()
@@ -43,24 +43,34 @@ defmodule TestServer.SSH do
 
     * `:port`             - integer of port number, defaults to random port
       that can be opened;
+
     * `:host_keys`        - list of host keys, or a
       `c::ssh_server_key_api.host_key/2` function. Default will autogenerate
       keys for algorithms specified in `t::ssh.pubkey_alg/0` and they can be
       fetched from `host_keys/1`;
-    * `:auth_keys`       - list of `{"user", public_key}` tuples, or a
+
+    * `:auth_keys`        - list of `{"user", public_key}` tuples, or a
       `c::ssh_server_key_api.is_auth_key/3` function. Defaults to an empty
       list.
-    * `:user_passwords`  - list of `{"user", "password"}` tuples;
+
+    * `:user_passwords`   - list of `{"user", "password"}` tuples;
+
     * `:no_auth_needed`   - boolean value indicating whether to allow
       connections with no authentication. Defaults to `true` if `:auth_keys`
       and `:user_passwords` has not been set, otherwise `false`;
+
     * `:ipfamily`         - The IP address type to use, either `:inet` or
       `:inet6`. Defaults to `:inet`;
+
     * `:suppress_ssh_strict_kex_ordering_log` - boolean that suppresses OTP
       SSH debug messages for strict KEX ordering. Defaults to `true`.  Note:
       the filter is installed when the server starts and removed when it stops.
       If a test crashes the filter may persist into the next test;
-    * `:daemon`           - options to pass directly to `:ssh.daemon/2`.
+
+    * `:daemon`           - options to pass directly to `:ssh.daemon/2`;
+
+    * `:suppress_warning` - Suppresses IO warnings on expectation failures
+      related to this instance. Defaults to `false`;
 
   ## Examples
 
@@ -111,7 +121,7 @@ defmodule TestServer.SSH do
       assert {:ok, "pong"} = SSHClient.receive_data(conn, channel_id)
       assert :ok = SSHClient.close(conn)
   """
-  @spec start(keyword()) :: {:ok, pid()}
+  @spec start(keyword()) :: {:ok, TestServer.instance()}
   def start(options \\ []) do
     TestServer.start_instance(__MODULE__, options, &verify!/1)
   end
@@ -172,11 +182,11 @@ defmodule TestServer.SSH do
   @doc """
   Shuts down a test server SSH instance.
   """
-  @spec stop(pid()) :: :ok | {:error, term()}
+  @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    Server.stop(Instance.get_options(instance))
+    :ok = Server.stop(Instance.get_options(instance))
 
     TestServer.stop_instance(__MODULE__, instance)
   end
@@ -199,7 +209,7 @@ defmodule TestServer.SSH do
       assert TestServer.SSH.address() == {"localhost", 2222}
       assert TestServer.SSH.address(host: "myserver.test") == {"myserver.test", 2222}
   """
-  @spec address(keyword() | pid()) :: {binary(), non_neg_integer()}
+  @spec address(keyword() | TestServer.instance()) :: {binary(), non_neg_integer()}
   def address(options) when is_list(options),
     do: address(TestServer.fetch_instance!(__MODULE__), options)
 
@@ -210,7 +220,7 @@ defmodule TestServer.SSH do
 
   See `address/1` for options.
   """
-  @spec address(pid(), keyword()) :: {binary(), non_neg_integer()}
+  @spec address(TestServer.instance(), keyword()) :: {binary(), non_neg_integer()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
@@ -255,7 +265,7 @@ defmodule TestServer.SSH do
 
   See `channel/1` for options.
   """
-  @spec channel(pid(), keyword()) :: {:ok, channel()}
+  @spec channel(TestServer.instance(), keyword()) :: {:ok, channel()}
   def channel(instance, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
@@ -288,6 +298,7 @@ defmodule TestServer.SSH do
 
     * `:match` - a `t:match_fun/0` function that returns a boolean. Defaults to
       matching anything;
+
     * `:to`    - a `t:handler_fun/0` or `t:raw_handler_fun/0` function called
       when the handler matches. Defaults to send back the received data for
       `:exec` and `:data` type channel messages, with no `:data` message
@@ -300,7 +311,8 @@ defmodule TestServer.SSH do
 
     * `:data_type_code` - an integer SSH data type code to send with the reply,
       defaults to `0` (SSH_MSG_CHANNEL_DATA);
-    * `:exit_status` - an integer exit status to send when finishing an `:exec`
+
+    * `:exit_status`    - an integer exit status to send when finishing an `:exec`
       channel, defaults to `0`. Ignored for other channel types;
 
   ## Examples
@@ -363,7 +375,7 @@ defmodule TestServer.SSH do
 
   See `host_keys/0` for more.
   """
-  @spec host_keys(pid()) :: [host_key()]
+  @spec host_keys(TestServer.instance()) :: [host_key()]
   def host_keys(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 

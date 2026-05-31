@@ -4,7 +4,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
     HTTP server adapter using `Plug.Cowboy`.
 
     By default only one acceptor process is started which is enough for
-    testing.  This adapter will be used by default if `Bandit` is not loaded
+    testing. This adapter will be used by default if `Bandit` is not loaded
     and `Plug.Cowboy` is loaded in the project.
 
     ## Usage

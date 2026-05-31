@@ -12,7 +12,7 @@ HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
 
 TestServer now has SSH support with `TestServer.SSH`.
 
-- Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.add/2` and `TestServer.HTTP.websocket_handle/3`
+- Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.add/2` and `TestServer.HTTP.websocket_handle/2`
 - Fixed UTF-8 response body handling for `TestServer.HTTP.Server.Httpd`
 - Fixed invalid host header port parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed bracketed IPv6 host header parsing in `TestServer.HTTP.Server.Httpd`

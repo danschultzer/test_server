@@ -45,7 +45,7 @@ defmodule TestServer.HTTPTest do
 
       options = TestServer.HTTP.Instance.get_options(instance)
 
-      assert %X509.Test.Suite{} = options[:x509_suite]
+      assert %{cert: _, cacerts: _} = options[:x509_suite]
 
       http_options =
         fn cacerts ->
@@ -63,8 +63,8 @@ defmodule TestServer.HTTPTest do
           ]
         end
 
-      valid_cacerts = TestServer.HTTP.x509_suite().cacerts
-      invalid_cacerts = X509.Test.Suite.new().cacerts
+      %{cacerts: valid_cacerts} = TestServer.HTTP.x509_suite()
+      %{cacerts: invalid_cacerts} = X509.Test.Suite.new()
 
       assert {:error, {:failed_connect, _}} =
                http1_request(TestServer.HTTP.url("/"),

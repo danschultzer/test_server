@@ -8,38 +8,37 @@ defmodule TestServer.HTTP.Server do
         @behaviour TestServer.HTTP.Server
 
         @impl TestServer.HTTP.Server
-        def start(instance, port, scheme, tls_options, server_options) do
+        def start(instance, port, scheme, options, server_options) do
           my_http_server_options =
             server_options
             |> Keyword.put(:port, port)
             |> Keyword.put_new(:ipfamily, options[:ipfamily])
 
           case MyHTTPServer.start(my_http_server_options) do
-            {:ok, pid} -> {:ok, pid, my_http_server_options}
+            {:ok, server_pid} -> {:ok, server_pid, my_http_server_options}
             {:error, error} -> {:error, error}
           end
         end
 
         @impl TestServer.HTTP.Server
-        def stop(instance, server_options), do: MyHTTPServer.stop()
+        def stop(server_pid, server_options), do: MyHTTPServer.stop(server_pid)
 
         @impl TestServer.HTTP.Server
         def get_socket_pid(%{adapter: {_, data}}), do: data.pid # or however your adapter provides the pid
       end
   """
   @type scheme :: :http | :https
-  @type instance :: pid()
   @type port_number :: :inet.port_number()
   @type options :: [tls: keyword(), ipfamily: :inet | :inet6]
   @type server_options :: keyword()
 
-  @callback start(instance(), port_number(), scheme(), options(), server_options()) ::
-              {:ok, pid(), server_options()} | {:error, any()}
-  @callback stop(instance(), server_options()) :: :ok | {:error, any()}
+  @callback start(TestServer.instance(), port_number(), scheme(), options(), server_options()) ::
+              {:ok, term(), server_options()} | {:error, term()}
+  @callback stop(term(), server_options()) :: :ok | {:error, term()}
   @callback get_socket_pid(Plug.Conn.t()) :: pid()
 
   @doc false
-  @spec start(pid(), keyword()) :: {:ok, keyword()} | {:error, any()}
+  @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
     port = TestServer.open_port(options)
     scheme = parse_scheme(options)
@@ -79,12 +78,14 @@ defmodule TestServer.HTTP.Server do
     case Keyword.take(tls_options, [:key, :keyfile]) do
       [] ->
         suite = X509.Test.Suite.new()
+        server_key = X509.PrivateKey.to_der(suite.server_key)
+        cert = X509.Certificate.to_der(suite.valid)
 
         {[
-           key: {:RSAPrivateKey, X509.PrivateKey.to_der(suite.server_key)},
-           cert: X509.Certificate.to_der(suite.valid),
+           key: {:RSAPrivateKey, server_key},
+           cert: cert,
            cacerts: suite.chain ++ suite.cacerts
-         ], x509_suite: suite}
+         ], x509_suite: %{cert: cert, cacerts: suite.cacerts}}
 
       [_ | _] ->
         {tls_options, []}
@@ -117,7 +118,7 @@ defmodule TestServer.HTTP.Server do
   end
 
   @doc false
-  @spec stop(keyword()) :: :ok | {:error, any()}
+  @spec stop(keyword()) :: :ok | {:error, term()}
   def stop(options) do
     {mod, server_options} = Keyword.fetch!(options, :http_server)
     reference = Keyword.fetch!(options, :http_server_reference)

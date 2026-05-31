@@ -2,7 +2,7 @@ defmodule TestServer.SSH.Server do
   @moduledoc false
 
   @doc false
-  @spec start(pid(), keyword()) :: {:ok, keyword()} | {:error, any()}
+  @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
     port = TestServer.open_port(options)
     {host_keys, daemon_options} = daemon_options(instance, options)

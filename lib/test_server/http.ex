@@ -63,7 +63,7 @@ defmodule TestServer.HTTP do
         http_server: {TestServer.HTTP.Server.Bandit, [ip: :any]}
       )
 
-      TestServer.HTTP.add("/",
+      TestServer.HTTP.handle("/",
         to: fn conn ->
           assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 
@@ -197,8 +197,8 @@ defmodule TestServer.HTTP do
     "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{uri}"
   end
 
-  @spec add(binary()) :: :ok
-  def add(uri), do: add(uri, [])
+  @spec handle(binary()) :: :ok
+  def handle(uri), do: handle(uri, [])
 
   @doc """
   Adds a route to the current test server.
@@ -220,7 +220,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      TestServer.HTTP.add("/",
+      TestServer.HTTP.handle("/",
         match: fn conn ->
           conn.query_params["a"] == "1"
         end,
@@ -228,30 +228,32 @@ defmodule TestServer.HTTP do
           Plug.Conn.resp(conn, 200, "a = 1")
         end)
 
-      TestServer.HTTP.add("/", to: &Plug.Conn.resp(&1, 200, "PONG"))
-      TestServer.HTTP.add("/")
+      TestServer.HTTP.handle("/", to: &Plug.Conn.resp(&1, 200, "PONG"))
+      TestServer.HTTP.handle("/")
 
       assert {:ok, %Req.Response{status: 200, body: "PONG"}} = Req.get(TestServer.HTTP.url("/"))
       assert {:ok, %Req.Response{status: 200, body: "HTTP/1.1"}} = Req.post(TestServer.HTTP.url("/"))
       assert {:ok, %Req.Response{status: 200, body: "a = 1"}} = Req.get(TestServer.HTTP.url("/?a=1"))
   """
-  @spec add(binary(), keyword()) :: :ok
-  def add(uri, options) when is_binary(uri) do
+  @spec handle(binary(), keyword()) :: :ok
+  def handle(uri, options) when is_binary(uri) do
     {:ok, instance} = TestServer.autostart_instance(__MODULE__)
 
-    add(instance, uri, options)
+    handle(instance, uri, options)
   end
 
-  @spec add(TestServer.instance(), binary()) :: :ok
-  def add(instance, uri) when is_pid(instance) and is_binary(uri), do: add(instance, uri, [])
+  @spec handle(TestServer.instance(), binary()) :: :ok
+  def handle(instance, uri) when is_pid(instance) and is_binary(uri),
+    do: handle(instance, uri, [])
 
   @doc """
   Adds a route to a test server instance.
 
-  See `add/2` for options.
+  See `handle/2` for options.
   """
-  @spec add(TestServer.instance(), binary(), keyword()) :: :ok
-  def add(instance, uri, options) when is_pid(instance) and is_binary(uri) and is_list(options) do
+  @spec handle(TestServer.instance(), binary(), keyword()) :: :ok
+  def handle(instance, uri, options)
+      when is_pid(instance) and is_binary(uri) and is_list(options) do
     options = Keyword.put_new(options, :to, &default_response_handler/1)
 
     {:ok, _route} = register_route(instance, uri, options)
@@ -314,7 +316,7 @@ defmodule TestServer.HTTP do
   ## Examples
 
       TestServer.HTTP.start(scheme: :https)
-      TestServer.HTTP.add("/")
+      TestServer.HTTP.handle("/")
 
       %{cert: _, cacerts: cacerts} = TestServer.HTTP.x509_suite()
       req_options = [connect_options: [transport_opts: [cacerts: cacerts]]]
@@ -354,13 +356,13 @@ defmodule TestServer.HTTP do
   @doc """
   Adds a websocket route to current test server.
 
-  The `:to` option can be overridden the same way as for `add/2`, and will be
-  called during the HTTP handshake. If the `conn.state` is `:unset` the
+  The `:to` option can be overridden the same way as for `handle/2`, and will
+  be called during the HTTP handshake. If the `conn.state` is `:unset` the
   websocket will be initiated otherwise response is returned as-is.
 
   ## Options
 
-  Takes the same options as `add/2`, except `:to`.
+  Takes the same options as `handle/2`, except `:to`.
 
   ## Examples
 

@@ -8,12 +8,12 @@ Mock HTTP/1, HTTP/2, and WebSocket endpoints with route expectations, plug pipel
 
 ### HTTP
 
-Add route request expectations with `TestServer.HTTP.add/2`:
+Add route request expectations with `TestServer.HTTP.handle/2`:
 
 ```elixir
 test "fetch_url/0" do
   # The test server will autostart the current test server, if not already running
-  TestServer.HTTP.add("/", via: :get)
+  TestServer.HTTP.handle("/", via: :get)
 
   # The URL is derived from the current test server instance
   Application.put_env(:my_app, :fetch_url, TestServer.HTTP.url())
@@ -22,26 +22,26 @@ test "fetch_url/0" do
 end
 ```
 
-`TestServer.HTTP.add/2` can route a request to an anonymous function or plug with `:to` option.
+`TestServer.HTTP.handle/2` can route a request to an anonymous function or plug with `:to` option.
 
 ```elixir
-TestServer.HTTP.add("/", to: fn conn ->
+TestServer.HTTP.handle("/", to: fn conn ->
   Plug.Conn.send_resp(conn, 200, "OK")
 end)
 
-TestServer.HTTP.add("/", to: MyPlug)
+TestServer.HTTP.handle("/", to: MyPlug)
 ```
 
 The method listened to can be defined with `:via` option. By default any method is matched.
 
 ```elixir
-TestServer.HTTP.add("/", via: :post)
+TestServer.HTTP.handle("/", via: :post)
 ```
 
 A custom match function can be set with `:match` option:
 
 ```elixir
-TestServer.HTTP.add("/", match: fn
+TestServer.HTTP.handle("/", match: fn
   %{params: %{"a" => "1"}} = _conn -> true
   _conn -> false
 end)
@@ -50,8 +50,8 @@ end)
 When a route is matched it'll be removed from active routes list. The route will be triggered in the order they were added:
 
 ```elixir
-TestServer.HTTP.add("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "first"))
-TestServer.HTTP.add("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "second"))
+TestServer.HTTP.handle("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "first"))
+TestServer.HTTP.handle("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "second"))
 
 {:ok, "first"} = fetch_request()
 {:ok, "second"} = fetch_request()
@@ -147,7 +147,7 @@ Use the `:ipfamily` option to test with IPv6 when starting the test server with 
 TestServer.HTTP.start(ipfamily: :inet6)
 
 assert :ok =
-          TestServer.HTTP.add("/",
+          TestServer.HTTP.handle("/",
             to: fn conn ->
               assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 

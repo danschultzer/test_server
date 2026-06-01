@@ -8,11 +8,11 @@ Requires Elixir 1.15 or higher.
 
 All public functions in `TestServer` have been moved to `TestServer.HTTP`. The
 HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
-`TestServer.HTTP.Server.*`.
+`TestServer.HTTP.Server.*`. `add/2` has been renamed to `handle/2`.
 
 TestServer now has SSH support with `TestServer.SSH`.
 
-- Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.add/2` and `TestServer.HTTP.websocket_handle/2`
+- Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.handle/2` and `TestServer.HTTP.websocket_handle/2`
 - Fixed UTF-8 response body handling for `TestServer.HTTP.Server.Httpd`
 - Fixed invalid host header port parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed bracketed IPv6 host header parsing in `TestServer.HTTP.Server.Httpd`

@@ -54,7 +54,7 @@ defmodule TestServer.SSH.Server do
       {
         TestServer.SSH.Channel,
         options
-        |> Keyword.take([:listen])
+        |> Keyword.take([:messages])
         |> Keyword.put(:instance, instance)
       }
 

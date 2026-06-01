@@ -14,7 +14,7 @@ defmodule TestServer.SSH.Instance do
   @spec register(TestServer.instance(), {:channel, {keyword(), TestServer.stacktrace()}}) ::
           {:ok, %{ref: TestServer.SSH.channel_ref()}}
   def register(instance, {:channel, {options, stacktrace}}) do
-    options[:listen] && ensure_listen!(options[:listen])
+    options[:messages] && ensure_messages!(options[:messages])
 
     GenServer.call(instance, {:register, {:channel, {options, stacktrace}}})
   end
@@ -31,23 +31,23 @@ defmodule TestServer.SSH.Instance do
     GenServer.call(instance, {:register, {:handle, {channel_ref, options, stacktrace}}})
   end
 
-  @listen_events ~w(exec data env pty shell eof)a
+  @message_events ~w(exec data env pty shell eof)a
 
-  defp ensure_listen!(listen) when is_list(listen) do
-    case Enum.all?(listen, &(&1 in @listen_events)) do
+  defp ensure_messages!(messages) when is_list(messages) do
+    case Enum.all?(messages, &(&1 in @message_events)) do
       true ->
         :ok
 
       false ->
         raise ArgumentError,
-              "expected list to only include #{inspect(@listen_events)}, got: #{inspect(listen)}"
+              "expected list to only include #{inspect(@message_events)}, got: #{inspect(messages)}"
     end
   end
 
-  defp ensure_listen!(listen) do
-    case listen do
+  defp ensure_messages!(messages) do
+    case messages do
       :all -> :ok
-      _ -> raise ArgumentError, "expected :all, got: #{inspect(listen)}"
+      _ -> raise ArgumentError, "expected :all, got: #{inspect(messages)}"
     end
   end
 

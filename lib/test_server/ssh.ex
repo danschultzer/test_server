@@ -238,7 +238,7 @@ defmodule TestServer.SSH do
 
   ## Options
 
-    * `:listen` - list of message types to dispatch to handlers, or `:all`.
+    * `:messages` - list of message types to dispatch to handlers, or `:all`.
       Defaults to `[:exec, :data]`. Available types: `:exec`, `:data`, `:env`,
       `:pty`, `:shell`, `:eof`;
 
@@ -271,7 +271,7 @@ defmodule TestServer.SSH do
 
     [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
 
-    options = Keyword.put_new(options, :listen, [:exec, :data])
+    options = Keyword.put_new(options, :messages, [:exec, :data])
 
     {:ok, channel} = Instance.register(instance, {:channel, {options, stacktrace}})
 

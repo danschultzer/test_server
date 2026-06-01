@@ -80,9 +80,9 @@ defmodule TestServer.SSH.Channel do
   @impl true
   def handle_ssh_msg({:ssh_cm, connection, frame}, state) do
     type = elem(frame, 0)
-    listen = Keyword.fetch!(state.channel.options, :listen)
+    messages = Keyword.fetch!(state.channel.options, :messages)
 
-    case dispatch(listen, type, connection, frame, state) do
+    case dispatch(messages, type, connection, frame, state) do
       {:raw, {:ok, channel_state}} ->
         {:ok, %{state | state: channel_state}}
 
@@ -94,8 +94,8 @@ defmodule TestServer.SSH.Channel do
     end
   end
 
-  defp dispatch(listen, type, connection, frame, state) do
-    case listen == :all or type in listen do
+  defp dispatch(messages, type, connection, frame, state) do
+    case messages == :all or type in messages do
       true ->
         Instance.dispatch(
           state.instance,

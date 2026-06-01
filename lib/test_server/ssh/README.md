@@ -47,11 +47,11 @@ test "SSHClient" do
 end
 ```
 
-By default, only `:exec` and `:data` messages are dispatched to handlers. Use the `:listen` option on `TestServer.SSH.channel/2` to control which message types are dispatched:
+By default, only `:exec` and `:data` messages are dispatched to handlers. Use the `:messages` option on `TestServer.SSH.channel/2` to control which message types are dispatched:
 
 ```elixir
-{:ok, channel_1} = TestServer.SSH.channel(listen: :all)
-{:ok, channel_2} = TestServer.SSH.channel(listen: [:data, :env, :pty])
+{:ok, channel_1} = TestServer.SSH.channel(messages: :all)
+{:ok, channel_2} = TestServer.SSH.channel(messages: [:data, :env, :pty])
 ```
 
 ### Host keys

@@ -452,13 +452,13 @@ defmodule TestServer.SSHTest do
 
     test "with invalid options" do
       assert_raise ArgumentError, ~r/expected :all, got: :invalid/, fn ->
-        TestServer.SSH.channel(listen: :invalid)
+        TestServer.SSH.channel(messages: :invalid)
       end
 
       assert_raise ArgumentError,
                    ~r/expected list to only include \[:exec, :data, :env, :pty, :shell, :eof\], got: \[:invalid\]/,
                    fn ->
-                     TestServer.SSH.channel(listen: [:invalid])
+                     TestServer.SSH.channel(messages: [:invalid])
                    end
     end
 
@@ -534,8 +534,8 @@ defmodule TestServer.SSHTest do
       assert io =~ "The following channels have been used:"
     end
 
-    test "with `listen: :all` option" do
-      {:ok, channel} = TestServer.SSH.channel(listen: :all)
+    test "with `messages: :all` option" do
+      {:ok, channel} = TestServer.SSH.channel(messages: :all)
 
       :ok =
         TestServer.SSH.handle(channel,
@@ -597,8 +597,8 @@ defmodule TestServer.SSHTest do
       assert SSHClient.close(conn, channel_id) == :ok
     end
 
-    test "with `:listen` option filtering messages" do
-      {:ok, channel} = TestServer.SSH.channel(listen: [])
+    test "with `:messages` option" do
+      {:ok, channel} = TestServer.SSH.channel(messages: [])
 
       TestServer.SSH.handle(channel,
         to: fn msg, _state ->

@@ -403,7 +403,7 @@ defmodule TestServer.HTTP.Instance do
   def maybe_put_websocket(conn, route) do
     case route.options[:websocket] do
       true ->
-        websocket = {{self(), route.ref}, Keyword.get(route.options, :init_state)}
+        websocket = {{self(), route.ref}, %{}}
         Map.put(conn, :private, %{websocket: websocket})
 
       _false ->

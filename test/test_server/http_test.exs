@@ -818,14 +818,11 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with `:match` function" do
-        assert {:ok, socket} =
-                 TestServer.HTTP.websocket_init("/ws", init_state: %{custom: true})
+        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
 
         assert :ok =
                  TestServer.HTTP.websocket_handle(socket,
-                   match: fn _frame, %{custom: true} ->
-                     true
-                   end
+                   match: fn {:text, message}, _state -> message == "hello" end
                  )
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))

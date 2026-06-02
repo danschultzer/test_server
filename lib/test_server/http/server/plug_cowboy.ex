@@ -107,8 +107,8 @@ if Code.ensure_loaded?(Plug.Cowboy) do
     end
 
     @impl :cowboy_websocket
-    def websocket_info({callback, stacktrace}, {socket, state}) do
-      {callback, stacktrace}
+    def websocket_info({options, stacktrace}, {socket, state}) do
+      {options, stacktrace}
       |> WebSocket.handle_info({socket, state})
       |> handle_reply()
     end

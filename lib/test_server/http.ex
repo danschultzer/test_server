@@ -21,7 +21,7 @@ defmodule TestServer.HTTP do
                                     websocket_reply())
   @type websocket_match_fun :: (frame :: websocket_frame(), state :: websocket_state() ->
                                   boolean())
-  @type websocket_info_fun :: (state :: websocket_state() -> websocket_reply())
+  @type websocket_send_fun :: (state :: websocket_state() -> websocket_reply())
 
   @type websocket_reply ::
           {:reply, websocket_frame(), websocket_state()} | {:ok, websocket_state()}
@@ -475,34 +475,35 @@ defmodule TestServer.HTTP do
     do: {:reply, frame, state}
 
   @doc """
-  Sends an message to a websocket instance.
+  Sends a message to a websocket instance.
+
+    * `:to` - a `t:websocket_send_fun/0` that will run on the server;
 
   ## Examples
 
       {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
       {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-      assert TestServer.HTTP.websocket_info(socket, fn state ->
+      assert TestServer.HTTP.websocket_send(socket, to: fn state ->
         {:reply, {:text, "hello"}, state}
       end) == :ok
 
       assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """
-  @spec websocket_info(websocket_socket(), websocket_info_fun() | nil) :: :ok
-  def websocket_info({instance, _route_ref} = socket, callback \\ nil)
-      when is_function(callback) or is_nil(callback) do
+  @spec websocket_send(websocket_socket(), keyword()) :: :ok
+  def websocket_send({instance, _route_ref} = socket, options \\ []) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
 
-    callback = callback || (&default_websocket_info/1)
+    options = Keyword.put_new(options, :to, &default_websocket_send/1)
 
-    for pid <- Instance.active_websocket_connections(socket) do
-      send(pid, {callback, stacktrace})
+    for pid <- Instance.websocket_connections(socket) do
+      send(pid, {options, stacktrace})
     end
 
     :ok
   end
 
-  defp default_websocket_info(state), do: {:reply, {:text, "ping"}, state}
+  defp default_websocket_send(state), do: {:reply, {:text, "ping"}, state}
 end

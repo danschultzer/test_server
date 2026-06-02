@@ -76,18 +76,20 @@ defmodule TestServer.HTTP.Instance do
 
   @spec dispatch(
           TestServer.HTTP.websocket_socket(),
-          {:websocket, {:info, function(), TestServer.stacktrace()},
+          {:websocket, {:info, keyword(), TestServer.stacktrace()},
            TestServer.HTTP.websocket_state()}
         ) ::
           {:ok, TestServer.HTTP.websocket_reply()}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(
         {instance, _router_ref} = socket,
-        {:websocket, {:info, callback, stacktrace}, state}
+        {:websocket, {:info, options, stacktrace}, state}
       ) do
+    to = Keyword.fetch!(options, :to)
+
     GenServer.call(
       instance,
-      {:dispatch, {:websocket, socket, {:info, callback, stacktrace}, state}}
+      {:dispatch, {:websocket, socket, {:info, to, stacktrace}, state}}
     )
   end
 
@@ -106,8 +108,8 @@ defmodule TestServer.HTTP.Instance do
     GenServer.cast(instance, {:put, :websocket_connection, route_ref, pid})
   end
 
-  @spec active_websocket_connections(TestServer.HTTP.websocket_socket()) :: [pid()]
-  def active_websocket_connections({instance, route_ref}) do
+  @spec websocket_connections(TestServer.HTTP.websocket_socket()) :: [pid()]
+  def websocket_connections({instance, route_ref}) do
     GenServer.call(instance, {:get, :websocket_connections, route_ref})
   end
 

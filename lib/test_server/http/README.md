@@ -101,7 +101,7 @@ assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
 
 ### WebSocket
 
-WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket_init/2`. By default, `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be send from the test server with `TestServer.HTTP.websocket_info/2`.
+WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket_init/2`. By default, `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be send from the test server with `TestServer.HTTP.websocket_send/2`.
 
 ```elixir
 test "WebSocketClient" do
@@ -122,7 +122,7 @@ test "WebSocketClient" do
   :ok = WebSocketClient.send(client, "hi")
   {:ok, "hi"} = WebSocketClient.receive(client)
 
-  :ok = TestServer.HTTP.websocket_info(socket, fn state -> {:reply, {:text, "ping"}, state} end)
+  :ok = TestServer.HTTP.websocket_send(socket, to: fn state -> {:reply, {:text, "ping"}, state} end)
   {:ok, "ping"} = WebSocketClient.receive(client)
 end
 ```

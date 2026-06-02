@@ -81,8 +81,8 @@ if Code.ensure_loaded?(Bandit) do
       do: WebSocket.handle_frame({opcode, data}, {socket, state})
 
     @impl WebSock
-    def handle_info({callback, stacktrace}, {socket, state}),
-      do: WebSocket.handle_info({callback, stacktrace}, {socket, state})
+    def handle_info({options, stacktrace}, {socket, state}),
+      do: WebSocket.handle_info({options, stacktrace}, {socket, state})
 
     def handle_info(_, {socket, state}), do: {:ok, {socket, state}}
 

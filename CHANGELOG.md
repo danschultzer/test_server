@@ -8,7 +8,7 @@ Requires Elixir 1.15 or higher.
 
 All public functions in `TestServer` have been moved to `TestServer.HTTP`. The
 HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
-`TestServer.HTTP.Server.*`. `add/2` has been renamed to `handle/2`.
+`TestServer.HTTP.Server.*`. `add/2` has been renamed to `handle/2`, and `websocket_info/2` has been renamed to `websocket_send/2` and now takes options as second argument.
 
 TestServer now has SSH support with `TestServer.SSH`.
 

@@ -608,8 +608,8 @@ defmodule TestServer.HTTPTest do
       # a 501 response, so no socket is ever initialized to be handled.
     end
 
-    describe "websocket_info/2" do
-      # No tests for `websocket_info/2` as `websocket_init/3` always returns
+    describe "websocket_send/2" do
+      # No tests for `websocket_send/2` as `websocket_init/3` always returns
       # a 501 response, so no socket is ever initialized to be handled.
     end
   else
@@ -856,7 +856,7 @@ defmodule TestServer.HTTPTest do
       end
     end
 
-    describe "websocket_info/2" do
+    describe "websocket_send/2" do
       test "when instance not running" do
         {:ok, instance} = TestServer.HTTP.start()
         assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
@@ -865,7 +865,7 @@ defmodule TestServer.HTTPTest do
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
                      fn ->
-                       TestServer.HTTP.websocket_info(socket)
+                       TestServer.HTTP.websocket_send(socket)
                      end
       end
 
@@ -878,7 +878,7 @@ defmodule TestServer.HTTPTest do
             assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-            assert :ok = TestServer.HTTP.websocket_info(socket, fn _state -> :invalid end)
+            assert :ok = TestServer.HTTP.websocket_send(socket, to: fn _state -> :invalid end)
             assert {:ok, message} = WebSocketClient.receive_message(client)
             assert message =~ "(RuntimeError) Invalid callback response, got: :invalid."
           end
@@ -898,7 +898,7 @@ defmodule TestServer.HTTPTest do
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
             assert :ok =
-                     TestServer.HTTP.websocket_info(socket, fn _state -> raise "boom" end)
+                     TestServer.HTTP.websocket_send(socket, to: fn _state -> raise "boom" end)
 
             assert {:ok, message} = WebSocketClient.receive_message(client)
             assert message =~ "(RuntimeError) boom"
@@ -915,9 +915,11 @@ defmodule TestServer.HTTPTest do
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
         assert :ok =
-                 TestServer.HTTP.websocket_info(socket, fn state ->
-                   {:reply, {:text, "pong"}, state}
-                 end)
+                 TestServer.HTTP.websocket_send(socket,
+                   to: fn state ->
+                     {:reply, {:text, "pong"}, state}
+                   end
+                 )
 
         assert {:ok, "pong"} = WebSocketClient.receive_message(client)
       end
@@ -926,7 +928,7 @@ defmodule TestServer.HTTPTest do
         assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-        assert :ok = TestServer.HTTP.websocket_info(socket)
+        assert :ok = TestServer.HTTP.websocket_send(socket)
         assert {:ok, "ping"} = WebSocketClient.receive_message(client)
       end
     end

@@ -13,7 +13,10 @@ defmodule TestServer.HTTP.Instance do
     GenServer.stop(instance)
   end
 
-  @spec register(pid(), {:plug_router_to, {binary(), keyword(), TestServer.stacktrace()}}) ::
+  @spec register(
+          TestServer.instance(),
+          {:plug_router_to, {binary(), keyword(), TestServer.stacktrace()}}
+        ) ::
           {:ok, %{ref: reference()}}
   def register(instance, {:plug_router_to, {uri, options, stacktrace}}) do
     ensure_plug!(options[:to])
@@ -22,7 +25,7 @@ defmodule TestServer.HTTP.Instance do
     GenServer.call(instance, {:register, {:plug_router_to, {uri, options, stacktrace}}})
   end
 
-  @spec register(pid(), {:plug, {atom() | function(), TestServer.stacktrace()}}) ::
+  @spec register(TestServer.instance(), {:plug, {atom() | function(), TestServer.stacktrace()}}) ::
           {:ok, map()}
   def register(instance, {:plug, {plug, stacktrace}}) do
     ensure_plug!(plug)
@@ -51,7 +54,7 @@ defmodule TestServer.HTTP.Instance do
   defp ensure_function!(fun) when is_function(fun), do: :ok
   defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
 
-  @spec dispatch(pid(), {:plug, Plug.Conn.t()}) ::
+  @spec dispatch(TestServer.instance(), {:plug, Plug.Conn.t()}) ::
           {:ok, Plug.Conn.t()}
           | {:error, {:not_found, Plug.Conn.t()}}
           | {:error, {term(), list()}}
@@ -73,27 +76,29 @@ defmodule TestServer.HTTP.Instance do
 
   @spec dispatch(
           TestServer.HTTP.websocket_socket(),
-          {:websocket, {:info, function(), TestServer.stacktrace()},
+          {:websocket, {:info, keyword(), TestServer.stacktrace()},
            TestServer.HTTP.websocket_state()}
         ) ::
           {:ok, TestServer.HTTP.websocket_reply()}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(
         {instance, _router_ref} = socket,
-        {:websocket, {:info, callback, stacktrace}, state}
+        {:websocket, {:info, options, stacktrace}, state}
       ) do
+    to = Keyword.fetch!(options, :to)
+
     GenServer.call(
       instance,
-      {:dispatch, {:websocket, socket, {:info, callback, stacktrace}, state}}
+      {:dispatch, {:websocket, socket, {:info, to, stacktrace}, state}}
     )
   end
 
-  @spec get_options(pid()) :: keyword()
+  @spec get_options(TestServer.instance()) :: keyword()
   def get_options(instance) do
     GenServer.call(instance, :options)
   end
 
-  @spec routes(pid()) :: [map()]
+  @spec routes(TestServer.instance()) :: [map()]
   def routes(instance) do
     GenServer.call(instance, :routes)
   end
@@ -103,8 +108,8 @@ defmodule TestServer.HTTP.Instance do
     GenServer.cast(instance, {:put, :websocket_connection, route_ref, pid})
   end
 
-  @spec active_websocket_connections(TestServer.HTTP.websocket_socket()) :: [pid()]
-  def active_websocket_connections({instance, route_ref}) do
+  @spec websocket_connections(TestServer.HTTP.websocket_socket()) :: [pid()]
+  def websocket_connections({instance, route_ref}) do
     GenServer.call(instance, {:get, :websocket_connections, route_ref})
   end
 
@@ -120,7 +125,7 @@ defmodule TestServer.HTTP.Instance do
     end)
   end
 
-  @spec websocket_handlers(pid()) :: [map()]
+  @spec websocket_handlers(TestServer.instance()) :: [map()]
   def websocket_handlers(instance) do
     GenServer.call(instance, :websocket_handlers)
   end
@@ -137,7 +142,7 @@ defmodule TestServer.HTTP.Instance do
     end)
   end
 
-  @spec report_error(pid(), {struct(), TestServer.stacktrace()}) :: :ok
+  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
   def report_error(instance, {exception, stacktrace}) do
     options = get_options(instance)
     caller = Keyword.fetch!(options, :caller)
@@ -400,7 +405,7 @@ defmodule TestServer.HTTP.Instance do
   def maybe_put_websocket(conn, route) do
     case route.options[:websocket] do
       true ->
-        websocket = {{self(), route.ref}, Keyword.get(route.options, :init_state)}
+        websocket = {{self(), route.ref}, %{}}
         Map.put(conn, :private, %{websocket: websocket})
 
       _false ->
@@ -447,7 +452,10 @@ defmodule TestServer.HTTP.Instance do
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  defp validate_websocket_frame!({:reply, _frame, _state} = response, _stacktrace), do: response
+  defp validate_websocket_frame!({:reply, {opcode, _data}, _state} = response, _stacktrace)
+       when opcode in [:text, :binary],
+       do: response
+
   defp validate_websocket_frame!({:ok, _state} = response, _stacktrace), do: response
 
   defp validate_websocket_frame!(response, stacktrace) do
@@ -456,8 +464,8 @@ defmodule TestServer.HTTP.Instance do
 
     Expected one of the following:
 
-      - {:reply, {:text, message}, state}
-      - {:reply, {:binary, message}, state}
+      - {:reply, {:text, iodata}, state}
+      - {:reply, {:binary, iodata}, state}
       - {:ok, state}
 
     #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}

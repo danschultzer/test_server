@@ -12,7 +12,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
 
   test "Plug.Conn.send_resp/3" do
     assert :ok =
-             TestServer.HTTP.add("/",
+             TestServer.HTTP.handle("/",
                to: fn conn ->
                  Plug.Conn.send_resp(conn, 200, "test")
                end
@@ -23,7 +23,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
 
   test "Plug.Conn.send_file/1" do
     assert :ok =
-             TestServer.HTTP.add("/",
+             TestServer.HTTP.handle("/",
                to: fn conn ->
                  Plug.Conn.send_file(conn, 200, __ENV__.file)
                end
@@ -36,7 +36,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
 
   test "Plug.Conn.send_chunked/1 and Plug.Conn.chunk/1" do
     assert :ok =
-             TestServer.HTTP.add("/",
+             TestServer.HTTP.handle("/",
                to: fn conn ->
                  conn = Plug.Conn.send_chunked(conn, 200)
                  {:ok, conn} = Plug.Conn.chunk(conn, "Hello\n")
@@ -51,7 +51,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
 
   test "Plug.Conn.get_peer_data/1" do
     assert :ok =
-             TestServer.HTTP.add("/",
+             TestServer.HTTP.handle("/",
                to: fn conn ->
                  assert %{address: {127, 0, 0, 1}} = Plug.Conn.get_peer_data(conn)
 
@@ -64,7 +64,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
 
   test "Plug.Conn.get_http_protocol/1" do
     assert :ok =
-             TestServer.HTTP.add("/",
+             TestServer.HTTP.handle("/",
                to: fn conn ->
                  assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
                  Plug.Conn.send_resp(conn, 200, "OK")
@@ -76,7 +76,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
 
   test "Plug.Conn.read_body/1" do
     assert :ok =
-             TestServer.HTTP.add("/",
+             TestServer.HTTP.handle("/",
                to: fn conn ->
                  assert {:ok, body, _data} = Plug.Conn.read_body(conn)
                  Plug.Conn.resp(conn, 200, body)

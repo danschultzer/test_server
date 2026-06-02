@@ -4,7 +4,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
     HTTP server adapter using `Plug.Cowboy`.
 
     By default only one acceptor process is started which is enough for
-    testing.  This adapter will be used by default if `Bandit` is not loaded
+    testing. This adapter will be used by default if `Bandit` is not loaded
     and `Plug.Cowboy` is loaded in the project.
 
     ## Usage
@@ -107,8 +107,8 @@ if Code.ensure_loaded?(Plug.Cowboy) do
     end
 
     @impl :cowboy_websocket
-    def websocket_info({callback, stacktrace}, {socket, state}) do
-      {callback, stacktrace}
+    def websocket_info({options, stacktrace}, {socket, state}) do
+      {options, stacktrace}
       |> WebSocket.handle_info({socket, state})
       |> handle_reply()
     end

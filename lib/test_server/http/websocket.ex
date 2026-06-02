@@ -75,8 +75,8 @@ defmodule TestServer.HTTP.WebSocket do
   defp handle_reply({:reply, frame, state}, socket), do: {:reply, :ok, frame, {socket, state}}
   defp handle_reply({:ok, state}, socket), do: {:ok, {socket, state}}
 
-  def handle_info({callback, stacktrace}, {socket, state}) do
-    case Instance.dispatch(socket, {:websocket, {:info, callback, stacktrace}, state}) do
+  def handle_info({options, stacktrace}, {socket, state}) do
+    case Instance.dispatch(socket, {:websocket, {:info, options, stacktrace}, state}) do
       {:ok, result} -> handle_reply(result, socket)
       {:error, {error, stacktrace}} -> reply_with_error({socket, state}, {error, stacktrace})
     end

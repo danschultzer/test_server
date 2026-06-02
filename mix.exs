@@ -60,7 +60,7 @@ defmodule TestServer.MixProject do
         "GitHub" => @source_url,
         "Sponsor" => "https://github.com/sponsors/danschultzer"
       },
-      files: ~w(lib LICENSE mix.exs README.md)
+      files: ~w(CHANGELOG.md lib LICENSE mix.exs README.md)
     ]
   end
 

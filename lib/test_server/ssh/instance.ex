@@ -11,16 +11,16 @@ defmodule TestServer.SSH.Instance do
     GenServer.stop(instance)
   end
 
-  @spec register(pid(), {:channel, {keyword(), TestServer.stacktrace()}}) ::
+  @spec register(TestServer.instance(), {:channel, {keyword(), TestServer.stacktrace()}}) ::
           {:ok, %{ref: TestServer.SSH.channel_ref()}}
   def register(instance, {:channel, {options, stacktrace}}) do
-    options[:listen] && ensure_listen!(options[:listen])
+    options[:messages] && ensure_messages!(options[:messages])
 
     GenServer.call(instance, {:register, {:channel, {options, stacktrace}}})
   end
 
   @spec register(
-          pid(),
+          TestServer.instance(),
           {:handle, {TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}}
         ) ::
           {:ok, map()}
@@ -31,30 +31,33 @@ defmodule TestServer.SSH.Instance do
     GenServer.call(instance, {:register, {:handle, {channel_ref, options, stacktrace}}})
   end
 
-  @listen_events ~w(exec data env pty shell eof)a
+  @message_events ~w(exec data env pty shell eof)a
 
-  defp ensure_listen!(listen) when is_list(listen) do
-    case Enum.all?(listen, &(&1 in @listen_events)) do
+  defp ensure_messages!(messages) when is_list(messages) do
+    case Enum.all?(messages, &(&1 in @message_events)) do
       true ->
         :ok
 
       false ->
         raise ArgumentError,
-              "expected list to only include #{inspect(@listen_events)}, got: #{inspect(listen)}"
+              "expected list to only include #{inspect(@message_events)}, got: #{inspect(messages)}"
     end
   end
 
-  defp ensure_listen!(listen) do
-    case listen do
+  defp ensure_messages!(messages) do
+    case messages do
       :all -> :ok
-      _ -> raise ArgumentError, "expected :all, got: #{inspect(listen)}"
+      _ -> raise ArgumentError, "expected :all, got: #{inspect(messages)}"
     end
   end
 
   defp ensure_function!(fun) when is_function(fun), do: :ok
   defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
 
-  @spec dispatch(pid(), {:channel_up, TestServer.SSH.channel_id(), TestServer.SSH.connection()}) ::
+  @spec dispatch(
+          TestServer.instance(),
+          {:channel_up, TestServer.SSH.channel_id(), TestServer.SSH.connection()}
+        ) ::
           {:ok, {TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}}
           | {:error, :not_found}
   def dispatch(instance, {:channel_up, channel_id, connection}) do
@@ -62,7 +65,7 @@ defmodule TestServer.SSH.Instance do
   end
 
   @spec dispatch(
-          pid(),
+          TestServer.instance(),
           {:handle, TestServer.SSH.channel_id(), TestServer.SSH.connection(),
            TestServer.SSH.channel_msg(), TestServer.SSH.state()}
         ) ::
@@ -79,17 +82,17 @@ defmodule TestServer.SSH.Instance do
     )
   end
 
-  @spec handlers(pid()) :: [map()]
+  @spec handlers(TestServer.instance()) :: [map()]
   def handlers(instance) do
     GenServer.call(instance, :handlers)
   end
 
-  @spec channels(pid()) :: [map()]
+  @spec channels(TestServer.instance()) :: [map()]
   def channels(instance) do
     GenServer.call(instance, :channels)
   end
 
-  @spec get_options(pid()) :: keyword()
+  @spec get_options(TestServer.instance()) :: keyword()
   def get_options(instance) do
     GenServer.call(instance, :options)
   end
@@ -118,7 +121,7 @@ defmodule TestServer.SSH.Instance do
     end)
   end
 
-  @spec report_error(pid(), {struct(), TestServer.stacktrace()}) :: :ok
+  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
   def report_error(instance, {exception, stacktrace}) do
     options = get_options(instance)
     caller = Keyword.fetch!(options, :caller)

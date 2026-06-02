@@ -47,11 +47,11 @@ test "SSHClient" do
 end
 ```
 
-By default, only `:exec` and `:data` messages are dispatched to handlers. Use the `:listen` option on `TestServer.SSH.channel/2` to control which message types are dispatched:
+By default, only `:exec` and `:data` messages are dispatched to handlers. Use the `:messages` option on `TestServer.SSH.channel/2` to control which message types are dispatched:
 
 ```elixir
-{:ok, channel_1} = TestServer.SSH.channel(listen: :all)
-{:ok, channel_2} = TestServer.SSH.channel(listen: [:data, :env, :pty])
+{:ok, channel_1} = TestServer.SSH.channel(messages: :all)
+{:ok, channel_2} = TestServer.SSH.channel(messages: [:data, :env, :pty])
 ```
 
 ### Host keys
@@ -60,9 +60,9 @@ Host keys can be configured in `TestServer.SSH.start/1`. By default host keys ar
 
 ```elixir
 host_key = :public_key.generate_key({:rsa, 2048, 65_537})
-{:ok, _instance} = TestServer.SSH.start(host_keys: [host_key])
+{:ok, instance} = TestServer.SSH.start(host_keys: [host_key])
 
-[%{fingerprint: fingerprint}] = TestServer.SSH.host_keys()
+[%{fingerprint: fingerprint}] = TestServer.SSH.host_keys(instance)
 ```
 
 ### Authentication
@@ -89,6 +89,5 @@ Use the `:ipfamily` option to test with IPv6 when starting the test server with 
 assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
 assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port} = SSHClient.sockname(conn)
 ```
-
 
 <!-- MDOC !-->

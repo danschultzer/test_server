@@ -15,7 +15,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
   describe "conn/1" do
     test "with no host header" do
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    refute List.keyfind(conn.req_headers, "host", 0)
                    assert conn.host == ""
@@ -31,7 +31,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
 
     test "with host header without port" do
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    assert conn.host == "localhost"
                    refute conn.port
@@ -46,7 +46,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
 
     test "with host header with invalid port" do
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    assert conn.host == "localhost"
                    refute conn.port
@@ -61,7 +61,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
 
     test "with host header with extra colon" do
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    assert conn.host == "localhost"
                    refute conn.port
@@ -77,7 +77,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
     @tag ipfamily: :inet6
     test "with IPv6 host header" do
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    assert conn.host == "::1"
                    assert conn.port == 8080
@@ -93,7 +93,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
     @tag ipfamily: :inet6
     test "with IPv6 host header without port" do
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    assert conn.host == "::1"
                    refute conn.port
@@ -108,7 +108,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
 
     test "with extra query segment" do
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    assert conn.query_string == "foo=bar"
 
@@ -125,7 +125,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       %{port: port} = URI.parse(url)
 
       assert :ok =
-               TestServer.HTTP.add("/a/1",
+               TestServer.HTTP.handle("/a/1",
                  to: fn conn ->
                    assert conn.host == "localhost"
                    assert conn.method == "GET"
@@ -153,7 +153,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       body = "héllo 👋"
 
       assert :ok =
-               TestServer.HTTP.add("/",
+               TestServer.HTTP.handle("/",
                  to: fn conn ->
                    Plug.Conn.resp(conn, 200, body)
                  end

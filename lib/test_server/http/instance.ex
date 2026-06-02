@@ -450,7 +450,10 @@ defmodule TestServer.HTTP.Instance do
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  defp validate_websocket_frame!({:reply, _frame, _state} = response, _stacktrace), do: response
+  defp validate_websocket_frame!({:reply, {opcode, _data}, _state} = response, _stacktrace)
+       when opcode in [:text, :binary],
+       do: response
+
   defp validate_websocket_frame!({:ok, _state} = response, _stacktrace), do: response
 
   defp validate_websocket_frame!(response, stacktrace) do
@@ -459,8 +462,8 @@ defmodule TestServer.HTTP.Instance do
 
     Expected one of the following:
 
-      - {:reply, {:text, message}, state}
-      - {:reply, {:binary, message}, state}
+      - {:reply, {:text, iodata}, state}
+      - {:reply, {:binary, iodata}, state}
       - {:ok, state}
 
     #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}

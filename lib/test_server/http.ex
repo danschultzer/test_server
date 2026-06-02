@@ -15,7 +15,7 @@ defmodule TestServer.HTTP do
   @type match_fun :: (conn :: Plug.Conn.t() -> boolean())
 
   @type websocket_socket :: {TestServer.instance(), route()}
-  @type websocket_frame :: {atom(), term()}
+  @type websocket_frame :: {:text | :binary, iodata()}
   @type websocket_state :: term()
   @type websocket_handler_fun :: (frame :: websocket_frame(), state :: websocket_state() ->
                                     websocket_reply())

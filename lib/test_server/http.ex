@@ -31,7 +31,10 @@ defmodule TestServer.HTTP do
   @doc """
   Start a test server HTTP instance.
 
-  The instance will be terminated when the test case finishes.
+  Automatically registers an `ExUnit.Callbacks.on_exit/1` callback that verifies
+  expectations and stops the instance after the individual test finishes, even if
+  verification fails. There is no need to call `stop/0` or register a separate
+  teardown callback unless you want to stop the server before the test ends.
 
   ## Options
 

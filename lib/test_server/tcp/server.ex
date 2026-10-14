@@ -4,66 +4,38 @@ defmodule TestServer.TCP.Server do
   alias TestServer.TCP.Instance
 
   @doc false
-  @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()}
+  @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
-    port = fetch_port!(options)
-    listen_options = listen_options(options)
+    with {:ok, port} <- TestServer.open_port(options),
+         listen_options = listen_options(options),
+         {:ok, listener} <- :gen_tcp.listen(port, listen_options) do
+      {:ok, _acceptor} = Task.start_link(fn -> accept_loop(instance, listener) end)
 
-    case :gen_tcp.listen(port, listen_options) do
-      {:ok, listen_socket} ->
-        {:ok, acceptor_pid} = Task.start_link(fn -> accept_loop(instance, listen_socket) end)
-        {:ok, port} = :inet.port(listen_socket)
+      options =
+        options
+        |> Keyword.put(:port, port)
+        |> Keyword.put(:listener, listener)
 
-        options =
-          options
-          |> Keyword.put(:port, port)
-          |> Keyword.put(:listen_options, listen_options)
-          |> Keyword.put(:listen_socket, listen_socket)
-          |> Keyword.put(:acceptor_pid, acceptor_pid)
-
-        {:ok, options}
-
-      {:error, reason} ->
-        raise "Could not listen to port #{inspect(port)}, because: #{inspect(reason)}"
-    end
-  end
-
-  defp fetch_port!(options) do
-    port = Keyword.get(options, :port, 0)
-
-    case is_integer(port) and port >= 0 and port <= 65_535 do
-      true -> port
-      false -> raise "Invalid port, got: #{inspect(port)}"
+      {:ok, options}
     end
   end
 
   defp listen_options(options) do
-    options
-    |> Keyword.get(:listen_options, [:binary, active: false, reuseaddr: true])
-    |> List.wrap()
-    |> Enum.reject(&match?({:active, _value}, &1))
-    |> Kernel.++(active: false)
-    |> put_ipfamily(Keyword.get(options, :ipfamily, :inet))
+    [mode: :binary]
+    |> Keyword.merge(Keyword.get(options, :listen, []))
+    |> Keyword.put(:active, false)
+    |> then(fn listen_options ->
+      case Keyword.get(options, :ipfamily, :inet) do
+        :inet -> listen_options
+        ipfamily -> [ipfamily | listen_options]
+      end
+    end)
   end
 
-  defp put_ipfamily(listen_options, :inet), do: listen_options
-  defp put_ipfamily(listen_options, ipfamily), do: [ipfamily | listen_options]
-
-  defp accept_loop(instance, listen_socket) do
-    case :gen_tcp.accept(listen_socket) do
+  defp accept_loop(instance, listener) do
+    case :gen_tcp.accept(listener) do
       {:ok, socket} ->
-        pid =
-          spawn_link(fn ->
-            receive do
-              {:socket, socket} -> connection_loop(instance, socket)
-            end
-          end)
-
-        :ok = :gen_tcp.controlling_process(socket, pid)
-        :ok = Instance.register_connection(instance, pid, socket)
-        Kernel.send(pid, {:socket, socket})
-
-        accept_loop(instance, listen_socket)
+        handle_accepted_socket(instance, socket, listener)
 
       {:error, :closed} ->
         :ok
@@ -73,55 +45,83 @@ defmodule TestServer.TCP.Server do
     end
   end
 
-  defp connection_loop(instance, socket) do
+  defp handle_accepted_socket(instance, socket, listener) do
+    {:ok, owner} = Task.start_link(fn -> run_socket(instance, socket) end)
+    :ok = :gen_tcp.controlling_process(socket, owner)
+
+    case Instance.dispatch(instance, {:connection, owner, socket}) do
+      {:ok, _connection} ->
+        send(owner, :start)
+
+      {:error, :not_found} ->
+        message =
+          "#{TestServer.format_instance(TestServer.TCP, instance)} received an unexpected TCP connection attempt"
+          |> append_formatted_connections(instance)
+
+        send_error(socket, {RuntimeError.exception(message), []}, instance)
+        :gen_tcp.close(socket)
+        send(owner, :stop)
+    end
+
+    accept_loop(instance, listener)
+  end
+
+  defp run_socket(instance, socket) do
+    receive do
+      :start -> socket_loop(instance, socket)
+      :stop -> :ok
+    end
+  after
+    :gen_tcp.close(socket)
+  end
+
+  defp socket_loop(instance, socket) do
     case :inet.setopts(socket, active: :once) do
       :ok ->
-        await_connection_message(instance, socket)
+        receive_socket_message(instance, socket)
 
       {:error, _reason} ->
-        Instance.unregister_connection(instance, self())
+        :ok
     end
   end
 
-  defp await_connection_message(instance, socket) do
+  defp receive_socket_message(instance, socket) do
     receive do
       {:tcp, ^socket, data} ->
         instance
         |> Instance.dispatch({:handle, self(), data})
-        |> respond(instance, socket, data)
+        |> handle_result(instance, socket, data)
 
       {:tcp_closed, ^socket} ->
-        Instance.unregister_connection(instance, self())
+        :ok
 
       {:tcp_error, ^socket, reason} ->
         exception = RuntimeError.exception("TCP receive failed, because: #{inspect(reason)}")
         send_error(socket, {exception, []}, instance)
         :gen_tcp.close(socket)
-        Instance.unregister_connection(instance, self())
 
       {:write, data} ->
-        respond({:reply, data}, instance, socket, nil)
+        handle_result({:reply, data}, instance, socket, nil)
     end
   end
 
-  defp respond({:reply, data}, instance, socket, _data) do
+  defp handle_result({:reply, data}, instance, socket, _data) do
     case :gen_tcp.send(socket, data) do
       :ok ->
-        connection_loop(instance, socket)
+        socket_loop(instance, socket)
 
       {:error, reason} ->
         exception = RuntimeError.exception("TCP reply failed, because: #{inspect(reason)}")
         send_error(socket, {exception, []}, instance)
         :gen_tcp.close(socket)
-        Instance.unregister_connection(instance, self())
     end
   end
 
-  defp respond(:ok, instance, socket, _data) do
-    connection_loop(instance, socket)
+  defp handle_result(:ok, instance, socket, _data) do
+    socket_loop(instance, socket)
   end
 
-  defp respond({:error, :not_found}, instance, socket, data) do
+  defp handle_result({:error, :not_found}, instance, socket, data) do
     message =
       "#{TestServer.format_instance(TestServer.TCP, instance)} received unexpected TCP data"
       |> append_formatted_data(data)
@@ -129,20 +129,29 @@ defmodule TestServer.TCP.Server do
 
     send_error(socket, {RuntimeError.exception(message), []}, instance)
     :gen_tcp.close(socket)
-    Instance.unregister_connection(instance, self())
   end
 
-  defp respond({:error, {exception, stacktrace}}, instance, socket, _data) do
+  defp handle_result({:error, {exception, stacktrace}}, instance, socket, _data) do
     send_error(socket, {exception, stacktrace}, instance)
     :gen_tcp.close(socket)
-    Instance.unregister_connection(instance, self())
   end
 
   defp send_error(socket, {exception, stacktrace}, instance) do
-    Instance.report_error(instance, {exception, stacktrace})
+    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
 
     message = Exception.format(:error, exception, stacktrace)
+
     :gen_tcp.send(socket, message)
+  end
+
+  defp append_formatted_connections(message, instance) do
+    connections = Enum.split_with(Instance.connections(instance), &is_nil(&1.owner))
+
+    """
+    #{message}
+
+    #{format_connections(connections)}
+    """
   end
 
   defp append_formatted_data(message, data) do
@@ -160,6 +169,30 @@ defmodule TestServer.TCP.Server do
     #{message}
 
     #{format_handlers(handlers)}
+    """
+  end
+
+  defp format_connections({[], used_connections}) do
+    message = "No available connections."
+
+    case used_connections do
+      [] ->
+        message
+
+      used_connections ->
+        """
+        #{message} The following connections have been used:
+
+        #{Instance.format_connections(used_connections)}
+        """
+    end
+  end
+
+  defp format_connections({available_connections, _used_connections}) do
+    """
+    Available connections:
+
+    #{Instance.format_connections(available_connections)}
     """
   end
 
@@ -191,7 +224,7 @@ defmodule TestServer.TCP.Server do
   @spec stop(keyword(), [map()]) :: :ok
   def stop(options, connections) do
     options
-    |> Keyword.fetch!(:listen_socket)
+    |> Keyword.fetch!(:listener)
     |> :gen_tcp.close()
 
     Enum.each(connections, fn

@@ -11,7 +11,7 @@ defmodule TestServer.TCP do
 
   @type connection :: {TestServer.instance(), connection_ref()}
   @type connection_ref :: reference()
-  @type data :: binary()
+  @type data :: term()
   @type state :: term()
   @type handler_fun :: (data(), state() ->
                           {:reply, iodata(), state()}
@@ -22,48 +22,48 @@ defmodule TestServer.TCP do
                        | {:ok, state()})
 
   @doc """
+  Same as `start/1`, but returns the instance and raises on failure.
+  """
+  @spec start!(keyword()) :: TestServer.instance()
+  def start!(options \\ []) do
+    case start(options) do
+      {:ok, instance} -> instance
+      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
+    end
+  end
+
+  @doc """
   Start a test server TCP instance.
 
   The instance will be terminated when the test case finishes.
 
   ## Options
 
-    * `:port`           - integer of port number, defaults to random port
+    * `:port`             - integer of port number, defaults to random port
       that can be opened;
 
-    * `:ipfamily`       - The IP address type to use, either `:inet` or
+    * `:ipfamily`         - The IP address type to use, either `:inet` or
       `:inet6`. Defaults to `:inet`;
 
-    * `:listen_options` - options passed to `:gen_tcp.listen/2`. Defaults to
-      `[:binary, active: false, reuseaddr: true]`. `active: false` is always
-      used by the server;
+    * `:listen`           - options passed to `:gen_tcp.listen/2`. Defaults to
+      `[:binary]`, `:active` can't be set;
 
     * `:suppress_warning` - Suppresses IO warnings on expectation failures
       related to this instance. Defaults to `false`;
 
   ## Examples
 
-      {:ok, _instance} = TestServer.TCP.start(
-        listen_options: [:binary, packet: :line]
+      TestServer.TCP.start!(
+        listen: [packet: :line]
       )
 
-      :ok =
-        TestServer.TCP.handle(
-          match: fn data, _state -> data == "PING\\n" end,
-          to: fn _data, state -> {:reply, "PONG\\n", state} end
-        )
+      TestServer.TCP.handle(to: fn _data, state -> {:reply, "pong\\r\\n", state} end)
 
-      {:ok, socket} =
-        :gen_tcp.connect(~c"localhost", elem(TestServer.TCP.address(), 1), [
-          :binary,
-          active: false,
-          packet: :line
-        ])
-
-      :ok = :gen_tcp.send(socket, "PING\\n")
-      assert {:ok, "PONG\\n"} = :gen_tcp.recv(socket, 0)
+      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+      assert TCPClient.send(socket, "ping\\r\\n") == :ok
+      assert TCPClient.receive_data(socket) == {:ok, "pong\\r\\n"}
   """
-  @spec start(keyword()) :: {:ok, TestServer.instance()}
+  @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     TestServer.start_instance(__MODULE__, options, &verify!/1)
   end
@@ -93,7 +93,7 @@ defmodule TestServer.TCP do
   defp verify_connections!(instance) do
     instance
     |> Instance.connections()
-    |> Enum.filter(&(not is_nil(&1.ref) and is_nil(&1.pid)))
+    |> Enum.filter(&is_nil(&1.owner))
     |> case do
       [] ->
         :ok
@@ -112,11 +112,11 @@ defmodule TestServer.TCP do
 
   ## Examples
 
-      {:ok, _instance} = TestServer.TCP.start()
-      {host, port} = TestServer.TCP.address()
+      _instance = TestServer.TCP.start!()
+      address = TestServer.TCP.address()
       :ok = TestServer.TCP.stop()
 
-      assert :gen_tcp.connect(String.to_charlist(host), port, [:binary, active: false]) ==
+      assert TCPClient.connect(address) ==
                {:error, :econnrefused}
   """
   @spec stop() :: :ok | {:error, term()}
@@ -129,12 +129,12 @@ defmodule TestServer.TCP do
   def stop(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    :ok = Server.stop(Instance.get_options(instance), Instance.connections(instance))
+    :ok = Server.stop(Instance.options(instance), Instance.connections(instance))
 
     TestServer.stop_instance(__MODULE__, instance)
   end
 
-  @spec address() :: {binary(), non_neg_integer()}
+  @spec address() :: {binary(), :inet.port_number()}
   def address, do: address([])
 
   @doc """
@@ -147,12 +147,12 @@ defmodule TestServer.TCP do
 
   ## Examples
 
-      {:ok, _instance} = TestServer.TCP.start(port: 4040)
+      TestServer.TCP.start!(port: 4040)
 
       assert TestServer.TCP.address() == {"localhost", 4040}
       assert TestServer.TCP.address(host: "myserver.test") == {"myserver.test", 4040}
   """
-  @spec address(keyword() | TestServer.instance()) :: {binary(), non_neg_integer()}
+  @spec address(keyword() | TestServer.instance()) :: {binary(), :inet.port_number()}
   def address(options) when is_list(options),
     do: address(TestServer.fetch_instance!(__MODULE__), options)
 
@@ -163,74 +163,79 @@ defmodule TestServer.TCP do
 
   See `address/1` for options.
   """
-  @spec address(TestServer.instance(), keyword()) :: {binary(), non_neg_integer()}
+  @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    host = TestServer.get_host(options)
-    port = instance |> Instance.get_options() |> Keyword.fetch!(:port)
+    host = TestServer.host(options)
+    port = instance |> Instance.options() |> Keyword.fetch!(:port)
 
     {host, port}
   end
 
-  @spec connect() :: {:ok, connection()}
-  def connect, do: connect([])
-
   @doc """
-  Registers a connection on the current test server TCP instance.
+  Adds an expected TCP connection on the current test server instance.
 
-  Connections are bound to incoming TCP sockets FIFO in registration order:
-  the first registered connection ref is bound to the first accepted socket,
-  the second to the second, and so on. If a socket is accepted while no
-  connection ref is waiting, the framework still accepts it as an anonymous
-  connection that only matches global handlers (handlers registered without
-  a connection ref).
+  Connections are exhausted FIFO (first in, first out) as sockets are opened.
 
   ## Examples
 
-      {:ok, conn} = TestServer.TCP.connect()
+      connection_1 = TestServer.TCP.connection()
+      connection_2 = TestServer.TCP.connection()
 
-      :ok =
-        TestServer.TCP.handle(conn,
-          to: fn _data, state -> {:reply, "scoped", state} end
-        )
+      TestServer.TCP.handle(connection_1, to: fn _, state -> {:reply, "connection 1", state} end)
+      TestServer.TCP.handle(connection_2, to: fn _, state -> {:reply, "connection 2", state} end)
 
-      {:ok, socket} =
-        :gen_tcp.connect(~c"localhost", elem(TestServer.TCP.address(), 1), [
-          :binary,
-          active: false
-        ])
-
-      :ok = :gen_tcp.send(socket, "ping")
-      assert {:ok, "scoped"} = :gen_tcp.recv(socket, 0)
+      assert {:ok, socket_1} = TCPClient.connect(TestServer.TCP.address())
+      assert {:ok, socket_2} = TCPClient.connect(TestServer.TCP.address())
+      assert TCPClient.send(socket_2, "ping") == {:ok, "connection 2"}
+      assert TCPClient.send(socket_1, "ping") == {:ok, "connection 1"}
   """
-  @spec connect(keyword()) :: {:ok, connection()}
-  def connect(options) when is_list(options) do
-    {:ok, instance} = TestServer.autostart_instance(__MODULE__)
+  @spec connection() :: connection()
+  def connection do
+    instance = TestServer.autostart_instance(__MODULE__)
 
-    connect(instance, options)
+    connection(instance)
   end
-
-  def connect(instance) when is_pid(instance), do: connect(instance, [])
 
   @doc """
-  Registers a connection on a test server TCP instance.
+  Adds an expected TCP connection to a test server instance.
 
-  See `connect/1` for behaviour.
+  See `connection/1` for behaviour.
   """
-  @spec connect(TestServer.instance(), keyword()) :: {:ok, connection()}
-  def connect(instance, options) when is_pid(instance) and is_list(options) do
+  @spec connection(TestServer.instance()) :: connection()
+  def connection(instance) when is_pid(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
-    {:ok, connection} = Instance.register(instance, {:connect, {options, stacktrace}})
+    {:ok, connection} = Instance.register(instance, {:connection, stacktrace})
 
-    {:ok, {instance, connection.ref}}
+    {instance, connection.ref}
   end
 
-  @spec handle() :: :ok
   def handle, do: handle([])
+
+  @spec handle(connection() | keyword()) :: :ok
+  def handle(options) when is_list(options) do
+    instance = TestServer.autostart_instance(__MODULE__)
+
+    connection =
+      case Instance.connections(instance) do
+        [%{ref: connection_ref}] ->
+          {instance, connection_ref}
+
+        [] ->
+          connection(instance)
+
+        _multiple_connections ->
+          raise "Multiple connections available, please pass connection to `TestServer.TCP.handle/2`"
+      end
+
+    handle(connection, options)
+  end
+
+  def handle(connection), do: handle(connection, [])
 
   @doc """
   Adds a data handler to the current test server TCP instance.
@@ -238,11 +243,6 @@ defmodule TestServer.TCP do
   Handlers are matched FIFO (first in, first out). Any data not matched by a
   handler, or any handlers not consumed by data, will raise an error in the
   test case.
-
-  A handler registered without a connection (`handle/0` or `handle/1` with
-  options) is *global* — it matches data on any connection. A handler
-  registered with a connection (`handle/2` with a `t:connection/0`) is
-  scoped — it only matches data on that connection.
 
   The `:to` callback returns `{:reply, data, state}` or `{:ok, state}`. For
   reply tuples, the framework calls `:gen_tcp.send/2` for you.
@@ -261,48 +261,19 @@ defmodule TestServer.TCP do
 
   ## Examples
 
-      :ok =
-        TestServer.TCP.handle(
-          match: fn data, _state -> data == "PING" end,
-          to: fn _data, state -> {:reply, "PONG", state} end
-        )
+      TestServer.TCP.handle(
+        match: fn data, _state -> data == "ping" end,
+        to: fn _data, state -> {:reply, "pong", state} end
+      )
 
-      :ok = TestServer.TCP.handle()
+      TestServer.TCP.handle()
 
-      {:ok, socket} =
-        :gen_tcp.connect(~c"localhost", elem(TestServer.TCP.address(), 1), [
-          :binary,
-          active: false
-        ])
+      {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
 
-      assert :ok = :gen_tcp.send(socket, "PING")
-      assert {:ok, "PONG"} = :gen_tcp.recv(socket, 0)
-      assert :ok = :gen_tcp.send(socket, "echo")
-      assert {:ok, "echo"} = :gen_tcp.recv(socket, 0)
+      assert TCPClient.send(socket, "ping") == {:ok, "pong"}
+      assert TCPClient.send(socket, "echo") == {:ok, "echo"}
   """
-  @spec handle(keyword() | TestServer.instance() | connection()) :: :ok
-  def handle(options) when is_list(options) do
-    {:ok, instance} = TestServer.autostart_instance(__MODULE__)
-
-    handle(instance, options)
-  end
-
-  def handle(instance) when is_pid(instance), do: handle(instance, [])
-
-  def handle({instance, _connection_ref} = connection) when is_pid(instance),
-    do: handle(connection, [])
-
-  @doc """
-  Adds a data handler to a test server TCP instance or connection.
-
-  See `handle/1` for options. When the first argument is a `t:connection/0`
-  the handler is scoped to that connection; otherwise it is global.
-  """
-  @spec handle(TestServer.instance() | connection(), keyword()) :: :ok
-  def handle(instance, options) when is_pid(instance) and is_list(options) do
-    register_handler(instance, nil, options)
-  end
-
+  @spec handle(connection(), keyword()) :: :ok
   def handle({instance, connection_ref}, options)
       when is_pid(instance) and is_reference(connection_ref) and is_list(options) do
     register_handler(instance, connection_ref, options)
@@ -311,7 +282,7 @@ defmodule TestServer.TCP do
   defp register_handler(instance, connection_ref, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :to, &default_handler/2)
 
@@ -324,8 +295,7 @@ defmodule TestServer.TCP do
   defp default_handler(data, state), do: {:reply, data, state}
 
   @spec send(connection()) :: :ok
-  def send({instance, _connection_ref} = connection) when is_pid(instance),
-    do: send(connection, [])
+  def send(connection), do: send(connection, [])
 
   @doc """
   Sends data from the current test server TCP instance to a specific
@@ -333,7 +303,7 @@ defmodule TestServer.TCP do
 
   The `:to` callback receives the connection state and returns
   `{:reply, data, state}` or `{:ok, state}`. For reply tuples, the framework
-  calls `:gen_tcp.send/2` for you. Raises if the client has disconnected.
+  calls `:gen_tcp.send/2` for you.
 
   The `:to` callback runs inside the test server instance process, so it must
   not call back into the `TestServer.TCP` API for the same instance.
@@ -345,28 +315,25 @@ defmodule TestServer.TCP do
 
   ## Examples
 
-      {:ok, conn} = TestServer.TCP.connect()
+      connection = TestServer.TCP.connection()
 
-      {:ok, socket} =
-        :gen_tcp.connect(~c"localhost", elem(TestServer.TCP.address(), 1), [
-          :binary,
-          active: false
-        ])
+      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
 
-      :ok = TestServer.TCP.send(conn, to: fn state -> {:reply, "hello", state} end)
-      assert {:ok, "hello"} = :gen_tcp.recv(socket, 0)
+      TestServer.TCP.send(connection, to: fn state -> {:reply, "hello", state} end)
+
+      assert TCPClient.receive_data(socket) == {:ok, "hello"}
   """
   @spec send(connection(), keyword()) :: :ok
-  def send({instance, connection_ref}, options)
+  def send({instance, connection_ref} = connection, options)
       when is_pid(instance) and is_reference(connection_ref) and is_list(options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :to, &default_send/1)
 
-    instance
-    |> Instance.dispatch({:send, {connection_ref, options, stacktrace}})
+    connection
+    |> Instance.dispatch({:send, options, stacktrace})
     |> handle_send_response(instance)
   end
 
@@ -374,12 +341,21 @@ defmodule TestServer.TCP do
 
   defp handle_send_response(:ok, _instance), do: :ok
 
-  defp handle_send_response({:error, :not_connected}, instance) do
-    raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection, because no client has connected to it yet"
+  defp handle_send_response({:error, :einval}, instance) do
+    raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection, because the connection does not exist"
+  end
+
+  defp handle_send_response({:error, :enotconn}, instance) do
+    raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection, because no client has connected to it"
+  end
+
+  defp handle_send_response({:error, :closed}, instance) do
+    raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection, because client has disconnected"
   end
 
   defp handle_send_response({:error, {exception, stacktrace}}, instance) do
-    Instance.report_error(instance, {exception, stacktrace})
+    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
+
     :ok
   end
 

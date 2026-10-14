@@ -5,6 +5,8 @@ defmodule TestServer.TCP.Instance do
 
   alias TestServer.TCP.Server
 
+  @send_timeout 100
+
   def start_link(options) do
     GenServer.start_link(__MODULE__, options)
   end
@@ -13,15 +15,15 @@ defmodule TestServer.TCP.Instance do
     GenServer.stop(instance)
   end
 
-  @spec register(TestServer.instance(), {:connect, {keyword(), TestServer.stacktrace()}}) ::
+  @spec register(TestServer.instance(), {:connection, TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.TCP.connection_ref()}}
-  def register(instance, {:connect, {options, stacktrace}}) do
-    GenServer.call(instance, {:register, {:connect, {options, stacktrace}}})
+  def register(instance, {:connection, stacktrace}) do
+    GenServer.call(instance, {:register, {:connection, stacktrace}})
   end
 
   @spec register(
           TestServer.instance(),
-          {:handle, {TestServer.TCP.connection_ref() | nil, keyword(), TestServer.stacktrace()}}
+          {:handle, {TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}}
         ) :: {:ok, map()}
   def register(instance, {:handle, {connection_ref, options, stacktrace}}) do
     options[:to] && ensure_function!(options[:to])
@@ -33,38 +35,34 @@ defmodule TestServer.TCP.Instance do
   defp ensure_function!(fun) when is_function(fun), do: :ok
   defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
 
-  @spec dispatch(TestServer.instance(), {:handle, pid(), binary()}) ::
+  @spec dispatch(TestServer.instance(), {:connection, pid(), :gen_tcp.socket()}) ::
+          {:ok, map()} | {:error, :not_found}
+  def dispatch(instance, {:connection, owner, socket}) do
+    GenServer.call(instance, {:dispatch, {:connection, {owner, socket}}})
+  end
+
+  @spec dispatch(TestServer.instance(), {:handle, pid(), TestServer.TCP.data()}) ::
           {:reply, TestServer.TCP.data()}
           | :ok
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:handle, connection_pid, data}) do
-    GenServer.call(instance, {:dispatch, {:handle, {connection_pid, data}}})
+  def dispatch(instance, {:handle, owner, data}) do
+    GenServer.call(instance, {:dispatch, {:handle, {owner, data}}})
   end
 
   @spec dispatch(
-          TestServer.instance(),
-          {:send, {TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}}
+          TestServer.TCP.connection(),
+          {:send, keyword(), TestServer.stacktrace()}
         ) :: :ok | {:error, term()}
-  def dispatch(instance, {:send, {connection_ref, options, stacktrace}}) do
+  def dispatch({instance, _connection_ref} = connection, {:send, options, stacktrace}) do
     options[:to] && ensure_function!(options[:to])
 
-    GenServer.call(instance, {:dispatch, {:send, {connection_ref, options, stacktrace}}})
+    GenServer.call(instance, {:dispatch, {:send, {connection, options, stacktrace}}})
   end
 
-  @spec register_connection(TestServer.instance(), pid(), port()) :: :ok
-  def register_connection(instance, connection_pid, socket) do
-    GenServer.call(instance, {:register, {:connection, {connection_pid, socket}}})
-  end
-
-  @spec unregister_connection(TestServer.instance(), pid()) :: :ok
-  def unregister_connection(instance, connection_pid) do
-    GenServer.cast(instance, {:unregister, {:connection, connection_pid}})
-  end
-
-  @spec handlers(TestServer.instance()) :: [map()]
-  def handlers(instance) do
-    GenServer.call(instance, :handlers)
+  @spec options(TestServer.instance()) :: keyword()
+  def options(instance) do
+    GenServer.call(instance, :options)
   end
 
   @spec connections(TestServer.instance()) :: [map()]
@@ -72,9 +70,9 @@ defmodule TestServer.TCP.Instance do
     GenServer.call(instance, :connections)
   end
 
-  @spec get_options(TestServer.instance()) :: keyword()
-  def get_options(instance) do
-    GenServer.call(instance, :options)
+  @spec handlers(TestServer.instance()) :: [map()]
+  def handlers(instance) do
+    GenServer.call(instance, :handlers)
   end
 
   @spec format_handlers([map()]) :: binary()
@@ -101,34 +99,23 @@ defmodule TestServer.TCP.Instance do
     end)
   end
 
-  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
-  def report_error(instance, {exception, stacktrace}) do
-    options = get_options(instance)
-    caller = Keyword.fetch!(options, :caller)
-
-    unless Keyword.get(options, :suppress_warning, false),
-      do: IO.warn(Exception.format(:error, exception, stacktrace))
-
-    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      reraise exception, stacktrace
-    end)
-
-    :ok
-  end
-
   @impl true
   def init(options) do
-    {:ok, options} = Server.start(self(), options)
+    case Server.start(self(), options) do
+      {:ok, options} ->
+        {:ok, %{options: options, handlers: [], connections: [], sends: []}}
 
-    {:ok, %{options: options, handlers: [], connections: []}}
+      {:error, reason} ->
+        {:stop, reason}
+    end
   end
 
   @impl true
-  def handle_call({:register, {:connect, {_options, stacktrace}}}, _from, state) do
+  def handle_call({:register, {:connection, stacktrace}}, _from, state) do
     connection = %{
       ref: make_ref(),
       stacktrace: stacktrace,
-      pid: nil,
+      owner: nil,
       socket: nil,
       state: %{}
     }
@@ -154,43 +141,52 @@ defmodule TestServer.TCP.Instance do
     {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
   end
 
-  def handle_call({:register, {:connection, {connection_pid, socket}}}, _from, state) do
-    {_connection, connections} = bind_connection(state.connections, connection_pid, socket)
+  def handle_call({:dispatch, {:connection, {owner, socket}}}, _from, state) do
+    case find_available_connection(state.connections) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, :ok, %{state | connections: connections}}
+      index ->
+        connection = %{Enum.at(state.connections, index) | owner: owner, socket: socket}
+        connections = List.replace_at(state.connections, index, connection)
+
+        state = flush_sends(connection, %{state | connections: connections})
+
+        {:reply, {:ok, connection}, state}
+    end
   end
 
-  def handle_call({:dispatch, {:handle, {connection_pid, data}}}, _from, state) do
-    case Enum.find(state.connections, &(&1.pid == connection_pid)) do
+  def handle_call({:dispatch, {:handle, {owner, data}}}, _from, state) do
+    case Enum.find(state.connections, &(&1.owner == owner)) do
       nil ->
         {:reply, {:error, :not_found}, state}
 
       connection ->
         {res, state} = run_handlers(data, connection, state)
-        {res, state} = update_connection_response(res, connection_pid, state)
+        {res, state} = update_connection_response(res, owner, state)
 
         {:reply, res, state}
     end
   end
 
   def handle_call(
-        {:dispatch, {:send, {connection_ref, options, stacktrace}}},
-        _from,
+        {:dispatch, {:send, {{_instance, connection_ref}, options, stacktrace}}},
+        from,
         state
       ) do
-    to = Keyword.fetch!(options, :to)
-
     case Enum.find(state.connections, &(&1.ref == connection_ref)) do
-      %{socket: socket} = connection when not is_nil(socket) ->
-        {result, state} =
-          connection
-          |> run_send_handler(to, stacktrace)
-          |> update_send_response(connection, state)
+      %{owner: nil} ->
+        Process.send_after(self(), {:send_timeout, from}, @send_timeout)
+
+        {:noreply, %{state | sends: state.sends ++ [{connection_ref, from, options, stacktrace}]}}
+
+      %{owner: _owner} = connection ->
+        {result, state} = do_send(connection, options, stacktrace, state)
 
         {:reply, result, state}
 
-      _no_connected_client ->
-        {:reply, {:error, :not_connected}, state}
+      nil ->
+        {:reply, {:error, :einval}, state}
     end
   end
 
@@ -199,42 +195,41 @@ defmodule TestServer.TCP.Instance do
   end
 
   @impl true
-  def handle_cast({:unregister, {:connection, connection_pid}}, state) do
-    connections = Enum.reject(state.connections, &(&1.pid == connection_pid))
+  def handle_info({:send_timeout, from}, state) do
+    case List.keytake(state.sends, from, 1) do
+      {_send, sends} ->
+        GenServer.reply(from, {:error, :enotconn})
+        {:noreply, %{state | sends: sends}}
 
-    {:noreply, %{state | connections: connections}}
+      nil ->
+        {:noreply, state}
+    end
   end
 
-  defp bind_connection(connections, connection_pid, socket) do
-    case Enum.find_index(connections, &(not is_nil(&1.ref) and is_nil(&1.pid))) do
-      nil ->
-        connection = %{
-          ref: nil,
-          stacktrace: [],
-          pid: connection_pid,
-          socket: socket,
-          state: %{}
-        }
+  defp find_available_connection(connections) do
+    Enum.find_index(connections, &(not is_nil(&1.ref) and is_nil(&1.owner))) ||
+      Enum.find_index(connections, &(is_nil(&1.ref) and is_nil(&1.owner)))
+  end
 
-        {connection, connections ++ [connection]}
+  defp flush_sends(connection, state) do
+    {connection_sends, sends} = Enum.split_with(state.sends, &(elem(&1, 0) == connection.ref))
 
-      index ->
-        connection = %{
-          Enum.at(connections, index)
-          | pid: connection_pid,
-            socket: socket
-        }
+    state = %{state | sends: sends}
 
-        {connection, List.replace_at(connections, index, connection)}
-    end
+    Enum.reduce(connection_sends, state, fn {_ref, from, options, stacktrace}, state ->
+      {result, state} = do_send(connection, options, stacktrace, state)
+
+      GenServer.reply(from, result)
+
+      state
+    end)
   end
 
   defp run_handlers(data, connection, state) do
     state.handlers
     |> fetch_match_index([data, connection.state], fn
-      %{suspended: true} -> false
-      %{connection_ref: nil} -> true
-      %{connection_ref: ref} -> ref == connection.ref
+      %{connection_ref: ref, suspended: suspended} ->
+        ref == connection.ref and not suspended
     end)
     |> case do
       {:error, :not_found} ->
@@ -282,14 +277,6 @@ defmodule TestServer.TCP.Instance do
     handler.(data, connection_state)
   end
 
-  defp run_send_handler(connection, handler, stacktrace) when is_function(handler, 1) do
-    connection.state
-    |> handler.()
-    |> validate_response!(stacktrace)
-  rescue
-    error -> {:error, {error, __STACKTRACE__}}
-  end
-
   defp validate_response!(response, stacktrace) do
     case response do
       {:reply, data, state} ->
@@ -312,34 +299,20 @@ defmodule TestServer.TCP.Instance do
     end
   end
 
-  defp update_connection_response({:reply, data, connection_state}, connection_pid, state) do
-    {{:reply, data}, update_connection_state(state, connection_pid, connection_state)}
+  defp update_connection_response({:reply, data, connection_state}, owner, state) do
+    {{:reply, data}, update_connection_state(state, owner, connection_state)}
   end
 
-  defp update_connection_response({:ok, connection_state}, connection_pid, state) do
-    {:ok, update_connection_state(state, connection_pid, connection_state)}
+  defp update_connection_response({:ok, connection_state}, owner, state) do
+    {:ok, update_connection_state(state, owner, connection_state)}
   end
 
-  defp update_connection_response(response, _connection_pid, state) do
+  defp update_connection_response(response, _owner, state) do
     {response, state}
   end
 
-  defp update_send_response({:reply, data, connection_state}, connection, state) do
-    send(connection.pid, {:write, data})
-    {:ok, update_connection_state(state, connection.pid, connection_state)}
-  end
-
-  defp update_send_response({:ok, connection_state}, connection, state) do
-    {:ok, update_connection_state(state, connection.pid, connection_state)}
-  end
-
-  defp update_send_response({:error, {exception, stacktrace}}, connection, state) do
-    send(connection.pid, {:write, Exception.format(:error, exception, stacktrace)})
-    {{:error, {exception, stacktrace}}, state}
-  end
-
-  defp update_connection_state(state, connection_pid, connection_state) do
-    case Enum.find_index(state.connections, &(&1.pid == connection_pid)) do
+  defp update_connection_state(state, owner, connection_state) do
+    case Enum.find_index(state.connections, &(&1.owner == owner)) do
       nil ->
         state
 
@@ -351,5 +324,39 @@ defmodule TestServer.TCP.Instance do
 
         %{state | connections: connections}
     end
+  end
+
+  defp do_send(%{owner: owner} = connection, options, stacktrace, state) do
+    case Process.alive?(owner) do
+      true ->
+        connection
+        |> run_send_handler(Keyword.fetch!(options, :to), stacktrace)
+        |> update_send_response(connection, state)
+
+      false ->
+        {{:error, :closed}, state}
+    end
+  end
+
+  defp run_send_handler(connection, handler, stacktrace) when is_function(handler, 1) do
+    connection.state
+    |> handler.()
+    |> validate_response!(stacktrace)
+  rescue
+    error -> {:error, {error, __STACKTRACE__}}
+  end
+
+  defp update_send_response({:reply, data, connection_state}, connection, state) do
+    send(connection.owner, {:write, data})
+    {:ok, update_connection_state(state, connection.owner, connection_state)}
+  end
+
+  defp update_send_response({:ok, connection_state}, connection, state) do
+    {:ok, update_connection_state(state, connection.owner, connection_state)}
+  end
+
+  defp update_send_response({:error, {exception, stacktrace}}, connection, state) do
+    send(connection.owner, {:write, Exception.format(:error, exception, stacktrace)})
+    {{:error, {exception, stacktrace}}, state}
   end
 end

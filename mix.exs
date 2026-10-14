@@ -28,7 +28,7 @@ defmodule TestServer.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :crypto, :public_key, :ssh, :inets],
+      extra_applications: [:logger, :crypto, :public_key, :ssl, :ssh, :inets],
       mod: {TestServer.Application, []}
     ]
   end
@@ -47,6 +47,7 @@ defmodule TestServer.MixProject do
       {:credo, ">= 0.0.0", only: [:dev, :test]},
       {:websockex, "~> 0.5.1", only: [:test]},
       {:finch, ">= 0.0.0", only: [:test]},
+      {:gen_smtp, "~> 1.3", only: :test},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end

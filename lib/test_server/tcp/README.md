@@ -2,220 +2,275 @@
 
 <!-- MDOC !-->
 
-Mock TCP stream endpoints with FIFO data handlers.
+Mock TCP stream endpoints.
 
 ## Usage
 
-### Data handlers
-
-Add FIFO data handlers with `TestServer.TCP.handle/1`:
+Add data expectations with `TestServer.TCP.handle/2`:
 
 ```elixir
-test "TCP client" do
-  :ok =
-    TestServer.TCP.handle(
-      match: fn data, _state -> data == "PING\n" end,
-      to: fn _data, state -> {:reply, "PONG\n", state} end
-    )
+test "send/2" do
+  # The test server will autostart the current test server, if not already
+  # running, and a connection expectation will be set up if not already set.
+  TestServer.TCP.handle()
 
-  :ok = TestServer.TCP.handle()
-
-  {:ok, socket} =
-    :gen_tcp.connect(~c"localhost", elem(TestServer.TCP.address(), 1), [
-      :binary,
-      active: false,
-      packet: :line
-    ])
-
-  :ok = :gen_tcp.send(socket, "PING\n")
-  assert {:ok, "PONG\n"} = :gen_tcp.recv(socket, 0)
-
-  :ok = :gen_tcp.send(socket, "echo\n")
-  assert {:ok, "echo\n"} = :gen_tcp.recv(socket, 0)
+  assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+  assert TCPClient.send(socket, "echo") == :ok
+  assert TCPClient.receive_data(socket) == {:ok, "echo"}
 end
 ```
 
-The server autostarts when `handle/1` is called. Start it explicitly when you
-need custom socket options:
+TCP does not preserve message boundaries. Start with `listen: [packet: :line]` to handle each line separately:
 
 ```elixir
-TestServer.TCP.start(listen_options: [:binary, packet: :line])
+TestServer.TCP.start!(listen: [packet: :line])
 ```
 
-TCP is a stream protocol, so data delivered to handlers follows the configured
-`:gen_tcp` packet options. Use `:listen_options` to set framing such as
-`packet: :line`, `packet: 4`, or raw stream mode.
-
-### Targeting a specific connection
-
-Register a connection with `TestServer.TCP.connect/0` to get a connection ref
-you can scope handlers and sends to. Connections are bound to incoming
-sockets FIFO: the first registered ref takes the first accepted socket, the
-second ref the second socket, and so on. Sockets that arrive while no ref is
-waiting are accepted as anonymous connections that only match handlers
-registered without a ref.
+`TestServer.TCP.handle/2` can route data to an anonymous function:
 
 ```elixir
-{:ok, conn1} = TestServer.TCP.connect()
-{:ok, conn2} = TestServer.TCP.connect()
-
-:ok = TestServer.TCP.handle(conn1, to: fn _data, state -> {:reply, "one", state} end)
-:ok = TestServer.TCP.handle(conn2, to: fn _data, state -> {:reply, "two", state} end)
-
-{:ok, socket1} = :gen_tcp.connect(~c"localhost", port, [:binary, active: false])
-{:ok, socket2} = :gen_tcp.connect(~c"localhost", port, [:binary, active: false])
-
-:ok = :gen_tcp.send(socket1, "ping")
-assert {:ok, "one"} = :gen_tcp.recv(socket1, 0)
-:ok = :gen_tcp.send(socket2, "ping")
-assert {:ok, "two"} = :gen_tcp.recv(socket2, 0)
+TestServer.TCP.handle(to: fn _data, state -> {:reply, "pong", state} end)
 ```
 
-### Matching and replies
-
-By default, `TestServer.TCP.handle/1` echoes received data:
+A custom match function can be set with `:match` option:
 
 ```elixir
-:ok = TestServer.TCP.handle()
+TestServer.TCP.handle(match: fn data, _state -> data == "ping" end)
 ```
 
-Use `:match` to select data and `:to` to customize the response:
+Handlers are processed in the order they were added:
 
 ```elixir
-TestServer.TCP.handle(
-  match: fn data, _state -> data == "HELLO" end,
-  to: fn _data, state -> {:reply, "READY", state} end
+TestServer.TCP.handle(to: fn _data, state -> {:reply, "first", state} end)
+TestServer.TCP.handle(to: fn _data, state -> {:reply, "second", state} end)
+
+assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+assert TCPClient.send(socket, "ping") == :ok
+assert TCPClient.receive_data(socket) == {:ok, "first"}
+assert TCPClient.send(socket, "ping") == :ok
+assert TCPClient.receive_data(socket) == {:ok, "second"}
+```
+
+Use `TestServer.TCP.send/2` to send data from the server:
+
+```elixir
+connection = TestServer.TCP.connection()
+
+assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+
+TestServer.TCP.send(connection, to: fn state -> {:reply, "ping", state} end)
+
+assert TCPClient.receive_data(socket) == {:ok, "ping"}
+```
+
+Use `TestServer.TCP.connection/1` to expect multiple client connections or use with `TestServer.TCP.send/2`. They are assigned to accepted sockets in the order they are added:
+
+```elixir
+connection_1 = TestServer.TCP.connection()
+connection_2 = TestServer.TCP.connection()
+
+TestServer.TCP.handle(connection_1, to: fn _data, state -> {:reply, "connection 1", state} end)
+TestServer.TCP.handle(connection_2, to: fn _data, state -> {:reply, "connection 2", state} end)
+
+assert {:ok, socket_1} = TCPClient.connect(TestServer.TCP.address())
+assert {:ok, socket_2} = TCPClient.connect(TestServer.TCP.address())
+assert TCPClient.send(socket_1, "ping") == :ok
+assert TCPClient.send(socket_2, "ping") == :ok
+assert TCPClient.receive_data(socket_1) == {:ok, "connection 1"}
+assert TCPClient.receive_data(socket_2) == {:ok, "connection 2"}
+```
+
+### TLS
+
+TLS can be enabled with the `:transport` option when calling `TestServer.TCP.start/1`. A self-signed certificate suite is automatically generated:
+
+```elixir
+TestServer.TCP.start!(transport: :tls)
+TestServer.TCP.handle()
+
+{host, port} = TestServer.TCP.address()
+
+assert {:ok, socket} =
+         :ssl.connect(String.to_charlist(host), port,
+           active: false,
+           mode: :binary,
+           verify: :verify_peer,
+           cacerts: TestServer.TCP.cacerts(),
+           server_name_indication: String.to_charlist(host),
+           log_level: :warning
+         )
+
+assert :ssl.send(socket, "ping") == :ok
+assert :ssl.recv(socket, 0) == {:ok, "ping"}
+```
+
+Custom TLS certificates can be used by setting the `:tls` option:
+
+```elixir
+TestServer.TCP.start!(
+  transport: :tls,
+  tls: [certfile: "cert.pem", keyfile: "key.pem"]
 )
 ```
 
-The two-arity `:to` callback can return:
+An existing connection can be upgraded to TLS by enabling both transports and returning `{:reply, {data, upgrade: :tls}, state}`:
 
 ```elixir
-{:reply, data, state}
-{:ok, state}
+TestServer.TCP.start!(transport: [:tcp, :tls])
+
+TestServer.TCP.handle(
+  to: fn "STARTTLS\r\n", state ->
+    {:reply, {"220 Ready to start TLS\r\n", upgrade: :tls}, state}
+  end
+)
 ```
 
-The `:match` and `:to` callbacks run inside the test server instance process,
-so they must not call back into the `TestServer.TCP` API for the same
-instance.
-
-### Sending data
-
-Push data from the test server to a specific connection with
-`TestServer.TCP.send/2`:
-
-```elixir
-{:ok, conn} = TestServer.TCP.connect()
-
-{:ok, socket} =
-  :gen_tcp.connect(~c"localhost", elem(TestServer.TCP.address(), 1), [
-    :binary,
-    active: false
-  ])
-
-:ok =
-  TestServer.TCP.send(conn,
-    to: fn state -> {:reply, "hello", state} end
-  )
-
-assert {:ok, "hello"} = :gen_tcp.recv(socket, 0)
-```
-
-### Example: a minimal SMTP exchange
-
-The pieces above compose into a realistic protocol mock. SMTP servers greet
-first with a `220` banner, then answer each client command in turn, so this
-combines a server-initiated `send/2` with a FIFO sequence of scoped handlers:
-
-```elixir
-test "SMTP client" do
-  {:ok, conn} = TestServer.TCP.connect()
-
-  # One handler per client command, matched FIFO on the same connection.
-  :ok =
-    TestServer.TCP.handle(conn,
-      match: fn data, _state -> String.starts_with?(data, "EHLO") end,
-      to: fn _data, state -> {:reply, "250 test.server\r\n", state} end
-    )
-
-  :ok =
-    TestServer.TCP.handle(conn,
-      match: fn data, _state -> String.starts_with?(data, "MAIL FROM") end,
-      to: fn _data, state -> {:reply, "250 OK\r\n", state} end
-    )
-
-  :ok =
-    TestServer.TCP.handle(conn,
-      match: fn data, _state -> String.starts_with?(data, "RCPT TO") end,
-      to: fn _data, state -> {:reply, "250 OK\r\n", state} end
-    )
-
-  :ok =
-    TestServer.TCP.handle(conn,
-      match: fn data, _state -> String.starts_with?(data, "DATA") end,
-      to: fn _data, state -> {:reply, "354 End data with <CR><LF>.<CR><LF>\r\n", state} end
-    )
-
-  # The message body and its `.` terminator arrive as one chunk under raw
-  # framing, so a single handler matches the trailing `\r\n.\r\n`.
-  :ok =
-    TestServer.TCP.handle(conn,
-      match: fn data, _state -> String.ends_with?(data, "\r\n.\r\n") end,
-      to: fn _data, state -> {:reply, "250 OK: queued\r\n", state} end
-    )
-
-  :ok =
-    TestServer.TCP.handle(conn,
-      match: fn data, _state -> String.starts_with?(data, "QUIT") end,
-      to: fn _data, state -> {:reply, "221 Bye\r\n", state} end
-    )
-
-  {:ok, socket} =
-    :gen_tcp.connect(~c"localhost", elem(TestServer.TCP.address(), 1), [
-      :binary,
-      active: false
-    ])
-
-  # SMTP servers greet first.
-  :ok =
-    TestServer.TCP.send(conn,
-      to: fn state -> {:reply, "220 test.server ESMTP\r\n", state} end
-    )
-
-  assert {:ok, "220 test.server ESMTP\r\n"} = :gen_tcp.recv(socket, 0)
-
-  :ok = :gen_tcp.send(socket, "EHLO client\r\n")
-  assert {:ok, "250 test.server\r\n"} = :gen_tcp.recv(socket, 0)
-
-  :ok = :gen_tcp.send(socket, "MAIL FROM:<me@example.com>\r\n")
-  assert {:ok, "250 OK\r\n"} = :gen_tcp.recv(socket, 0)
-
-  :ok = :gen_tcp.send(socket, "RCPT TO:<you@example.com>\r\n")
-  assert {:ok, "250 OK\r\n"} = :gen_tcp.recv(socket, 0)
-
-  :ok = :gen_tcp.send(socket, "DATA\r\n")
-  assert {:ok, "354" <> _} = :gen_tcp.recv(socket, 0)
-
-  :ok = :gen_tcp.send(socket, "Subject: Hi\r\n\r\nHello there!\r\n.\r\n")
-  assert {:ok, "250 OK: queued\r\n"} = :gen_tcp.recv(socket, 0)
-
-  :ok = :gen_tcp.send(socket, "QUIT\r\n")
-  assert {:ok, "221 Bye\r\n"} = :gen_tcp.recv(socket, 0)
-end
-```
+Connections begin as plain TCP when both transports are enabled.
 
 ### IPv6
 
 Use the `:ipfamily` option to test with IPv6:
 
 ```elixir
-{:ok, _instance} = TestServer.TCP.start(ipfamily: :inet6)
-:ok = TestServer.TCP.handle()
+TestServer.TCP.start!(ipfamily: :inet6)
 
-assert {"localhost", port} = TestServer.TCP.address()
+assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
+assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port} = :inet.peername(socket)
+```
 
-{:ok, socket} =
-  :gen_tcp.connect(~c"localhost", port, [:binary, active: false, :inet6])
+### Example: SMTP
+
+The TCP test server can be used to test an SMTP client such as `:gen_smtp`:
+
+```elixir
+test ":gen_smtp_client.send_blocking/2", %{test_pid: test_pid} do
+  message =
+    """
+    From: from@example.com
+    To: to@example.com
+    Subject: Hello
+    Content-Type: text/plain; charset=utf-8
+
+    Hello from :gen_smtp!
+    """
+
+  TestServer.TCP.start!(listen: [packet: :line], transport: [:tcp, :tls])
+
+  connection = TestServer.TCP.connection()
+
+  # Advertise STARTTLS
+  TestServer.TCP.handle(connection,
+    to: fn data, state ->
+      assert "EHLO " <> _ = data
+
+      {:reply, "250-localhost\r\n250 STARTTLS\r\n", state}
+    end
+  )
+
+  # Upgrade the existing connection
+  TestServer.TCP.handle(connection,
+    to: fn data, state ->
+      assert data == "STARTTLS\r\n"
+
+      {:reply, {"220 Ready to start TLS\r\n", upgrade: :tls}, state}
+    end
+  )
+
+  # The SMTP client sends EHLO again after upgrading
+  TestServer.TCP.handle(connection,
+    to: fn data, state ->
+      assert "EHLO " <> _ = data
+
+      {:reply, "250 localhost\r\n", state}
+    end
+  )
+
+  # MAIL FROM command
+  TestServer.TCP.handle(connection,
+    to: fn data, state ->
+      assert data == "MAIL FROM:<from@example.com>\r\n"
+
+      {:reply, "250 OK\r\n", state}
+    end
+  )
+
+  # RCPT TO command
+  TestServer.TCP.handle(connection,
+    to: fn data, state ->
+      assert data == "RCPT TO:<to@example.com>\r\n"
+
+      {:reply, "250 OK\r\n", state}
+    end
+  )
+
+  # DATA command
+  TestServer.TCP.handle(connection,
+    to: fn data, state ->
+      assert data == "DATA\r\n"
+
+      {:reply, "354 End data with <CR><LF>.<CR><LF>\r\n", Map.put(state, :email, "")}
+    end
+  )
+
+  # Email content line by line
+  Enum.each(0..7, fn _ ->
+    TestServer.TCP.handle(connection,
+      to: fn
+        "." <> _, state ->
+          assert state.email == message <> "\r\n"
+
+          {:reply, "250 OK\r\n", state}
+
+        data, state ->
+          {:ok, %{state | email: state.email <> data}}
+      end
+    )
+  end)
+
+  # QUIT command
+  TestServer.TCP.handle(connection,
+    to: fn data, state ->
+      assert data =~ "QUIT"
+
+      send(test_pid, :smtp_quit)
+
+      {:ok, state}
+    end
+  )
+
+  {host, port} = TestServer.TCP.address()
+
+  # Send greeting as soon as the socket is established
+  Task.start(fn ->
+    TestServer.TCP.send(connection,
+      to: fn state -> {:reply, "220 localhost ESMTP\r\n", state} end
+    )
+  end)
+
+  options = [
+    relay: String.to_charlist(host),
+    port: port,
+    tls: :always,
+    tls_options: [
+      verify: :verify_peer,
+      cacerts: TestServer.TCP.cacerts(),
+      depth: 1,
+      server_name_indication: String.to_charlist(host),
+      log_level: :warning
+    ],
+    auth: :never,
+    no_mx_lookups: true
+  ]
+
+  assert :gen_smtp_client.send_blocking(
+            {~c"from@example.com", [~c"to@example.com"], message},
+            options
+          ) == "OK\r\n"
+
+  # :gen_smtp_client doesn't wait for the QUIT response so we want to ensure we received
+  # the QUIT command before ending the test
+  assert_receive :smtp_quit
+end
 ```
 
 <!-- MDOC !-->

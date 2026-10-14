@@ -4,66 +4,97 @@ defmodule TestServer.TCP.Server do
   alias TestServer.TCP.Instance
 
   @doc false
-  @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()}
+  @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
-    port = fetch_port!(options)
-    listen_options = listen_options(options)
+    {default_transport, transports} = validate_transports!(Keyword.get(options, :transport, :tcp))
 
-    case :gen_tcp.listen(port, listen_options) do
-      {:ok, listen_socket} ->
-        {:ok, acceptor_pid} = Task.start_link(fn -> accept_loop(instance, listen_socket) end)
-        {:ok, port} = :inet.port(listen_socket)
+    options =
+      options
+      |> put_tls_options(transports)
+      |> Keyword.put(:transport, transports)
 
-        options =
-          options
-          |> Keyword.put(:port, port)
-          |> Keyword.put(:listen_options, listen_options)
-          |> Keyword.put(:listen_socket, listen_socket)
-          |> Keyword.put(:acceptor_pid, acceptor_pid)
+    listen_options = listen_options(options, default_transport)
 
-        {:ok, options}
+    with {:ok, port} <- TestServer.open_port(options),
+         {:ok, socket} <- transport_listen(default_transport, port, listen_options) do
+      {:ok, accept_pid} = Task.start_link(fn -> accept_loop(instance, socket) end)
+      {_transport, raw_socket} = socket
 
-      {:error, reason} ->
-        raise "Could not listen to port #{inspect(port)}, because: #{inspect(reason)}"
+      options =
+        options
+        |> Keyword.put(:port, port)
+        |> Keyword.put(:listener, raw_socket)
+        |> Keyword.put(:acceptor, accept_pid)
+
+      {:ok, options}
     end
   end
 
-  defp fetch_port!(options) do
-    port = Keyword.get(options, :port, 0)
+  defp validate_transports!(transport) do
+    transports = List.wrap(transport)
 
-    case is_integer(port) and port >= 0 and port <= 65_535 do
-      true -> port
-      false -> raise "Invalid port, got: #{inspect(port)}"
+    transports == [] &&
+      raise ArgumentError, "expected transport or list of transports, got: #{inspect(transport)}"
+
+    transports -- [:tcp, :tls] != [] &&
+      raise ArgumentError, "expected :tcp or :tls transport, got: #{inspect(transport)}"
+
+    default_transport =
+      case :tcp in transports do
+        true -> :tcp
+        false -> List.first(transports)
+      end
+
+    {default_transport, transports}
+  end
+
+  defp put_tls_options(options, transports) do
+    case :tls in transports do
+      true ->
+        options
+        |> TestServer.put_tls_options()
+        |> Keyword.update!(:tls, &Keyword.put_new(&1, :log_level, :warning))
+
+      false ->
+        options
     end
   end
 
-  defp listen_options(options) do
-    options
-    |> Keyword.get(:listen_options, [:binary, active: false, reuseaddr: true])
-    |> List.wrap()
-    |> Enum.reject(&match?({:active, _value}, &1))
-    |> Kernel.++(active: false)
-    |> put_ipfamily(Keyword.get(options, :ipfamily, :inet))
+  defp listen_options(options, transport) do
+    tls_options = Keyword.get(options, :tls, [])
+
+    [mode: :binary]
+    |> Keyword.merge(Keyword.get(options, :listen, []))
+    |> Keyword.merge((transport == :tls && tls_options) || [])
+    |> Keyword.put(:active, false)
+    |> then(fn listen_options ->
+      case Keyword.get(options, :ipfamily, :inet) do
+        :inet -> listen_options
+        ipfamily -> [ipfamily | listen_options]
+      end
+    end)
   end
 
-  defp put_ipfamily(listen_options, :inet), do: listen_options
-  defp put_ipfamily(listen_options, ipfamily), do: [ipfamily | listen_options]
+  defp transport_listen(transport, port, options) do
+    transport
+    |> case do
+      :tcp -> :gen_tcp.listen(port, options)
+      :tls -> :ssl.listen(port, options)
+    end
+    |> case do
+      {:ok, socket} -> {:ok, {transport, socket}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-  defp accept_loop(instance, listen_socket) do
-    case :gen_tcp.accept(listen_socket) do
+  defp accept_loop(instance, listener) do
+    case transport_accept(listener) do
       {:ok, socket} ->
-        pid =
-          spawn_link(fn ->
-            receive do
-              {:socket, socket} -> connection_loop(instance, socket)
-            end
-          end)
+        owner = start_socket(instance, socket)
+        :ok = transport_controlling_process(socket, owner)
 
-        :ok = :gen_tcp.controlling_process(socket, pid)
-        :ok = Instance.register_connection(instance, pid, socket)
-        Kernel.send(pid, {:socket, socket})
-
-        accept_loop(instance, listen_socket)
+        send(owner, :start)
+        accept_loop(instance, listener)
 
       {:error, :closed} ->
         :ok
@@ -73,76 +104,280 @@ defmodule TestServer.TCP.Server do
     end
   end
 
-  defp connection_loop(instance, socket) do
-    case :inet.setopts(socket, active: :once) do
-      :ok ->
-        await_connection_message(instance, socket)
-
-      {:error, _reason} ->
-        Instance.unregister_connection(instance, self())
+  defp transport_accept({transport, raw_socket}) do
+    transport
+    |> case do
+      :tcp -> :gen_tcp.accept(raw_socket)
+      :tls -> :ssl.transport_accept(raw_socket)
+    end
+    |> case do
+      {:ok, raw_socket} -> {:ok, {transport, raw_socket}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp await_connection_message(instance, socket) do
+  defp start_socket(instance, socket) do
+    {:ok, owner} =
+      Task.start_link(fn ->
+        Process.link(instance)
+
+        receive do
+          :start -> :ok
+        end
+
+        socket =
+          case transport_handshake(socket) do
+            {:ok, socket} -> assign_connection(instance, socket)
+            # This normally happens on TLS connect errors so no need to surface
+            {:error, _reason} -> socket
+          end
+
+        transport_close(socket)
+      end)
+
+    owner
+  end
+
+  defp transport_handshake({transport, raw_socket}, options \\ []) do
+    transport
+    |> case do
+      :tcp -> {:ok, raw_socket}
+      :tls -> :ssl.handshake(raw_socket, options)
+    end
+    |> case do
+      {:ok, raw_socket} ->
+        {:ok, {transport, raw_socket}}
+
+      {:ok, raw_socket, _extensions} ->
+        transport_handshake_continue(raw_socket, transport)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp transport_handshake_continue(raw_socket, :tls) do
+    case :ssl.handshake_continue(raw_socket, []) do
+      {:ok, raw_socket} -> {:ok, {:tls, raw_socket}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp assign_connection(instance, socket) do
+    case Instance.dispatch(instance, {:connection, self(), socket}) do
+      {:ok, _connection, state} ->
+        socket_loop(instance, socket, state)
+
+      {:error, :not_found} ->
+        message =
+          "#{TestServer.format_instance(TestServer.TCP, instance)} received an unexpected TCP connection attempt"
+          |> append_formatted_connections(instance)
+
+        send_error(socket, RuntimeError.exception(message), instance)
+
+        socket
+    end
+  end
+
+  defp socket_loop(instance, socket, state) do
+    case transport_setopts(socket, active: :once) do
+      :ok -> receive_socket_message(instance, socket, state)
+      # This normally happens on client disconnects so no need to surface
+      {:error, _reason} -> socket
+    end
+  end
+
+  defp transport_setopts({transport, raw_socket}, opts) do
+    case transport do
+      :tcp -> :inet.setopts(raw_socket, opts)
+      :tls -> :ssl.setopts(raw_socket, opts)
+    end
+  end
+
+  defp receive_socket_message(instance, {_transport, raw_socket} = socket, state) do
     receive do
-      {:tcp, ^socket, data} ->
-        instance
-        |> Instance.dispatch({:handle, self(), data})
-        |> respond(instance, socket, data)
+      {:tcp, ^raw_socket, data} ->
+        handle_data(instance, socket, data, state)
 
-      {:tcp_closed, ^socket} ->
-        Instance.unregister_connection(instance, self())
+      {:ssl, ^raw_socket, data} ->
+        handle_data(instance, socket, data, state)
 
-      {:tcp_error, ^socket, reason} ->
-        exception = RuntimeError.exception("TCP receive failed, because: #{inspect(reason)}")
-        send_error(socket, {exception, []}, instance)
-        :gen_tcp.close(socket)
-        Instance.unregister_connection(instance, self())
+      {:tcp_closed, ^raw_socket} ->
+        {:ok, socket, state}
 
-      {:write, data} ->
-        respond({:reply, data}, instance, socket, nil)
+      {:ssl_closed, ^raw_socket} ->
+        {:ok, socket, state}
+
+      {:tcp_error, ^raw_socket, reason} ->
+        message = "TCP receive failed, because: #{inspect(reason)}"
+
+        {:error, RuntimeError.exception(message)}
+
+      {:ssl_error, ^raw_socket, reason} ->
+        message = "TCP receive failed, because: #{inspect(reason)}"
+
+        {:error, RuntimeError.exception(message)}
+
+      {:send, {options, stacktrace}} ->
+        handle_send(instance, socket, {options, stacktrace}, state)
+    end
+    |> case do
+      {:ok, socket, state} ->
+        socket_loop(instance, socket, state)
+
+      {:error, reason} ->
+        send_error(socket, reason, instance)
+        socket
     end
   end
 
-  defp respond({:reply, data}, instance, socket, _data) do
-    case :gen_tcp.send(socket, data) do
+  defp handle_data(instance, socket, data, state) do
+    case Instance.dispatch(instance, {:handle, self(), data, state}) do
+      {:reply, {data, options}, state} ->
+        handle_reply(instance, socket, {data, options}, state)
+
+      {:ok, state} ->
+        {:ok, socket, state}
+
+      {:error, :not_found} ->
+        message =
+          "#{TestServer.format_instance(TestServer.TCP, instance)} received unexpected TCP data"
+          |> append_formatted_data(data)
+          |> append_formatted_handlers(instance)
+
+        {:error, RuntimeError.exception(message)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp handle_reply(instance, socket, {data, reply_options}, state) do
+    {current_transport, _raw_socket} = socket
+
+    case validate_transport_upgrade(instance, current_transport, reply_options) do
+      {:ok, new_transport} ->
+        data
+        |> send_data(socket, state)
+        |> maybe_transport_upgrade(instance, new_transport)
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  defp validate_transport_upgrade(instance, current_transport, reply_options) do
+    new_transport = Keyword.get(reply_options, :upgrade)
+    transports = instance |> Instance.options() |> Keyword.fetch!(:transport)
+    tls? = :tls in transports
+
+    case {tls?, current_transport, new_transport} do
+      {_tls?, _current_transport, nil} ->
+        {:ok, current_transport}
+
+      {true, :tcp, :tls} ->
+        {:ok, :tls}
+
+      {false, :tcp, :tls} ->
+        reason =
+          RuntimeError.exception(
+            "TCP transport can't upgrade to TLS without `transport: [:tcp, :tls]` option"
+          )
+
+        {:error, reason}
+
+      {_tls?, current_transport, new_transport} ->
+        reason =
+          RuntimeError.exception(
+            "TCP transport can only upgrade from TCP to TLS, got: #{inspect(current_transport)} to #{inspect(new_transport)}"
+          )
+
+        {:error, reason}
+    end
+  end
+
+  defp send_data(data, socket, state) do
+    case transport_send(socket, data) do
       :ok ->
-        connection_loop(instance, socket)
+        {:ok, socket, state}
 
       {:error, reason} ->
         exception = RuntimeError.exception("TCP reply failed, because: #{inspect(reason)}")
-        send_error(socket, {exception, []}, instance)
-        :gen_tcp.close(socket)
-        Instance.unregister_connection(instance, self())
+
+        {:error, exception}
     end
   end
 
-  defp respond(:ok, instance, socket, _data) do
-    connection_loop(instance, socket)
+  defp transport_send({transport, raw_socket}, data) do
+    case transport do
+      :tcp -> :gen_tcp.send(raw_socket, data)
+      :tls -> :ssl.send(raw_socket, data)
+    end
   end
 
-  defp respond({:error, :not_found}, instance, socket, data) do
-    message =
-      "#{TestServer.format_instance(TestServer.TCP, instance)} received unexpected TCP data"
-      |> append_formatted_data(data)
-      |> append_formatted_handlers(instance)
-
-    send_error(socket, {RuntimeError.exception(message), []}, instance)
-    :gen_tcp.close(socket)
-    Instance.unregister_connection(instance, self())
+  defp maybe_transport_upgrade({:error, reason}, _instance, _new_transport) do
+    {:error, reason}
   end
 
-  defp respond({:error, {exception, stacktrace}}, instance, socket, _data) do
-    send_error(socket, {exception, stacktrace}, instance)
-    :gen_tcp.close(socket)
-    Instance.unregister_connection(instance, self())
+  defp maybe_transport_upgrade({:ok, {transport, _socket} = socket, state}, _instance, transport) do
+    {:ok, socket, state}
+  end
+
+  defp maybe_transport_upgrade({:ok, {:tcp, _} = socket, state}, instance, :tls) do
+    options = Instance.options(instance)
+
+    case transport_upgrade(socket, options) do
+      {:ok, tls_socket} ->
+        {:ok, _connection, _state} =
+          Instance.dispatch(instance, {:connection, self(), tls_socket})
+
+        {:ok, tls_socket, state}
+
+      {:error, reason} ->
+        {:error,
+         RuntimeError.exception("TCP transport upgrade failed, because: #{inspect(reason)}")}
+    end
+  end
+
+  defp transport_upgrade({:tcp, raw_socket}, options) do
+    listen_options = listen_options(options, :tls)
+
+    case transport_setopts({:tcp, raw_socket}, active: false) do
+      :ok -> transport_handshake({:tls, raw_socket}, listen_options)
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp handle_send(instance, socket, {options, stacktrace}, state) do
+    case Instance.dispatch(instance, {:send, options, state, stacktrace}) do
+      {:reply, data, state} -> send_data(data, socket, state)
+      {:ok, state} -> {:ok, socket, state}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp send_error(socket, {exception, stacktrace}, instance) do
-    Instance.report_error(instance, {exception, stacktrace})
+    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
 
     message = Exception.format(:error, exception, stacktrace)
-    :gen_tcp.send(socket, message)
+
+    transport_send(socket, message)
+  end
+
+  defp send_error(socket, reason, instance), do: send_error(socket, {reason, []}, instance)
+
+  defp transport_close({transport, raw_socket}) do
+    case transport do
+      :tcp -> :gen_tcp.close(raw_socket)
+      :tls -> :ssl.close(raw_socket)
+    end
+  end
+
+  defp transport_controlling_process({transport, raw_socket}, owner) do
+    case transport do
+      :tcp -> :gen_tcp.controlling_process(raw_socket, owner)
+      :tls -> :ssl.controlling_process(raw_socket, owner)
+    end
   end
 
   defp append_formatted_data(message, data) do
@@ -187,16 +422,37 @@ defmodule TestServer.TCP.Server do
     """
   end
 
-  @doc false
-  @spec stop(keyword(), [map()]) :: :ok
-  def stop(options, connections) do
-    options
-    |> Keyword.fetch!(:listen_socket)
-    |> :gen_tcp.close()
+  defp append_formatted_connections(message, instance) do
+    connections = Enum.split_with(Instance.connections(instance), &is_nil(&1.owner))
 
-    Enum.each(connections, fn
-      %{socket: nil} -> :ok
-      %{socket: socket} -> :gen_tcp.close(socket)
-    end)
+    """
+    #{message}
+
+    #{format_connections(connections)}
+    """
+  end
+
+  defp format_connections({[], used_connections}) do
+    message = "No available connections."
+
+    case used_connections do
+      [] ->
+        message
+
+      used_connections ->
+        """
+        #{message} The following connections have been used:
+
+        #{Instance.format_connections(used_connections)}
+        """
+    end
+  end
+
+  defp format_connections({available_connections, _used_connections}) do
+    """
+    Available connections:
+
+    #{Instance.format_connections(available_connections)}
+    """
   end
 end

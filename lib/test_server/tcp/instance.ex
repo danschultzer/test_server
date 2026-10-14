@@ -5,66 +5,95 @@ defmodule TestServer.TCP.Instance do
 
   alias TestServer.TCP.Server
 
+  @send_timeout 1_000
+
   def start_link(options) do
     GenServer.start_link(__MODULE__, options)
   end
 
-  def stop(instance) do
-    GenServer.stop(instance)
-  end
-
-  @spec register(TestServer.instance(), {:connect, {keyword(), TestServer.stacktrace()}}) ::
+  @spec register(TestServer.instance(), {:connection, TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.TCP.connection_ref()}}
-  def register(instance, {:connect, {options, stacktrace}}) do
-    GenServer.call(instance, {:register, {:connect, {options, stacktrace}}})
+  def register(instance, {:connection, stacktrace}) do
+    GenServer.call(instance, {:register, {:connection, stacktrace}})
   end
 
   @spec register(
           TestServer.instance(),
-          {:handle, {TestServer.TCP.connection_ref() | nil, keyword(), TestServer.stacktrace()}}
+          {:handle, TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}
         ) :: {:ok, map()}
-  def register(instance, {:handle, {connection_ref, options, stacktrace}}) do
-    options[:to] && ensure_function!(options[:to])
-    options[:match] && ensure_function!(options[:match])
+  def register(instance, {:handle, connection_ref, options, stacktrace}) do
+    Keyword.has_key?(options, :to) && ensure_function!(options[:to])
+    Keyword.has_key?(options, :match) && ensure_function!(options[:match])
 
-    GenServer.call(instance, {:register, {:handle, {connection_ref, options, stacktrace}}})
+    GenServer.call(instance, {:register, {:handle, connection_ref, options, stacktrace}})
+  end
+
+  @spec register(
+          TestServer.instance(),
+          {:send, TestServer.TCP.connection_ref(), keyword()}
+        ) ::
+          {:ok, pid()}
+          | {:error, :einval}
+          | {:error, :enotconn}
+          | {:error, :closed}
+  def register(instance, {:send, connection_ref, options}) do
+    timeout = Keyword.get(options, :timeout, @send_timeout)
+
+    Keyword.has_key?(options, :to) && ensure_function!(options[:to])
+    Keyword.has_key?(options, :timeout) && ensure_integer!(timeout)
+
+    GenServer.call(
+      instance,
+      {:register, {:send, connection_ref, timeout}},
+      timeout + 1_000
+    )
   end
 
   defp ensure_function!(fun) when is_function(fun), do: :ok
   defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
 
-  @spec dispatch(TestServer.instance(), {:handle, pid(), binary()}) ::
-          {:reply, TestServer.TCP.data()}
-          | :ok
-          | {:error, :not_found}
-          | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:handle, connection_pid, data}) do
-    GenServer.call(instance, {:dispatch, {:handle, {connection_pid, data}}})
+  defp ensure_integer!(value) when is_integer(value) and value > 0, do: :ok
+
+  defp ensure_integer!(value),
+    do: raise(ArgumentError, "expected positive integer, got: #{inspect(value)}")
+
+  @spec dispatch(
+          TestServer.instance(),
+          {:connection, pid(), {:tcp, :gen_tcp.socket()} | {:tls, :ssl.socket()}}
+        ) ::
+          {:ok, map(), TestServer.TCP.state()} | {:error, :not_found}
+  def dispatch(instance, {:connection, owner, socket}) do
+    GenServer.call(instance, {:dispatch, {:connection, owner, socket}})
   end
 
   @spec dispatch(
           TestServer.instance(),
-          {:send, {TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}}
-        ) :: :ok | {:error, term()}
-  def dispatch(instance, {:send, {connection_ref, options, stacktrace}}) do
-    options[:to] && ensure_function!(options[:to])
-
-    GenServer.call(instance, {:dispatch, {:send, {connection_ref, options, stacktrace}}})
+          {:handle, pid(), TestServer.TCP.data(), TestServer.TCP.state()}
+        ) ::
+          {:reply, {iodata(), keyword()}, TestServer.TCP.state()}
+          | {:ok, TestServer.TCP.state()}
+          | {:error, :not_found}
+          | {:error, {term(), TestServer.stacktrace()}}
+  def dispatch(instance, {:handle, owner, data, connection_state}) do
+    GenServer.call(instance, {:dispatch, {:handle, owner, data, connection_state}})
   end
 
-  @spec register_connection(TestServer.instance(), pid(), port()) :: :ok
-  def register_connection(instance, connection_pid, socket) do
-    GenServer.call(instance, {:register, {:connection, {connection_pid, socket}}})
+  @spec dispatch(
+          TestServer.instance(),
+          {:send, keyword(), TestServer.TCP.state(), TestServer.stacktrace()}
+        ) ::
+          {:reply, iodata(), TestServer.TCP.state()}
+          | {:ok, TestServer.TCP.state()}
+          | {:error, {term(), TestServer.stacktrace()}}
+  def dispatch(instance, {:send, options, connection_state, stacktrace}) do
+    Keyword.has_key?(options, :to) && ensure_function!(options[:to])
+
+    GenServer.call(instance, {:dispatch, {:send, options, connection_state, stacktrace}})
   end
 
-  @spec unregister_connection(TestServer.instance(), pid()) :: :ok
-  def unregister_connection(instance, connection_pid) do
-    GenServer.cast(instance, {:unregister, {:connection, connection_pid}})
-  end
-
-  @spec handlers(TestServer.instance()) :: [map()]
-  def handlers(instance) do
-    GenServer.call(instance, :handlers)
+  @spec options(TestServer.instance()) :: keyword()
+  def options(instance) do
+    GenServer.call(instance, :options)
   end
 
   @spec connections(TestServer.instance()) :: [map()]
@@ -72,9 +101,9 @@ defmodule TestServer.TCP.Instance do
     GenServer.call(instance, :connections)
   end
 
-  @spec get_options(TestServer.instance()) :: keyword()
-  def get_options(instance) do
-    GenServer.call(instance, :options)
+  @spec handlers(TestServer.instance()) :: [map()]
+  def handlers(instance) do
+    GenServer.call(instance, :handlers)
   end
 
   @spec format_handlers([map()]) :: binary()
@@ -101,97 +130,114 @@ defmodule TestServer.TCP.Instance do
     end)
   end
 
-  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
-  def report_error(instance, {exception, stacktrace}) do
-    options = get_options(instance)
-    caller = Keyword.fetch!(options, :caller)
-
-    unless Keyword.get(options, :suppress_warning, false),
-      do: IO.warn(Exception.format(:error, exception, stacktrace))
-
-    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      reraise exception, stacktrace
-    end)
-
-    :ok
-  end
-
   @impl true
   def init(options) do
-    {:ok, options} = Server.start(self(), options)
+    case Server.start(self(), options) do
+      {:ok, options} ->
+        {:ok, %{options: options, handlers: [], connections: []}}
 
-    {:ok, %{options: options, handlers: [], connections: []}}
+      {:error, reason} ->
+        {:stop, reason}
+    end
   end
 
   @impl true
-  def handle_call({:register, {:connect, {_options, stacktrace}}}, _from, state) do
+  def handle_call({:register, {:connection, stacktrace}}, _from, state) do
     connection = %{
       ref: make_ref(),
       stacktrace: stacktrace,
-      pid: nil,
+      owner: nil,
       socket: nil,
-      state: %{}
+      subscribers: []
     }
 
     {:reply, {:ok, connection}, %{state | connections: state.connections ++ [connection]}}
   end
 
-  def handle_call(
-        {:register, {:handle, {connection_ref, options, stacktrace}}},
-        _from,
-        state
-      ) do
+  def handle_call({:register, {:handle, connection_ref, options, stacktrace}}, _from, state) do
     handler = %{
-      ref: make_ref(),
       connection_ref: connection_ref,
       match: Keyword.get(options, :match),
       to: Keyword.fetch!(options, :to),
       stacktrace: stacktrace,
-      suspended: false,
-      received: []
+      suspended: false
     }
 
     {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
   end
 
-  def handle_call({:register, {:connection, {connection_pid, socket}}}, _from, state) do
-    {_connection, connections} = bind_connection(state.connections, connection_pid, socket)
+  def handle_call({:register, {:send, connection_ref, timeout}}, from, state) do
+    {index, connection} = find_index_value(state.connections, &(&1.ref == connection_ref))
+    alive? = connection && connection.owner && Process.alive?(connection.owner)
 
-    {:reply, :ok, %{state | connections: connections}}
+    case {connection, alive?} do
+      {nil, _} ->
+        {:reply, {:error, :einval}, state}
+
+      {%{owner: nil} = connection, _} ->
+        timer =
+          Process.send_after(
+            self(),
+            {:timeout, from, {:send, index}},
+            timeout
+          )
+
+        connection = %{connection | subscribers: connection.subscribers ++ [{from, timer}]}
+        connections = put_index_value(state.connections, index, connection)
+        state = %{state | connections: connections}
+
+        {:noreply, state}
+
+      {%{owner: _owner}, false} ->
+        {:reply, {:error, :closed}, state}
+
+      {%{owner: owner}, true} ->
+        {:reply, {:ok, owner}, state}
+    end
   end
 
-  def handle_call({:dispatch, {:handle, {connection_pid, data}}}, _from, state) do
-    case Enum.find(state.connections, &(&1.pid == connection_pid)) do
+  def handle_call({:dispatch, {:connection, owner, socket}}, _from, state) do
+    connection =
+      Enum.find_index(state.connections, &(&1.owner == owner)) ||
+        Enum.find_index(state.connections, &is_nil(&1.owner))
+
+    case connection do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      index ->
+        connection = %{Enum.at(state.connections, index) | owner: owner, socket: socket}
+        connection = notify_connection_subscribers(connection, owner)
+        connections = List.replace_at(state.connections, index, connection)
+        state = %{state | connections: connections}
+
+        {:reply, {:ok, connection, %{}}, state}
+    end
+  end
+
+  def handle_call({:dispatch, {:handle, owner, data, connection_state}}, _from, state) do
+    case Enum.find(state.connections, &(&1.owner == owner)) do
       nil ->
         {:reply, {:error, :not_found}, state}
 
       connection ->
-        {res, state} = run_handlers(data, connection, state)
-        {res, state} = update_connection_response(res, connection_pid, state)
+        {result, state} = run_handlers(data, connection, connection_state, state)
 
-        {:reply, res, state}
+        {:reply, result, state}
     end
   end
 
   def handle_call(
-        {:dispatch, {:send, {connection_ref, options, stacktrace}}},
+        {:dispatch, {:send, options, connection_state, stacktrace}},
         _from,
         state
       ) do
-    to = Keyword.fetch!(options, :to)
+    result =
+      options
+      |> Keyword.fetch!(:to)
+      |> try_run_send_handler(connection_state, stacktrace)
 
-    case Enum.find(state.connections, &(&1.ref == connection_ref)) do
-      %{socket: socket} = connection when not is_nil(socket) ->
-        {result, state} =
-          connection
-          |> run_send_handler(to, stacktrace)
-          |> update_send_response(connection, state)
-
-        {:reply, result, state}
-
-      _no_connected_client ->
-        {:reply, {:error, :not_connected}, state}
-    end
+    {:reply, result, state}
   end
 
   def handle_call(option, _from, state) when option in [:connections, :handlers, :options] do
@@ -199,42 +245,57 @@ defmodule TestServer.TCP.Instance do
   end
 
   @impl true
-  def handle_cast({:unregister, {:connection, connection_pid}}, state) do
-    connections = Enum.reject(state.connections, &(&1.pid == connection_pid))
+  def handle_info({:timeout, from, {:send, connection_index}}, state) do
+    case Enum.at(state.connections, connection_index) do
+      %{subscribers: []} ->
+        {:noreply, state}
 
-    {:noreply, %{state | connections: connections}}
-  end
+      %{subscribers: subscribers} = connection ->
+        subscribers =
+          Enum.filter(subscribers, fn {subscriber_from, _timer} ->
+            subscriber_from != from
+          end)
 
-  defp bind_connection(connections, connection_pid, socket) do
-    case Enum.find_index(connections, &(not is_nil(&1.ref) and is_nil(&1.pid))) do
-      nil ->
-        connection = %{
-          ref: nil,
-          stacktrace: [],
-          pid: connection_pid,
-          socket: socket,
-          state: %{}
-        }
+        connections =
+          put_index_value(state.connections, connection_index, %{
+            connection
+            | subscribers: subscribers
+          })
 
-        {connection, connections ++ [connection]}
+        GenServer.reply(from, {:error, :enotconn})
 
-      index ->
-        connection = %{
-          Enum.at(connections, index)
-          | pid: connection_pid,
-            socket: socket
-        }
-
-        {connection, List.replace_at(connections, index, connection)}
+        {:noreply, %{state | connections: connections}}
     end
   end
 
-  defp run_handlers(data, connection, state) do
+  defp notify_connection_subscribers(connection, owner) do
+    Enum.each(connection.subscribers, fn {from, timer} ->
+      Process.cancel_timer(timer)
+      GenServer.reply(from, {:ok, owner})
+    end)
+
+    %{connection | subscribers: []}
+  end
+
+  defp find_index_value(list, fun) do
+    Enum.reduce_while(list, {0, nil}, fn item, {index, nil} ->
+      case fun.(item) do
+        true -> {:halt, {index, item}}
+        false -> {:cont, {index + 1, nil}}
+      end
+    end)
+  end
+
+  defp put_index_value(list, index, value) do
+    List.update_at(list, index, fn _ -> value end)
+  end
+
+  defp run_handlers(data, %{ref: connection_ref}, connection_state, state) do
     state.handlers
-    |> fetch_match_index([data, connection.state], fn
-      %{suspended: true} -> false
-      %{connection_ref: nil} -> true
-      %{connection_ref: ref} -> ref == connection.ref
+    |> fetch_match_index([data, connection_state], fn
+      %{connection_ref: ^connection_ref, suspended: true} -> false
+      %{connection_ref: ^connection_ref, suspended: false} -> true
+      %{connection_ref: _other, suspended: _any} -> false
     end)
     |> case do
       {:error, :not_found} ->
@@ -246,11 +307,11 @@ defmodule TestServer.TCP.Instance do
       {:ok, index} ->
         %{to: handler, stacktrace: stacktrace} = Enum.at(state.handlers, index)
 
-        result = try_run_handler(handler, data, connection.state, stacktrace)
+        result = try_run_handler(handler, data, connection_state, stacktrace)
 
         handlers =
           List.update_at(state.handlers, index, fn handler ->
-            %{handler | suspended: true, received: handler.received ++ [data]}
+            %{handler | suspended: true}
           end)
 
         {result, %{state | handlers: handlers}}
@@ -273,24 +334,74 @@ defmodule TestServer.TCP.Instance do
   defp try_run_handler(handler, data, connection_state, stacktrace) do
     data
     |> run_handler(handler, connection_state)
-    |> validate_response!(stacktrace)
+    |> validate_handler_response!(stacktrace)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  defp run_handler(data, handler, connection_state) when is_function(handler, 2) do
+  defp run_handler(data, handler, connection_state) do
     handler.(data, connection_state)
   end
 
-  defp run_send_handler(connection, handler, stacktrace) when is_function(handler, 1) do
-    connection.state
-    |> handler.()
-    |> validate_response!(stacktrace)
+  defp validate_handler_response!(response, stacktrace) do
+    case response do
+      {:reply, {data, options}, state} ->
+        validate_handler_options!(options, stacktrace)
+
+        {:reply, {data, options}, state}
+
+      {:reply, data, state} ->
+        {:reply, {data, []}, state}
+
+      {:ok, state} ->
+        {:ok, state}
+
+      _other ->
+        raise """
+        Invalid callback response, got: #{inspect(response)}.
+
+        Expected one of the following:
+
+          - {:reply, data, state}, where data is iodata
+          - {:reply, {data, options}, state}, where data is iodata
+          - {:ok, state}
+
+        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+        """
+    end
+  end
+
+  defp validate_handler_options!(options, stacktrace) do
+    valid_options = ~w(upgrade)a
+
+    case Keyword.validate(options, valid_options) do
+      {:ok, _options} ->
+        :ok
+
+      {:error, _keys} ->
+        raise """
+        Invalid options in callback response, got: #{inspect(options)}.
+
+        Valid options are: #{inspect(valid_options)}.
+
+        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+        """
+    end
+  end
+
+  defp try_run_send_handler(handler, connection_state, stacktrace) do
+    handler
+    |> run_send_handler(connection_state)
+    |> validate_send_response!(stacktrace)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  defp validate_response!(response, stacktrace) do
+  defp run_send_handler(handler, connection_state) do
+    handler.(connection_state)
+  end
+
+  defp validate_send_response!(response, stacktrace) do
     case response do
       {:reply, data, state} ->
         {:reply, data, state}
@@ -309,47 +420,6 @@ defmodule TestServer.TCP.Instance do
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
-    end
-  end
-
-  defp update_connection_response({:reply, data, connection_state}, connection_pid, state) do
-    {{:reply, data}, update_connection_state(state, connection_pid, connection_state)}
-  end
-
-  defp update_connection_response({:ok, connection_state}, connection_pid, state) do
-    {:ok, update_connection_state(state, connection_pid, connection_state)}
-  end
-
-  defp update_connection_response(response, _connection_pid, state) do
-    {response, state}
-  end
-
-  defp update_send_response({:reply, data, connection_state}, connection, state) do
-    send(connection.pid, {:write, data})
-    {:ok, update_connection_state(state, connection.pid, connection_state)}
-  end
-
-  defp update_send_response({:ok, connection_state}, connection, state) do
-    {:ok, update_connection_state(state, connection.pid, connection_state)}
-  end
-
-  defp update_send_response({:error, {exception, stacktrace}}, connection, state) do
-    send(connection.pid, {:write, Exception.format(:error, exception, stacktrace)})
-    {{:error, {exception, stacktrace}}, state}
-  end
-
-  defp update_connection_state(state, connection_pid, connection_state) do
-    case Enum.find_index(state.connections, &(&1.pid == connection_pid)) do
-      nil ->
-        state
-
-      index ->
-        connections =
-          List.update_at(state.connections, index, fn connection ->
-            %{connection | state: connection_state}
-          end)
-
-        %{state | connections: connections}
     end
   end
 end

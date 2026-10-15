@@ -142,21 +142,6 @@ defmodule TestServer.HTTP.Instance do
     end)
   end
 
-  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
-  def report_error(instance, {exception, stacktrace}) do
-    options = get_options(instance)
-    caller = Keyword.fetch!(options, :caller)
-
-    unless Keyword.get(options, :suppress_warning, false),
-      do: IO.warn(Exception.format(:error, exception, stacktrace))
-
-    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      reraise exception, stacktrace
-    end)
-
-    :ok
-  end
-
   @impl true
   def init(options) do
     case Server.start(self(), options) do

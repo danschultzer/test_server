@@ -166,4 +166,18 @@ defmodule TestServer do
         host
     end
   end
+
+  @spec report_error(keyword(), {struct(), TestServer.stacktrace()}) :: :ok
+  def report_error(options, {exception, stacktrace}) do
+    caller = Keyword.fetch!(options, :caller)
+
+    unless Keyword.get(options, :suppress_warning, false),
+      do: IO.warn(Exception.format(:error, exception, stacktrace))
+
+    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
+      reraise exception, stacktrace
+    end)
+
+    :ok
+  end
 end

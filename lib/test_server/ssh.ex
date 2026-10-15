@@ -286,7 +286,27 @@ defmodule TestServer.SSH do
     {instance, channel.ref}
   end
 
-  @spec handle(channel()) :: :ok
+  def handle, do: handle([])
+
+  @spec handle(channel() | keyword()) :: :ok
+  def handle(options) when is_list(options) do
+    instance = TestServer.autostart_instance(__MODULE__)
+
+    channel =
+      case Instance.channels(instance) do
+        [channel] ->
+          {instance, channel.ref}
+
+        [] ->
+          channel(instance, [])
+
+        _multiple_channels ->
+          raise "Multiple channels available, please pass channel to `TestServer.SSH.handle/2`"
+      end
+
+    handle(channel, options)
+  end
+
   def handle(channel), do: handle(channel, [])
 
   @doc """

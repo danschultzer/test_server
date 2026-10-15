@@ -8,7 +8,7 @@ if Code.ensure_loaded?(:httpd) do
 
     ## Usage
 
-        TestServer.HTTP.start(
+        TestServer.HTTP.start!(
           http_server: {TestServer.HTTP.Server.Httpd, httpd_options}
         )
     """

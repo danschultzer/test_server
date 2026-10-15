@@ -11,14 +11,11 @@ Mock HTTP/1, HTTP/2, and WebSocket endpoints with route expectations, plug pipel
 Add route request expectations with `TestServer.HTTP.handle/2`:
 
 ```elixir
-test "fetch_url/0" do
+test "fetch_url/1" do
   # The test server will autostart the current test server, if not already running
   TestServer.HTTP.handle("/", via: :get)
 
-  # The URL is derived from the current test server instance
-  Application.put_env(:my_app, :fetch_url, TestServer.HTTP.url())
-
-  {:ok, "HTTP"} = MyModule.fetch_url()
+  {:ok, "HTTP"} = MyModule.fetch_url(TestServer.HTTP.url())
 end
 ```
 
@@ -80,13 +77,13 @@ By default the test server is set up to serve plain HTTP. HTTPS can be enabled w
 Custom SSL certificates can also be used by defining the `:tls` option:
 
 ```elixir
-TestServer.HTTP.start(scheme: :https, tls: [keyfile: key, certfile: cert])
+TestServer.HTTP.start!(scheme: :https, tls: [keyfile: key, certfile: cert])
 ```
 
 A self-signed certificate suite is automatically generated if you don't set the `:tls` options:
 
 ```elixir
-TestServer.HTTP.start(scheme: :https)
+TestServer.HTTP.start!(scheme: :https)
 
 req_options = [
   connect_options: [
@@ -107,9 +104,9 @@ WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/2`. By de
 test "WebSocketClient" do
   socket = TestServer.HTTP.websocket("/ws")
 
-  :ok = TestServer.HTTP.websocket_handle(socket)
-  :ok = TestServer.HTTP.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi" end)
-  :ok = TestServer.HTTP.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
+  TestServer.HTTP.websocket_handle(socket)
+  TestServer.HTTP.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi" end)
+  TestServer.HTTP.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
 
   {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
@@ -122,7 +119,7 @@ test "WebSocketClient" do
   :ok = WebSocketClient.send(client, "hi")
   {:ok, "hi"} = WebSocketClient.receive(client)
 
-  :ok = TestServer.HTTP.websocket_send(socket, to: fn state -> {:reply, {:text, "ping"}, state} end)
+  TestServer.HTTP.websocket_send(socket, to: fn state -> {:reply, {:text, "ping"}, state} end)
   {:ok, "ping"} = WebSocketClient.receive(client)
 end
 ```
@@ -134,7 +131,7 @@ end
 TestServer supports `Bandit`, `Plug.Cowboy`, and `:httpd` out of the box. The HTTP adapter will be selected in this order depending which is available in the dependencies. You can also explicitly set the http server in the configuration when calling `TestServer.HTTP.start/1`:
 
 ```elixir
-TestServer.HTTP.start(http_server: {TestServer.HTTP.Server.Bandit, []})
+TestServer.HTTP.start!(http_server: {TestServer.HTTP.Server.Bandit, []})
 ```
 
 You can create your own plug based HTTP Server Adapter by using the `TestServer.HTTP.Server` behaviour.
@@ -144,16 +141,15 @@ You can create your own plug based HTTP Server Adapter by using the `TestServer.
 Use the `:ipfamily` option to test with IPv6 when starting the test server with `TestServer.HTTP.start/1`:
 
 ```elixir
-TestServer.HTTP.start(ipfamily: :inet6)
+TestServer.HTTP.start!(ipfamily: :inet6)
 
-assert :ok =
-          TestServer.HTTP.handle("/",
-            to: fn conn ->
-              assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+TestServer.HTTP.handle("/",
+  to: fn conn ->
+    assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 
-              Plug.Conn.resp(conn, 200, "OK")
-            end
-          )
+    Plug.Conn.resp(conn, 200, "OK")
+  end
+)
 ```
 
 <!-- MDOC !-->

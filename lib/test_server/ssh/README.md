@@ -21,25 +21,39 @@ test "SSHClient" do
 end
 ```
 
-`TestServer.SSH.handle/2` can route a message to an anonymous function:
+`TestServer.SSH.handle/2` can route a message to an anonymous function with `:to` option.
 
 ```elixir
-TestServer.SSH.handle(channel,
+TestServer.SSH.handle(
   to: fn {:data, _channel_id, _want_reply, _data}, state ->
     {:reply, "pong", state}
   end
 )
 ```
 
-A custom `:match` function can select a message:
+A custom `:match` function can select a message.
 
 ```elixir
-TestServer.SSH.handle(channel,
+TestServer.SSH.handle(
   match: fn
     {:data, _channel_id, _want_reply, "ping"}, _state -> true
     _message, _state -> false
   end
 )
+```
+
+When a message is matched the handle will be removed from active list. The handler will be triggered in the order they were added:
+
+```elixir
+TestServer.SSH.handle(fn _, state -> {:reply, "first", state} end)
+TestServer.SSH.handle(fn _, state -> {:reply, "second", state} end)
+
+{:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+{:ok, channel_id} = SSHClient.session_channel(conn)
+:ok = SSHClient.send(conn, channel_id, "hello")
+{:ok, "first"} = SSHClient.receive_data(conn, channel_id)
+:ok = SSHClient.send(conn, channel_id, "hello")
+{:ok, "second"} = SSHClient.receive_data(conn, channel_id)
 ```
 
 By default, `:exec` and `:data` messages are dispatched. Use `:messages` to
@@ -68,7 +82,7 @@ By default the test server accepts unauthenticated requests. Pass in `:user_pass
 {:RSAPrivateKey, _, mod, exp, _, _, _, _, _, _, _} =
   :public_key.generate_key({:rsa, 2048, 65_537})
 
-TestServer.SSH.start(
+TestServer.SSH.start!(
   user_passwords: [{"user1", "pass"}],
   auth_keys: [{"user2", {:RSAPublicKey, mod, exp}}]
 )

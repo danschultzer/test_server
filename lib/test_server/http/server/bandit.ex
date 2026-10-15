@@ -9,7 +9,7 @@ if Code.ensure_loaded?(Bandit) do
 
     ## Usage
 
-        TestServer.HTTP.start(
+        TestServer.HTTP.start!(
           http_server: {TestServer.HTTP.Server.Bandit, bandit_options}
         )
     """

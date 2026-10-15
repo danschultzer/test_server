@@ -57,7 +57,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      TestServer.HTTP.start(
+      TestServer.HTTP.start!(
         scheme: :https,
         ipfamily: :inet6,
         http_server: {TestServer.HTTP.Server.Bandit, [ip: :any]}
@@ -141,7 +141,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      TestServer.HTTP.start()
+      TestServer.HTTP.start!()
       url = TestServer.HTTP.url()
       TestServer.HTTP.stop()
 
@@ -180,7 +180,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      TestServer.HTTP.start(port: 4444)
+      TestServer.HTTP.start!(port: 4444)
 
       assert TestServer.HTTP.url() == "http://localhost:4444"
       assert TestServer.HTTP.url("/test") == "http://localhost:4444/test"
@@ -326,7 +326,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      TestServer.HTTP.start(scheme: :https)
+      TestServer.HTTP.start!(scheme: :https)
       TestServer.HTTP.handle("/")
 
       %{cert: _, cacerts: cacerts} = TestServer.HTTP.x509_suite()

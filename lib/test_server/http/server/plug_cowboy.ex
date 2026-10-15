@@ -9,7 +9,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
 
     ## Usage
 
-        TestServer.HTTP.start(
+        TestServer.HTTP.start!(
           http_server: {TestServer.HTTP.Server.Plug.Cowboy, cowboy_options}
         )
     """

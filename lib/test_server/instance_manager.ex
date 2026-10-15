@@ -12,7 +12,7 @@ defmodule TestServer.InstanceManager do
   @spec start_instance(pid(), module(), keyword()) ::
           {:ok, TestServer.instance()} | {:error, term()}
   def start_instance(caller, protocol_module, options) do
-    [_first | stacktrace] = TestServer.get_pruned_stacktrace(protocol_module)
+    [_first | stacktrace] = TestServer.pruned_stacktrace(protocol_module)
 
     instance_module = Module.concat(protocol_module, Instance)
 
@@ -48,7 +48,7 @@ defmodule TestServer.InstanceManager do
   end
 
   defp raise_multiple_instances_error(instances, protocol_module) do
-    [{m, f, a, _} | _] = TestServer.get_pruned_stacktrace(protocol_module)
+    [{m, f, a, _} | _] = TestServer.pruned_stacktrace(protocol_module)
 
     formatted_instances =
       instances

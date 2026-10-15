@@ -2,12 +2,11 @@ defmodule TestServer.HTTP.Server.HttpdTest do
   use ExUnit.Case
 
   setup context do
-    {:ok, _instance} =
-      TestServer.HTTP.start(
-        scheme: :http,
-        http_server: {TestServer.HTTP.Server.Httpd, []},
-        ipfamily: context[:ipfamily] || :inet
-      )
+    TestServer.HTTP.start!(
+      scheme: :http,
+      http_server: {TestServer.HTTP.Server.Httpd, []},
+      ipfamily: context[:ipfamily] || :inet
+    )
 
     :ok
   end

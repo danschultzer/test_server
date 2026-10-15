@@ -3,6 +3,8 @@ defmodule TestServer.SSH.Instance do
 
   use GenServer
 
+  alias TestServer.SSH.Server
+
   def start_link(options) do
     GenServer.start_link(__MODULE__, options)
   end
@@ -56,7 +58,7 @@ defmodule TestServer.SSH.Instance do
 
   @spec dispatch(
           TestServer.instance(),
-          {:channel_up, TestServer.SSH.channel_id(), TestServer.SSH.connection()}
+          {:channel_up, :ssh.channel_id(), :ssh.connection_ref()}
         ) ::
           {:ok, {TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}}
           | {:error, :not_found}
@@ -66,11 +68,11 @@ defmodule TestServer.SSH.Instance do
 
   @spec dispatch(
           TestServer.instance(),
-          {:handle, TestServer.SSH.channel_id(), TestServer.SSH.connection(),
-           TestServer.SSH.channel_msg(), TestServer.SSH.state()}
+          {:handle, :ssh.channel_id(), :ssh.connection_ref(), :ssh_connection.channel_msg(),
+           TestServer.SSH.state()}
         ) ::
           {:raw, {:ok, TestServer.SSH.state()}}
-          | {:raw, {:stop, TestServer.SSH.channel_id(), TestServer.SSH.state()}}
+          | {:raw, {:stop, :ssh.channel_id(), TestServer.SSH.state()}}
           | {:reply, {binary(), keyword()}, TestServer.SSH.state()}
           | {:ok, TestServer.SSH.state()}
           | {:error, :not_found}
@@ -92,8 +94,8 @@ defmodule TestServer.SSH.Instance do
     GenServer.call(instance, :channels)
   end
 
-  @spec get_options(TestServer.instance()) :: keyword()
-  def get_options(instance) do
+  @spec options(TestServer.instance()) :: keyword()
+  def options(instance) do
     GenServer.call(instance, :options)
   end
 
@@ -121,25 +123,8 @@ defmodule TestServer.SSH.Instance do
     end)
   end
 
-  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
-  def report_error(instance, {exception, stacktrace}) do
-    options = get_options(instance)
-    caller = Keyword.fetch!(options, :caller)
-
-    unless Keyword.get(options, :suppress_warning, false),
-      do: IO.warn(Exception.format(:error, exception, stacktrace))
-
-    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      reraise exception, stacktrace
-    end)
-
-    :ok
-  end
-
   @impl true
   def init(options) do
-    alias TestServer.SSH.Server
-
     case Server.start(self(), options) do
       {:ok, options} ->
         {:ok,

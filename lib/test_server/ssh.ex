@@ -9,21 +9,18 @@ defmodule TestServer.SSH do
 
   @type channel :: {TestServer.instance(), channel_ref()}
   @type channel_ref :: reference()
-  @type channel_id :: :ssh.channel_id()
   @type state :: term()
-  @type channel_msg :: :ssh_connection.channel_msg()
-  @type connection :: :ssh.connection_ref()
 
-  @type handler_fun :: (channel_msg(), state() ->
+  @type handler_fun :: (:ssh_connection.channel_msg(), state() ->
                           {:reply, iodata(), state()}
                           | {:reply, {iodata(), keyword()}, state()}
                           | {:ok, state()})
 
-  @type raw_handler_fun :: (channel_msg(), connection(), state() ->
+  @type raw_handler_fun :: (:ssh_connection.channel_msg(), :ssh.connection_ref(), state() ->
                               {:ok, state()}
-                              | {:stop, channel_id(), state()})
+                              | {:stop, :ssh.channel_id(), state()})
 
-  @type match_fun :: (channel_msg(), state() -> boolean())
+  @type match_fun :: (:ssh_connection.channel_msg(), state() -> boolean())
 
   @type host_key :: %{
           key:
@@ -80,13 +77,13 @@ defmodule TestServer.SSH do
       auth_public_key = {:RSAPublicKey, mod, exp}
       user_dir = SSHClient.write_user_dir_pem!(auth_key, "id_rsa")
 
-      {:ok, _instance} = TestServer.SSH.start(
+      TestServer.SSH.start!(
         port: 2222,
         host_keys: [host_key],
         auth_keys: [{"user", auth_public_key}]
       )
 
-      {:ok, channel} = TestServer.SSH.channel()
+      channel = TestServer.SSH.channel()
 
       :ok =
         TestServer.SSH.handle(
@@ -121,9 +118,20 @@ defmodule TestServer.SSH do
       assert {:ok, "pong"} = SSHClient.receive_data(conn, channel_id)
       assert :ok = SSHClient.close(conn)
   """
-  @spec start(keyword()) :: {:ok, TestServer.instance()}
+  @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     TestServer.start_instance(__MODULE__, options, &verify!/1)
+  end
+
+  @doc """
+  Same as `start/1`, but returns the instance and raises on failure.
+  """
+  @spec start!(keyword()) :: TestServer.instance()
+  def start!(options \\ []) do
+    case start(options) do
+      {:ok, instance} -> instance
+      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
+    end
   end
 
   defp verify!(instance) do
@@ -170,7 +178,7 @@ defmodule TestServer.SSH do
 
   ## Examples
 
-      {:ok, _instance} = TestServer.SSH.start()
+      _instance = TestServer.SSH.start!()
       {address, port} = TestServer.SSH.address()
       :ok = TestServer.SSH.stop()
 
@@ -186,12 +194,12 @@ defmodule TestServer.SSH do
   def stop(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    :ok = Server.stop(Instance.get_options(instance))
+    :ok = Server.stop(Instance.options(instance))
 
     TestServer.stop_instance(__MODULE__, instance)
   end
 
-  @spec address() :: {binary(), non_neg_integer()}
+  @spec address() :: {binary(), :inet.port_number()}
   def address, do: address([])
 
   @doc """
@@ -204,12 +212,12 @@ defmodule TestServer.SSH do
 
   ## Examples
 
-      {:ok, _instance} = TestServer.SSH.start(port: 2222)
+      TestServer.SSH.start!(port: 2222)
 
       assert TestServer.SSH.address() == {"localhost", 2222}
       assert TestServer.SSH.address(host: "myserver.test") == {"myserver.test", 2222}
   """
-  @spec address(keyword() | TestServer.instance()) :: {binary(), non_neg_integer()}
+  @spec address(keyword() | TestServer.instance()) :: {binary(), :inet.port_number()}
   def address(options) when is_list(options),
     do: address(TestServer.fetch_instance!(__MODULE__), options)
 
@@ -220,21 +228,21 @@ defmodule TestServer.SSH do
 
   See `address/1` for options.
   """
-  @spec address(TestServer.instance(), keyword()) :: {binary(), non_neg_integer()}
+  @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    host = TestServer.get_host(options)
-    port = instance |> Instance.get_options() |> Keyword.fetch!(:port)
+    host = TestServer.host(options)
+    port = instance |> Instance.options() |> Keyword.fetch!(:port)
 
     {host, port}
   end
 
-  @spec channel() :: {:ok, channel()}
+  @spec channel() :: channel()
   def channel, do: channel([])
 
   @doc """
-  Adds a channel to the current test server.
+  Adds an expected channel to the current test server.
 
   ## Options
 
@@ -244,7 +252,7 @@ defmodule TestServer.SSH do
 
   ## Examples
 
-      {:ok, channel} = TestServer.SSH.channel()
+      channel = TestServer.SSH.channel()
       :ok = TestServer.SSH.handle(channel)
 
       assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
@@ -253,32 +261,52 @@ defmodule TestServer.SSH do
       assert {:ok, "ping"} = SSHClient.receive_data(conn, channel_id)
       assert :ok = SSHClient.close(conn)
   """
-  @spec channel(keyword()) :: {:ok, channel()}
+  @spec channel(keyword()) :: channel()
   def channel(options) when is_list(options) do
-    {:ok, instance} = TestServer.autostart_instance(__MODULE__)
+    instance = TestServer.autostart_instance(__MODULE__)
 
     channel(instance, options)
   end
 
   @doc """
-  Adds a channel to a test server instance.
+  Adds an expected channel to a test server instance.
 
   See `channel/1` for options.
   """
-  @spec channel(TestServer.instance(), keyword()) :: {:ok, channel()}
+  @spec channel(TestServer.instance(), keyword()) :: channel()
   def channel(instance, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :messages, [:exec, :data])
 
     {:ok, channel} = Instance.register(instance, {:channel, {options, stacktrace}})
 
-    {:ok, {instance, channel.ref}}
+    {instance, channel.ref}
   end
 
-  @spec handle(channel()) :: :ok
+  def handle, do: handle([])
+
+  @spec handle(channel() | keyword()) :: :ok
+  def handle(options) when is_list(options) do
+    instance = TestServer.autostart_instance(__MODULE__)
+
+    channel =
+      case Instance.channels(instance) do
+        [channel] ->
+          {instance, channel.ref}
+
+        [] ->
+          channel(instance, [])
+
+        _multiple_channels ->
+          raise "Multiple channels available, please pass channel to `TestServer.SSH.handle/2`"
+      end
+
+    handle(channel, options)
+  end
+
   def handle(channel), do: handle(channel, [])
 
   @doc """
@@ -317,7 +345,7 @@ defmodule TestServer.SSH do
 
   ## Examples
 
-      {:ok, channel} = TestServer.SSH.channel()
+      channel = TestServer.SSH.channel()
 
       :ok =
         TestServer.SSH.handle(
@@ -345,7 +373,7 @@ defmodule TestServer.SSH do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] =
-      TestServer.get_pruned_stacktrace(__MODULE__)
+      TestServer.pruned_stacktrace(__MODULE__)
 
     {:ok, _handler} = Instance.register(instance, {:handle, {channel_ref, options, stacktrace}})
 
@@ -357,7 +385,7 @@ defmodule TestServer.SSH do
 
   ## Examples
 
-      {:ok, _instance} = TestServer.SSH.start()
+      _instance = TestServer.SSH.start!()
       [host_key | _] = TestServer.SSH.host_keys()
 
       assert {:ok, _conn} =
@@ -379,7 +407,7 @@ defmodule TestServer.SSH do
   def host_keys(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    options = Instance.get_options(instance)
+    options = Instance.options(instance)
 
     case is_list(options[:host_keys]) do
       true ->

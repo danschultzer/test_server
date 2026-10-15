@@ -12,7 +12,7 @@ defmodule TestServer do
   alias TestServer.InstanceManager
 
   @doc false
-  def get_pruned_stacktrace(calling_module) do
+  def pruned_stacktrace(calling_module) do
     {:current_stacktrace, [{Process, :info, _, _} | stacktrace]} =
       Process.info(self(), :current_stacktrace)
 
@@ -51,8 +51,11 @@ defmodule TestServer do
         put_ex_unit_on_exit_callback(protocol_module, instance, verify_fn)
         {:ok, instance}
 
-      {:error, error} ->
-        raise_start_failure(protocol_module, error)
+      {:error, {exception, stacktrace}} when is_exception(exception) ->
+        reraise exception, stacktrace
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -66,14 +69,6 @@ defmodule TestServer do
         end
       end
     end)
-  end
-
-  defp raise_start_failure(_calling_module, {:EXIT, reason}) do
-    raise_start_failure(nil, reason)
-  end
-
-  defp raise_start_failure(calling_module, error) do
-    raise "EXIT when starting #{inspect(calling_module)} instance:\n\n#{Exception.format_exit(error)}"
   end
 
   @doc false
@@ -99,10 +94,22 @@ defmodule TestServer do
   end
 
   @doc false
+  def raise_start_failure!(protocol_module, options, reason) do
+    raise "EXIT when starting #{inspect(protocol_module)} instance#{format_port(options)}:\n\n#{Exception.format_exit(reason)}"
+  end
+
+  defp format_port(options) do
+    case Keyword.get(options, :port) do
+      port when is_integer(port) -> " on port #{port}"
+      _no_port -> ""
+    end
+  end
+
+  @doc false
   def autostart_instance(protocol_module) do
     case InstanceManager.fetch_instance(self(), protocol_module) do
-      :error -> protocol_module.start()
-      {:ok, instance} -> {:ok, instance}
+      :error -> protocol_module.start!()
+      {:ok, instance} -> instance
     end
   end
 
@@ -115,15 +122,18 @@ defmodule TestServer do
       end
 
     unless is_integer(port) and port >= 0 and port <= 65_535,
-      do: raise("Invalid port, got: #{inspect(port)}")
+      do: raise(ArgumentError, "expected a port, got: #{inspect(port)}")
 
     with {:ok, socket} <- :gen_tcp.listen(port, options),
          {:ok, port} <- :inet.port(socket),
          true <- :erlang.port_close(socket) do
-      port
+      {:ok, port}
     else
-      {:error, error} ->
-        raise("Could not listen to port #{inspect(port)}, because: #{inspect(error)}")
+      {:error, reason} ->
+        {:error,
+         RuntimeError.exception(
+           "Could not listen to port #{inspect(port)}, because: #{inspect(reason)}"
+         )}
     end
   end
 
@@ -138,7 +148,7 @@ defmodule TestServer do
   end
 
   @doc false
-  def get_host(options) do
+  def host(options) do
     host = Keyword.get(options, :host)
 
     unless is_nil(host) or is_binary(host),
@@ -155,5 +165,19 @@ defmodule TestServer do
 
         host
     end
+  end
+
+  @spec report_error(keyword(), {struct(), TestServer.stacktrace()}) :: :ok
+  def report_error(options, {exception, stacktrace}) do
+    caller = Keyword.fetch!(options, :caller)
+
+    unless Keyword.get(options, :suppress_warning, false),
+      do: IO.warn(Exception.format(:error, exception, stacktrace))
+
+    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
+      reraise exception, stacktrace
+    end)
+
+    :ok
   end
 end

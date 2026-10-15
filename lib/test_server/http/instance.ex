@@ -34,7 +34,7 @@ defmodule TestServer.HTTP.Instance do
   end
 
   @spec register(
-          TestServer.HTTP.websocket_socket(),
+          TestServer.HTTP.websocket(),
           {:websocket, {:handle, keyword(), TestServer.stacktrace()}}
         ) ::
           {:ok, map()}
@@ -63,7 +63,7 @@ defmodule TestServer.HTTP.Instance do
   end
 
   @spec dispatch(
-          TestServer.HTTP.websocket_socket(),
+          TestServer.HTTP.websocket(),
           {:websocket, {:handle, TestServer.HTTP.websocket_frame()},
            TestServer.HTTP.websocket_state()}
         ) ::
@@ -75,7 +75,7 @@ defmodule TestServer.HTTP.Instance do
   end
 
   @spec dispatch(
-          TestServer.HTTP.websocket_socket(),
+          TestServer.HTTP.websocket(),
           {:websocket, {:info, keyword(), TestServer.stacktrace()},
            TestServer.HTTP.websocket_state()}
         ) ::
@@ -93,8 +93,8 @@ defmodule TestServer.HTTP.Instance do
     )
   end
 
-  @spec get_options(TestServer.instance()) :: keyword()
-  def get_options(instance) do
+  @spec options(TestServer.instance()) :: keyword()
+  def options(instance) do
     GenServer.call(instance, :options)
   end
 
@@ -103,12 +103,12 @@ defmodule TestServer.HTTP.Instance do
     GenServer.call(instance, :routes)
   end
 
-  @spec put_websocket_connection(TestServer.HTTP.websocket_socket(), pid()) :: :ok
+  @spec put_websocket_connection(TestServer.HTTP.websocket(), pid()) :: :ok
   def put_websocket_connection({instance, route_ref}, pid) do
     GenServer.cast(instance, {:put, :websocket_connection, route_ref, pid})
   end
 
-  @spec websocket_connections(TestServer.HTTP.websocket_socket()) :: [pid()]
+  @spec websocket_connections(TestServer.HTTP.websocket()) :: [pid()]
   def websocket_connections({instance, route_ref}) do
     GenServer.call(instance, {:get, :websocket_connections, route_ref})
   end
@@ -142,46 +142,21 @@ defmodule TestServer.HTTP.Instance do
     end)
   end
 
-  @spec report_error(TestServer.instance(), {struct(), TestServer.stacktrace()}) :: :ok
-  def report_error(instance, {exception, stacktrace}) do
-    options = get_options(instance)
-    caller = Keyword.fetch!(options, :caller)
-
-    unless Keyword.get(options, :suppress_warning, false),
-      do: IO.warn(Exception.format(:error, exception, stacktrace))
-
-    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      reraise exception, stacktrace
-    end)
-
-    :ok
-  end
-
   @impl true
   def init(options) do
-    init_state = %{
-      routes: [],
-      plugs: [],
-      websocket_handlers: [],
-      websocket_connections: [],
-      options: options
-    }
-
-    case start_http_server(init_state) do
-      {:ok, state} -> {:ok, state}
-      {:error, error} -> {:stop, error}
-    end
-  end
-
-  defp start_http_server(state) do
-    case Server.start(self(), state.options) do
+    case Server.start(self(), options) do
       {:ok, options} ->
-        state = Map.merge(state, %{options: options})
+        {:ok,
+         %{
+           routes: [],
+           plugs: [],
+           websocket_handlers: [],
+           websocket_connections: [],
+           options: options
+         }}
 
-        {:ok, state}
-
-      {:error, error} ->
-        {:error, error}
+      {:error, reason} ->
+        {:stop, reason}
     end
   end
 
@@ -283,6 +258,13 @@ defmodule TestServer.HTTP.Instance do
       end
 
     {:reply, res, state}
+  end
+
+  @impl true
+  def handle_cast({:put, :websocket_connection, route_ref, pid}, state) do
+    connections = state.websocket_connections ++ [{route_ref, pid}]
+
+    {:noreply, %{state | websocket_connections: connections}}
   end
 
   defp build_match_function(uri, methods) do
@@ -402,7 +384,7 @@ defmodule TestServer.HTTP.Instance do
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  def maybe_put_websocket(conn, route) do
+  defp maybe_put_websocket(conn, route) do
     case route.options[:websocket] do
       true ->
         websocket = {{self(), route.ref}, %{}}
@@ -470,12 +452,5 @@ defmodule TestServer.HTTP.Instance do
 
     #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
     """
-  end
-
-  @impl true
-  def handle_cast({:put, :websocket_connection, route_ref, pid}, state) do
-    connections = state.websocket_connections ++ [{route_ref, pid}]
-
-    {:noreply, %{state | websocket_connections: connections}}
   end
 end

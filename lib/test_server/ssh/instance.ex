@@ -3,6 +3,8 @@ defmodule TestServer.SSH.Instance do
 
   use GenServer
 
+  alias TestServer.SSH.Server
+
   def start_link(options) do
     GenServer.start_link(__MODULE__, options)
   end
@@ -138,8 +140,6 @@ defmodule TestServer.SSH.Instance do
 
   @impl true
   def init(options) do
-    alias TestServer.SSH.Server
-
     case Server.start(self(), options) do
       {:ok, options} ->
         {:ok,

@@ -819,18 +819,6 @@ defmodule TestServer.HTTPTest do
         assert WebSocketClient.send_message(client, "ping") == {:ok, "function called"}
       end
 
-      test "with `:match` function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
-
-        assert :ok =
-                 TestServer.HTTP.websocket_handle(socket,
-                   match: fn {:text, message}, _state -> message == "hello" end
-                 )
-
-        assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-        assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}
-      end
-
       test "when `:match` function raises exception" do
         defmodule WebSocketHandleMatchFunctionRaiseTest do
           use ExUnit.Case
@@ -853,6 +841,18 @@ defmodule TestServer.HTTPTest do
         assert io = capture_io(fn -> ExUnit.run() end)
         assert io =~ "(RuntimeError) boom"
         assert io =~ "anonymous fn/2 in TestServer.HTTPTest.WebSocketHandleMatchFunctionRaiseTest"
+      end
+
+      test "with `:match` function" do
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+
+        assert :ok =
+                 TestServer.HTTP.websocket_handle(socket,
+                   match: fn {:text, message}, _state -> message == "hello" end
+                 )
+
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
+        assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}
       end
     end
 

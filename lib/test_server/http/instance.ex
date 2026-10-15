@@ -159,29 +159,19 @@ defmodule TestServer.HTTP.Instance do
 
   @impl true
   def init(options) do
-    init_state = %{
-      routes: [],
-      plugs: [],
-      websocket_handlers: [],
-      websocket_connections: [],
-      options: options
-    }
-
-    case start_http_server(init_state) do
-      {:ok, state} -> {:ok, state}
-      {:error, error} -> {:stop, error}
-    end
-  end
-
-  defp start_http_server(state) do
-    case Server.start(self(), state.options) do
+    case Server.start(self(), options) do
       {:ok, options} ->
-        state = Map.merge(state, %{options: options})
+        {:ok,
+         %{
+           routes: [],
+           plugs: [],
+           websocket_handlers: [],
+           websocket_connections: [],
+           options: options
+         }}
 
-        {:ok, state}
-
-      {:error, error} ->
-        {:error, error}
+      {:error, reason} ->
+        {:stop, reason}
     end
   end
 

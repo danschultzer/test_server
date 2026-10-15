@@ -100,7 +100,7 @@ defmodule TestServer.HTTP.Server do
     case options[:http_server] || Application.get_env(:test_server, :http_server) ||
            default_http_server() do
       {mod, server_options} when is_atom(mod) and is_list(server_options) -> {mod, server_options}
-      other -> raise("Invalid http_server, got: #{inspect(other)}")
+      other -> raise "Invalid http_server, got: #{inspect(other)}"
     end
   end
 

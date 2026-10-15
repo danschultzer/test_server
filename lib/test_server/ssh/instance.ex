@@ -94,8 +94,8 @@ defmodule TestServer.SSH.Instance do
     GenServer.call(instance, :channels)
   end
 
-  @spec get_options(TestServer.instance()) :: keyword()
-  def get_options(instance) do
+  @spec options(TestServer.instance()) :: keyword()
+  def options(instance) do
     GenServer.call(instance, :options)
   end
 

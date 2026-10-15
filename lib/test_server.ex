@@ -12,7 +12,7 @@ defmodule TestServer do
   alias TestServer.InstanceManager
 
   @doc false
-  def get_pruned_stacktrace(calling_module) do
+  def pruned_stacktrace(calling_module) do
     {:current_stacktrace, [{Process, :info, _, _} | stacktrace]} =
       Process.info(self(), :current_stacktrace)
 
@@ -148,7 +148,7 @@ defmodule TestServer do
   end
 
   @doc false
-  def get_host(options) do
+  def host(options) do
     host = Keyword.get(options, :host)
 
     unless is_nil(host) or is_binary(host),

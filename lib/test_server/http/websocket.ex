@@ -22,7 +22,7 @@ defmodule TestServer.HTTP.WebSocket do
   end
 
   defp reply_with_error({{instance, _route_ref}, state}, {exception, stacktrace}) do
-    TestServer.report_error(Instance.get_options(instance), {exception, stacktrace})
+    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
 
     {:reply, :ok, {:text, Exception.format(:error, exception, stacktrace)}, state}
   end

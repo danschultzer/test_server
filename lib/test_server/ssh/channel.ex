@@ -70,7 +70,7 @@ defmodule TestServer.SSH.Channel do
   end
 
   defp send_error(connection, channel_id, {exception, stacktrace}, state) do
-    TestServer.report_error(Instance.get_options(state.instance), {exception, stacktrace})
+    TestServer.report_error(Instance.options(state.instance), {exception, stacktrace})
 
     message = Exception.format(:error, exception, stacktrace)
 

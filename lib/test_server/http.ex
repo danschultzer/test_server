@@ -157,7 +157,7 @@ defmodule TestServer.HTTP do
   def stop(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    :ok = Server.stop(Instance.get_options(instance))
+    :ok = Server.stop(Instance.options(instance))
 
     TestServer.stop_instance(__MODULE__, instance)
   end
@@ -202,8 +202,8 @@ defmodule TestServer.HTTP do
   def url(instance, uri, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    domain = TestServer.get_host(options)
-    options = Instance.get_options(instance)
+    domain = TestServer.host(options)
+    options = Instance.options(instance)
 
     "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{uri}"
   end
@@ -276,7 +276,7 @@ defmodule TestServer.HTTP do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_register_route, _first_module_entry | stacktrace] =
-      TestServer.get_pruned_stacktrace(__MODULE__)
+      TestServer.pruned_stacktrace(__MODULE__)
 
     Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
   end
@@ -314,7 +314,7 @@ defmodule TestServer.HTTP do
   """
   @spec plug(TestServer.instance(), plug_module() | plug_fun()) :: :ok
   def plug(instance, plug) do
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     {:ok, _plug} = Instance.register(instance, {:plug, {plug, stacktrace}})
 
@@ -347,7 +347,7 @@ defmodule TestServer.HTTP do
   def x509_suite(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    options = Instance.get_options(instance)
+    options = Instance.options(instance)
 
     cond do
       not (options[:scheme] == :https) ->
@@ -473,7 +473,7 @@ defmodule TestServer.HTTP do
   def websocket_handle({instance, _route_ref} = socket, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :to, &default_websocket_handle/2)
 
@@ -505,7 +505,7 @@ defmodule TestServer.HTTP do
   def websocket_send({instance, _route_ref} = socket, options \\ []) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :to, &default_websocket_send/1)
 

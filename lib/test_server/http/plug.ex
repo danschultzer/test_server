@@ -77,7 +77,7 @@ defmodule TestServer.HTTP.Plug do
   end
 
   defp resp_error(conn, instance, {exception, stacktrace}) do
-    TestServer.report_error(Instance.get_options(instance), {exception, stacktrace})
+    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
 
     Conn.send_resp(conn, 500, Exception.format(:error, exception, stacktrace))
   end

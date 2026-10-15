@@ -194,7 +194,7 @@ defmodule TestServer.SSH do
   def stop(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    :ok = Server.stop(Instance.get_options(instance))
+    :ok = Server.stop(Instance.options(instance))
 
     TestServer.stop_instance(__MODULE__, instance)
   end
@@ -232,8 +232,8 @@ defmodule TestServer.SSH do
   def address(instance, options) when is_pid(instance) and is_list(options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    host = TestServer.get_host(options)
-    port = instance |> Instance.get_options() |> Keyword.fetch!(:port)
+    host = TestServer.host(options)
+    port = instance |> Instance.options() |> Keyword.fetch!(:port)
 
     {host, port}
   end
@@ -277,7 +277,7 @@ defmodule TestServer.SSH do
   def channel(instance, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_first_module_entry | stacktrace] = TestServer.get_pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :messages, [:exec, :data])
 
@@ -373,7 +373,7 @@ defmodule TestServer.SSH do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] =
-      TestServer.get_pruned_stacktrace(__MODULE__)
+      TestServer.pruned_stacktrace(__MODULE__)
 
     {:ok, _handler} = Instance.register(instance, {:handle, {channel_ref, options, stacktrace}})
 
@@ -407,7 +407,7 @@ defmodule TestServer.SSH do
   def host_keys(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    options = Instance.get_options(instance)
+    options = Instance.options(instance)
 
     case is_list(options[:host_keys]) do
       true ->

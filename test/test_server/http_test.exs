@@ -25,15 +25,15 @@ defmodule TestServer.HTTPTest do
 
       refute instance_1 == instance_2
 
-      options_1 = TestServer.HTTP.Instance.get_options(instance_1)
-      options_2 = TestServer.HTTP.Instance.get_options(instance_2)
+      options_1 = TestServer.HTTP.Instance.options(instance_1)
+      options_2 = TestServer.HTTP.Instance.options(instance_2)
 
       refute options_1[:port] == options_2[:port]
     end
 
     test "starts with self-signed SSL" do
       instance = TestServer.HTTP.start!(scheme: :https)
-      options = TestServer.HTTP.Instance.get_options(instance)
+      options = TestServer.HTTP.Instance.options(instance)
 
       assert %{cert: _, cacerts: _} = options[:x509_suite]
 
@@ -69,7 +69,7 @@ defmodule TestServer.HTTPTest do
 
     test "starts in IPv6-only mode" do
       instance = TestServer.HTTP.start!(ipfamily: :inet6)
-      options = TestServer.HTTP.Instance.get_options(instance)
+      options = TestServer.HTTP.Instance.options(instance)
 
       assert options[:ipfamily] == :inet6
 

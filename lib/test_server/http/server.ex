@@ -24,7 +24,7 @@ defmodule TestServer.HTTP.Server do
         def stop(server_pid, server_options), do: MyHTTPServer.stop(server_pid)
 
         @impl TestServer.HTTP.Server
-        def get_socket_pid(%{adapter: {_, data}}), do: data.pid # or however your adapter provides the pid
+        def socket_pid(%{adapter: {_, data}}), do: data.pid # or however your adapter provides the pid
       end
   """
   @type scheme :: :http | :https
@@ -35,7 +35,7 @@ defmodule TestServer.HTTP.Server do
   @callback start(TestServer.instance(), port_number(), scheme(), options(), server_options()) ::
               {:ok, term(), server_options()} | {:error, term()}
   @callback stop(term(), server_options()) :: :ok | {:error, term()}
-  @callback get_socket_pid(Plug.Conn.t()) :: pid()
+  @callback socket_pid(Plug.Conn.t()) :: pid()
 
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}

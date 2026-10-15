@@ -65,7 +65,7 @@ if Code.ensure_loaded?(Bandit) do
     end
 
     @impl TestServer.HTTP.Server
-    def get_socket_pid(%{adapter: {TestServer.HTTP.Server.Bandit.Adapter, {_plug_pid, req}}}) do
+    def socket_pid(%{adapter: {TestServer.HTTP.Server.Bandit.Adapter, {_plug_pid, req}}}) do
       req.owner_pid
     end
 

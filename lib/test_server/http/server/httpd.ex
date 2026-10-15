@@ -47,7 +47,7 @@ if Code.ensure_loaded?(:httpd) do
     end
 
     @impl TestServer.HTTP.Server
-    def get_socket_pid(%{adapter: {_, _data}}), do: self()
+    def socket_pid(%{adapter: {_, _data}}), do: self()
 
     # :httpd record handler
     require Record

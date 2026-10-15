@@ -75,7 +75,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
     end
 
     @impl TestServer.HTTP.Server
-    def get_socket_pid(%{adapter: {_, req}}), do: req.pid
+    def socket_pid(%{adapter: {_, req}}), do: req.pid
 
     # Dispatch handling
 

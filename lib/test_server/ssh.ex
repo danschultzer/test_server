@@ -32,6 +32,17 @@ defmodule TestServer.SSH do
         }
 
   @doc """
+  Same as `start/1`, but returns the instance and raises on failure.
+  """
+  @spec start!(keyword()) :: TestServer.instance()
+  def start!(options \\ []) do
+    case start(options) do
+      {:ok, instance} -> instance
+      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
+    end
+  end
+
+  @doc """
   Start a test server SSH instance.
 
   The instance will be terminated when the test case finishes.
@@ -121,17 +132,6 @@ defmodule TestServer.SSH do
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     TestServer.start_instance(__MODULE__, options, &verify!/1)
-  end
-
-  @doc """
-  Same as `start/1`, but returns the instance and raises on failure.
-  """
-  @spec start!(keyword()) :: TestServer.instance()
-  def start!(options \\ []) do
-    case start(options) do
-      {:ok, instance} -> instance
-      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
-    end
   end
 
   defp verify!(instance) do

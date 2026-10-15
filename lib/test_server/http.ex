@@ -29,6 +29,17 @@ defmodule TestServer.HTTP do
   @type x509_suite :: %{cert: binary(), cacerts: [binary()]}
 
   @doc """
+  Same as `start/1`, but returns the instance and raises on failure.
+  """
+  @spec start!(keyword()) :: TestServer.instance()
+  def start!(options \\ []) do
+    case start(options) do
+      {:ok, instance} -> instance
+      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
+    end
+  end
+
+  @doc """
   Start a test server HTTP instance.
 
   The instance will be terminated when the test case finishes.
@@ -84,17 +95,6 @@ defmodule TestServer.HTTP do
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
-  end
-
-  @doc """
-  Same as `start/1`, but returns the instance and raises on failure.
-  """
-  @spec start!(keyword()) :: TestServer.instance()
-  def start!(options \\ []) do
-    case start(options) do
-      {:ok, instance} -> instance
-      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
-    end
   end
 
   defp verify_instance!(instance) do

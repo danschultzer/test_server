@@ -56,7 +56,7 @@ defmodule TestServer.SSH.Instance do
 
   @spec dispatch(
           TestServer.instance(),
-          {:channel_up, TestServer.SSH.channel_id(), TestServer.SSH.connection()}
+          {:channel_up, :ssh.channel_id(), :ssh.connection_ref()}
         ) ::
           {:ok, {TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}}
           | {:error, :not_found}
@@ -66,11 +66,11 @@ defmodule TestServer.SSH.Instance do
 
   @spec dispatch(
           TestServer.instance(),
-          {:handle, TestServer.SSH.channel_id(), TestServer.SSH.connection(),
-           TestServer.SSH.channel_msg(), TestServer.SSH.state()}
+          {:handle, :ssh.channel_id(), :ssh.connection_ref(), :ssh_connection.channel_msg(),
+           TestServer.SSH.state()}
         ) ::
           {:raw, {:ok, TestServer.SSH.state()}}
-          | {:raw, {:stop, TestServer.SSH.channel_id(), TestServer.SSH.state()}}
+          | {:raw, {:stop, :ssh.channel_id(), TestServer.SSH.state()}}
           | {:reply, {binary(), keyword()}, TestServer.SSH.state()}
           | {:ok, TestServer.SSH.state()}
           | {:error, :not_found}

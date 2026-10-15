@@ -8,13 +8,13 @@ defmodule TestServer.HTTP do
   alias Plug.Conn
   alias TestServer.HTTP.{Instance, Server}
 
-  @type route :: reference()
+  @type route_ref :: reference()
   @type handler_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
   @type plug_module :: module()
   @type plug_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
   @type match_fun :: (conn :: Plug.Conn.t() -> boolean())
 
-  @type websocket_socket :: {TestServer.instance(), route()}
+  @type websocket :: {TestServer.instance(), route_ref()}
   @type websocket_frame :: {:text | :binary, iodata()}
   @type websocket_state :: term()
   @type websocket_handler_fun :: (frame :: websocket_frame(), state :: websocket_state() ->
@@ -350,8 +350,8 @@ defmodule TestServer.HTTP do
     end
   end
 
-  @spec websocket_init(binary()) :: {:ok, websocket_socket()}
-  def websocket_init(uri) when is_binary(uri), do: websocket_init(uri, [])
+  @spec websocket(binary()) :: {:ok, websocket()}
+  def websocket(uri) when is_binary(uri), do: websocket(uri, [])
 
   @doc """
   Adds a websocket route to current test server.
@@ -366,7 +366,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+      {:ok, socket} = TestServer.HTTP.websocket("/ws")
       TestServer.HTTP.websocket_handle(socket)
 
       assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -374,7 +374,7 @@ defmodule TestServer.HTTP do
 
   `:via` and `:match` are called during the HTTP handshake:
 
-      TestServer.HTTP.websocket_init("/ws", via: :get, match: fn conn ->
+      TestServer.HTTP.websocket("/ws", via: :get, match: fn conn ->
         conn.params["token"] == "secret"
       end)
 
@@ -382,7 +382,7 @@ defmodule TestServer.HTTP do
 
   `:to` option is also called during the HTTP handshake:
 
-      TestServer.HTTP.websocket_init("/ws",
+      TestServer.HTTP.websocket("/ws",
         to: fn conn ->
           Plug.Conn.send_resp(conn, 403, "Forbidden")
         end
@@ -391,25 +391,25 @@ defmodule TestServer.HTTP do
       assert {:error, %WebSockex.RequestError{code: 403}} =
               WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
   """
-  @spec websocket_init(binary(), keyword()) :: {:ok, websocket_socket()}
-  def websocket_init(uri, options) when is_binary(uri) do
+  @spec websocket(binary(), keyword()) :: {:ok, websocket()}
+  def websocket(uri, options) when is_binary(uri) do
     {:ok, instance} = TestServer.autostart_instance(__MODULE__)
 
-    websocket_init(instance, uri, options)
+    websocket(instance, uri, options)
   end
 
-  @spec websocket_init(TestServer.instance(), binary()) :: {:ok, websocket_socket()}
-  def websocket_init(instance, uri) when is_pid(instance) and is_binary(uri) do
-    websocket_init(instance, uri, [])
+  @spec websocket(TestServer.instance(), binary()) :: {:ok, websocket()}
+  def websocket(instance, uri) when is_pid(instance) and is_binary(uri) do
+    websocket(instance, uri, [])
   end
 
   @doc """
   Adds a websocket route to a test server.
 
-  See `websocket_init/2` for options.
+  See `websocket/2` for options.
   """
-  @spec websocket_init(TestServer.instance(), binary(), keyword()) :: {:ok, websocket_socket()}
-  def websocket_init(instance, uri, options) do
+  @spec websocket(TestServer.instance(), binary(), keyword()) :: {:ok, websocket()}
+  def websocket(instance, uri, options) do
     options =
       options
       |> Keyword.put(:websocket, true)
@@ -420,7 +420,7 @@ defmodule TestServer.HTTP do
     {:ok, {instance, ref}}
   end
 
-  @spec websocket_handle(websocket_socket()) :: :ok
+  @spec websocket_handle(websocket()) :: :ok
   def websocket_handle(socket), do: websocket_handle(socket, [])
 
   @doc """
@@ -440,7 +440,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+      {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
       TestServer.HTTP.websocket_handle(
         socket,
@@ -458,7 +458,7 @@ defmodule TestServer.HTTP do
       assert WebSocketClient.send_message(client, "echo") == {:ok, "echo"}
       assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
   """
-  @spec websocket_handle(websocket_socket(), keyword()) :: :ok
+  @spec websocket_handle(websocket(), keyword()) :: :ok
   def websocket_handle({instance, _route_ref} = socket, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
@@ -481,7 +481,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+      {:ok, socket} = TestServer.HTTP.websocket("/ws")
       {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
       assert TestServer.HTTP.websocket_send(socket, to: fn state ->
@@ -490,7 +490,7 @@ defmodule TestServer.HTTP do
 
       assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """
-  @spec websocket_send(websocket_socket(), keyword()) :: :ok
+  @spec websocket_send(websocket(), keyword()) :: :ok
   def websocket_send({instance, _route_ref} = socket, options \\ []) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 

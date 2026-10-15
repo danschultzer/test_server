@@ -9,21 +9,18 @@ defmodule TestServer.SSH do
 
   @type channel :: {TestServer.instance(), channel_ref()}
   @type channel_ref :: reference()
-  @type channel_id :: :ssh.channel_id()
   @type state :: term()
-  @type channel_msg :: :ssh_connection.channel_msg()
-  @type connection :: :ssh.connection_ref()
 
-  @type handler_fun :: (channel_msg(), state() ->
+  @type handler_fun :: (:ssh_connection.channel_msg(), state() ->
                           {:reply, iodata(), state()}
                           | {:reply, {iodata(), keyword()}, state()}
                           | {:ok, state()})
 
-  @type raw_handler_fun :: (channel_msg(), connection(), state() ->
+  @type raw_handler_fun :: (:ssh_connection.channel_msg(), :ssh.connection_ref(), state() ->
                               {:ok, state()}
-                              | {:stop, channel_id(), state()})
+                              | {:stop, :ssh.channel_id(), state()})
 
-  @type match_fun :: (channel_msg(), state() -> boolean())
+  @type match_fun :: (:ssh_connection.channel_msg(), state() -> boolean())
 
   @type host_key :: %{
           key:
@@ -191,7 +188,7 @@ defmodule TestServer.SSH do
     TestServer.stop_instance(__MODULE__, instance)
   end
 
-  @spec address() :: {binary(), non_neg_integer()}
+  @spec address() :: {binary(), :inet.port_number()}
   def address, do: address([])
 
   @doc """
@@ -209,7 +206,7 @@ defmodule TestServer.SSH do
       assert TestServer.SSH.address() == {"localhost", 2222}
       assert TestServer.SSH.address(host: "myserver.test") == {"myserver.test", 2222}
   """
-  @spec address(keyword() | TestServer.instance()) :: {binary(), non_neg_integer()}
+  @spec address(keyword() | TestServer.instance()) :: {binary(), :inet.port_number()}
   def address(options) when is_list(options),
     do: address(TestServer.fetch_instance!(__MODULE__), options)
 
@@ -220,7 +217,7 @@ defmodule TestServer.SSH do
 
   See `address/1` for options.
   """
-  @spec address(TestServer.instance(), keyword()) :: {binary(), non_neg_integer()}
+  @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
@@ -234,7 +231,7 @@ defmodule TestServer.SSH do
   def channel, do: channel([])
 
   @doc """
-  Adds a channel to the current test server.
+  Adds an expected channel to the current test server.
 
   ## Options
 
@@ -261,7 +258,7 @@ defmodule TestServer.SSH do
   end
 
   @doc """
-  Adds a channel to a test server instance.
+  Adds an expected channel to a test server instance.
 
   See `channel/1` for options.
   """

@@ -576,10 +576,10 @@ defmodule TestServer.HTTPTest do
 
   # Httpd adapter has no WebSocket support
   if System.get_env("HTTP_SERVER") == "Httpd" do
-    describe "websocket_init/3" do
+    describe "websocket/3" do
       test "returns 501" do
         # Test with WebSockex client
-        assert {:ok, _socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, _socket} = TestServer.HTTP.websocket("/ws")
 
         assert {:error, %WebSockex.RequestError{code: 501}} =
                  WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -597,23 +597,23 @@ defmodule TestServer.HTTPTest do
           }
 
         # Test the body response
-        assert {:ok, _socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, _socket} = TestServer.HTTP.websocket("/ws")
         assert {:ok, {{_, 501, _}, _headers, body}} = :httpc.request(:get, request, [], [])
         assert to_string(body) == "WebSocket is not supported with httpd!"
       end
     end
 
     describe "websocket_handle/3" do
-      # No tests for `websocket_handle/3` as `websocket_init/3` always returns
+      # No tests for `websocket_handle/3` as `websocket/3` always returns
       # a 501 response, so no socket is ever initialized to be handled.
     end
 
     describe "websocket_send/2" do
-      # No tests for `websocket_send/2` as `websocket_init/3` always returns
+      # No tests for `websocket_send/2` as `websocket/3` always returns
       # a 501 response, so no socket is ever initialized to be handled.
     end
   else
-    describe "websocket_init/3" do
+    describe "websocket/3" do
       test "when instance not running" do
         {:ok, instance} = TestServer.HTTP.start()
         assert :ok = TestServer.HTTP.stop()
@@ -621,21 +621,21 @@ defmodule TestServer.HTTPTest do
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
                      fn ->
-                       TestServer.HTTP.websocket_init(instance, "/ws")
+                       TestServer.HTTP.websocket(instance, "/ws")
                      end
       end
 
       test "with invalid options" do
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_init("/", to: :invalid)
+          TestServer.HTTP.websocket("/", to: :invalid)
         end
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_init("/", match: :invalid)
+          TestServer.HTTP.websocket("/", match: :invalid)
         end
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_init("/", match: :invalid)
+          TestServer.HTTP.websocket("/", match: :invalid)
         end
       end
 
@@ -644,15 +644,15 @@ defmodule TestServer.HTTPTest do
         {:ok, _instance_2} = TestServer.HTTP.start()
 
         assert_raise RuntimeError,
-                     ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.websocket_init\/2`/,
+                     ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.websocket\/2`/,
                      fn ->
-                       TestServer.HTTP.websocket_init("/ws")
+                       TestServer.HTTP.websocket("/ws")
                      end
       end
 
       test "with handshake callback function with set conn" do
         assert {:ok, _socket} =
-                 TestServer.HTTP.websocket_init("/ws",
+                 TestServer.HTTP.websocket("/ws",
                    to: fn conn ->
                      Plug.Conn.resp(conn, 403, "Forbidden")
                    end
@@ -664,7 +664,7 @@ defmodule TestServer.HTTPTest do
 
       test "with handshake callback function with unset conn" do
         assert {:ok, _socket} =
-                 TestServer.HTTP.websocket_init("/ws",
+                 TestServer.HTTP.websocket("/ws",
                    to: fn conn ->
                      assert Plug.Conn.get_req_header(conn, "upgrade") == ["websocket"]
 
@@ -679,7 +679,7 @@ defmodule TestServer.HTTPTest do
     describe "websocket_handle/3" do
       test "when instance not running" do
         {:ok, instance} = TestServer.HTTP.start()
-        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
         assert :ok = TestServer.HTTP.stop(instance)
 
         assert_raise RuntimeError,
@@ -690,7 +690,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with invalid options" do
-        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
           TestServer.HTTP.websocket_handle(socket, to: :invalid)
@@ -708,7 +708,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, _client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert :ok = TestServer.HTTP.websocket_handle(socket)
@@ -725,7 +725,7 @@ defmodule TestServer.HTTPTest do
 
           test "fails" do
             {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, _socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, _socket} = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
@@ -744,7 +744,7 @@ defmodule TestServer.HTTPTest do
 
           test "fails" do
             {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
             assert :ok = TestServer.HTTP.websocket_handle(socket)
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -766,7 +766,7 @@ defmodule TestServer.HTTPTest do
 
           test "fails" do
             {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
             assert :ok =
                      TestServer.HTTP.websocket_handle(socket,
@@ -790,7 +790,7 @@ defmodule TestServer.HTTPTest do
 
           test "fails" do
             {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
             assert :ok =
                      TestServer.HTTP.websocket_handle(socket,
@@ -808,7 +808,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with `:to` function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
         assert :ok =
                  TestServer.HTTP.websocket_handle(socket,
@@ -820,7 +820,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with `:match` function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
         assert :ok =
                  TestServer.HTTP.websocket_handle(socket,
@@ -837,7 +837,7 @@ defmodule TestServer.HTTPTest do
 
           test "fails" do
             {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
 
             assert :ok =
                      TestServer.HTTP.websocket_handle(socket,
@@ -859,7 +859,7 @@ defmodule TestServer.HTTPTest do
     describe "websocket_send/2" do
       test "when instance not running" do
         {:ok, instance} = TestServer.HTTP.start()
-        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
         assert :ok = TestServer.HTTP.stop(instance)
 
         assert_raise RuntimeError,
@@ -875,7 +875,7 @@ defmodule TestServer.HTTPTest do
 
           test "fails" do
             {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
             assert :ok = TestServer.HTTP.websocket_send(socket, to: fn _state -> :invalid end)
@@ -894,7 +894,7 @@ defmodule TestServer.HTTPTest do
 
           test "fails" do
             {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
             assert :ok =
@@ -911,7 +911,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with callback function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
         assert :ok =
@@ -925,7 +925,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with default callback function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket_init("/ws")
+        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
         assert :ok = TestServer.HTTP.websocket_send(socket)

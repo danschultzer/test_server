@@ -34,7 +34,7 @@ defmodule TestServer.HTTP.Instance do
   end
 
   @spec register(
-          TestServer.HTTP.websocket_socket(),
+          TestServer.HTTP.websocket(),
           {:websocket, {:handle, keyword(), TestServer.stacktrace()}}
         ) ::
           {:ok, map()}
@@ -63,7 +63,7 @@ defmodule TestServer.HTTP.Instance do
   end
 
   @spec dispatch(
-          TestServer.HTTP.websocket_socket(),
+          TestServer.HTTP.websocket(),
           {:websocket, {:handle, TestServer.HTTP.websocket_frame()},
            TestServer.HTTP.websocket_state()}
         ) ::
@@ -75,7 +75,7 @@ defmodule TestServer.HTTP.Instance do
   end
 
   @spec dispatch(
-          TestServer.HTTP.websocket_socket(),
+          TestServer.HTTP.websocket(),
           {:websocket, {:info, keyword(), TestServer.stacktrace()},
            TestServer.HTTP.websocket_state()}
         ) ::
@@ -103,12 +103,12 @@ defmodule TestServer.HTTP.Instance do
     GenServer.call(instance, :routes)
   end
 
-  @spec put_websocket_connection(TestServer.HTTP.websocket_socket(), pid()) :: :ok
+  @spec put_websocket_connection(TestServer.HTTP.websocket(), pid()) :: :ok
   def put_websocket_connection({instance, route_ref}, pid) do
     GenServer.cast(instance, {:put, :websocket_connection, route_ref, pid})
   end
 
-  @spec websocket_connections(TestServer.HTTP.websocket_socket()) :: [pid()]
+  @spec websocket_connections(TestServer.HTTP.websocket()) :: [pid()]
   def websocket_connections({instance, route_ref}) do
     GenServer.call(instance, {:get, :websocket_connections, route_ref})
   end
@@ -285,6 +285,13 @@ defmodule TestServer.HTTP.Instance do
     {:reply, res, state}
   end
 
+  @impl true
+  def handle_cast({:put, :websocket_connection, route_ref, pid}, state) do
+    connections = state.websocket_connections ++ [{route_ref, pid}]
+
+    {:noreply, %{state | websocket_connections: connections}}
+  end
+
   defp build_match_function(uri, methods) do
     {method_match, guards} =
       case methods do
@@ -402,7 +409,7 @@ defmodule TestServer.HTTP.Instance do
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  def maybe_put_websocket(conn, route) do
+  defp maybe_put_websocket(conn, route) do
     case route.options[:websocket] do
       true ->
         websocket = {{self(), route.ref}, %{}}
@@ -470,12 +477,5 @@ defmodule TestServer.HTTP.Instance do
 
     #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
     """
-  end
-
-  @impl true
-  def handle_cast({:put, :websocket_connection, route_ref, pid}, state) do
-    connections = state.websocket_connections ++ [{route_ref, pid}]
-
-    {:noreply, %{state | websocket_connections: connections}}
   end
 end

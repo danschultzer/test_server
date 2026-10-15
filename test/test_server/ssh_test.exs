@@ -396,7 +396,7 @@ defmodule TestServer.SSHTest do
     end
 
     test "with invalid `:host`" do
-      TestServer.SSH.start()
+      TestServer.SSH.start!()
 
       assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
         TestServer.SSH.address(host: :invalid)
@@ -404,7 +404,7 @@ defmodule TestServer.SSHTest do
     end
 
     test "produces address" do
-      TestServer.SSH.start()
+      TestServer.SSH.start!()
 
       assert {"localhost", port} = TestServer.SSH.address()
       assert is_integer(port)
@@ -460,9 +460,9 @@ defmodule TestServer.SSHTest do
                      TestServer.SSH.channel()
                    end
 
-      assert _channel = TestServer.SSH.channel(instance_1, [])
+      assert TestServer.SSH.channel(instance_1, [])
 
-      TestServer.SSH.stop(instance_1)
+      :ok = TestServer.SSH.stop(instance_1)
     end
 
     test "with invalid options" do
@@ -482,7 +482,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          _channel = TestServer.SSH.channel()
+          TestServer.SSH.channel()
 
           assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
           assert {:ok, _channel_id} = SSHClient.session_channel(conn)
@@ -524,13 +524,28 @@ defmodule TestServer.SSHTest do
           assert {:ok, channel_id_2} = SSHClient.session_channel(conn)
           assert SSHClient.exec(conn, channel_id_1, "ping") == :ok
           assert {:ok, %{data: "ping"}} = SSHClient.receive_until_closed(conn, channel_id_1)
-          assert {:error, :closed} = SSHClient.exec(conn, channel_id_2, "ping")
+          assert SSHClient.exec(conn, channel_id_2, "ping") == {:error, :closed}
         end
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "No available channels"
       assert io =~ "The following channels have been used:"
+    end
+
+    test "with multiple channels" do
+      channel_1 = TestServer.SSH.channel()
+      channel_2 = TestServer.SSH.channel()
+      :ok = TestServer.SSH.handle(channel_1, to: fn _data, state -> {:reply, "one", state} end)
+      :ok = TestServer.SSH.handle(channel_2, to: fn _data, state -> {:reply, "two", state} end)
+
+      assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+      assert {:ok, channel_id_1} = SSHClient.session_channel(conn)
+      assert {:ok, channel_id_2} = SSHClient.session_channel(conn)
+      assert SSHClient.exec(conn, channel_id_2, "ping") == :ok
+      assert SSHClient.exec(conn, channel_id_1, "ping") == :ok
+      assert {:ok, %{data: "two"}} = SSHClient.receive_until_closed(conn, channel_id_1)
+      assert {:ok, %{data: "one"}} = SSHClient.receive_until_closed(conn, channel_id_2)
     end
 
     test "with `messages: :all` option" do
@@ -623,8 +638,8 @@ defmodule TestServer.SSHTest do
     end
 
     test "with multiple channels" do
-      _channel_1 = TestServer.SSH.channel()
-      _channel_2 = TestServer.SSH.channel()
+      TestServer.SSH.channel()
+      TestServer.SSH.channel()
 
       assert_raise RuntimeError,
                    ~r/Multiple channels available, please pass channel to `TestServer\.SSH\.handle\/2`/,
@@ -693,7 +708,7 @@ defmodule TestServer.SSHTest do
     end
 
     test "when receiving unexpected message after processed handlers" do
-      defmodule UnexpectedMessageAfterProcessedTest do
+      defmodule HandleUnexpectedMessageAfterProcessedTest do
         use ExUnit.Case
 
         test "fails" do

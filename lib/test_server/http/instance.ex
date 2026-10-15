@@ -17,7 +17,7 @@ defmodule TestServer.HTTP.Instance do
           TestServer.instance(),
           {:plug_router_to, {binary(), keyword(), TestServer.stacktrace()}}
         ) ::
-          {:ok, %{ref: reference()}}
+          {:ok, %{ref: TestServer.HTTP.route_ref()}}
   def register(instance, {:plug_router_to, {uri, options, stacktrace}}) do
     ensure_plug!(options[:to])
     options[:match] && ensure_function!(options[:match])

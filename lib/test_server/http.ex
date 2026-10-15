@@ -29,6 +29,17 @@ defmodule TestServer.HTTP do
   @type x509_suite :: %{cert: binary(), cacerts: [binary()]}
 
   @doc """
+  Same as `start/1`, but returns the instance and raises on failure.
+  """
+  @spec start!(keyword()) :: TestServer.instance()
+  def start!(options \\ []) do
+    case start(options) do
+      {:ok, instance} -> instance
+      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
+    end
+  end
+
+  @doc """
   Start a test server HTTP instance.
 
   The instance will be terminated when the test case finishes.
@@ -84,17 +95,6 @@ defmodule TestServer.HTTP do
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
-  end
-
-  @doc """
-  Same as `start/1`, but returns the instance and raises on failure.
-  """
-  @spec start!(keyword()) :: TestServer.instance()
-  def start!(options \\ []) do
-    case start(options) do
-      {:ok, instance} -> instance
-      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
-    end
   end
 
   defp verify_instance!(instance) do
@@ -265,7 +265,7 @@ defmodule TestServer.HTTP do
   @spec handle(TestServer.instance(), binary(), keyword()) :: :ok
   def handle(instance, uri, options)
       when is_pid(instance) and is_binary(uri) and is_list(options) do
-    options = Keyword.put_new(options, :to, &default_response_handler/1)
+    options = Keyword.put_new(options, :to, &default_handler/1)
 
     {:ok, _route} = register_route(instance, uri, options)
 
@@ -281,7 +281,7 @@ defmodule TestServer.HTTP do
     Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
   end
 
-  defp default_response_handler(conn) do
+  defp default_handler(conn) do
     Conn.resp(conn, 200, to_string(Conn.get_http_protocol(conn)))
   end
 
@@ -475,14 +475,14 @@ defmodule TestServer.HTTP do
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
-    options = Keyword.put_new(options, :to, &default_websocket_handle/2)
+    options = Keyword.put_new(options, :to, &default_websocket_handler/2)
 
     {:ok, _handler} = Instance.register(socket, {:websocket, {:handle, options, stacktrace}})
 
     :ok
   end
 
-  defp default_websocket_handle(frame, state),
+  defp default_websocket_handler(frame, state),
     do: {:reply, frame, state}
 
   @doc """

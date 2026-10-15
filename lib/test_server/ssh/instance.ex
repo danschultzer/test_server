@@ -175,7 +175,7 @@ defmodule TestServer.SSH.Instance do
       ref: make_ref(),
       channel_ref: channel_ref,
       match: Keyword.get(options, :match),
-      to: Keyword.get(options, :to, &default_handler/2),
+      to: Keyword.fetch!(options, :to),
       stacktrace: stacktrace,
       suspended: false,
       received: []
@@ -189,23 +189,14 @@ defmodule TestServer.SSH.Instance do
         _from,
         state
       ) do
-    {res, state} = run_handlers(message, channel_ref, connection, channel_state, state)
+    {result, state} = run_handlers(message, channel_ref, connection, channel_state, state)
 
-    {:reply, res, state}
+    {:reply, result, state}
   end
 
   def handle_call(option, _from, state) when option in [:handlers, :channels, :options] do
     {:reply, Map.fetch!(state, option), state}
   end
-
-  defp default_handler({:exec, _channel_id, _want_reply, command}, state),
-    do: {:reply, to_string(command), state}
-
-  defp default_handler({:data, _channel_id, _type, data}, state),
-    do: {:reply, data, state}
-
-  defp default_handler(_message, state),
-    do: {:ok, state}
 
   defp run_handlers(message, channel_ref, connection, channel_state, state) do
     state.handlers
@@ -227,8 +218,8 @@ defmodule TestServer.SSH.Instance do
         result = try_run_handler(handler, message, connection, channel_state, stacktrace)
 
         handlers =
-          List.update_at(state.handlers, index, fn h ->
-            %{h | suspended: true, received: h.received ++ [message]}
+          List.update_at(state.handlers, index, fn handler ->
+            %{handler | suspended: true, received: handler.received ++ [message]}
           end)
 
         {result, %{state | handlers: handlers}}

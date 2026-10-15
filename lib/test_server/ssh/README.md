@@ -12,46 +12,44 @@ Session channels can be set up by calling `TestServer.SSH.channel/2`. By default
 
 ```elixir
 test "SSHClient" do
-  {:ok, channel} = TestServer.SSH.channel()
+  channel = TestServer.SSH.channel()
 
   # Only matches `hi` data message
-  :ok =
-    TestServer.SSH.handle(
-      channel,
-      match: fn {:data, _channel_id, _want_reply, data}, _state ->
-        data == "hi"
-      end
-    )
+  TestServer.SSH.handle(
+    channel,
+    match: fn {:data, _channel_id, _want_reply, data}, _state ->
+      data == "hi"
+    end
+  )
 
   # Reply with `pong` message
-  :ok =
-    TestServer.SSH.handle(
-      channel,
-      to: fn {:data, _channel_id, _want_reply, _data}, state ->
-        {:reply, "pong", state}
-      end
-    )
+  TestServer.SSH.handle(
+    channel,
+    to: fn {:data, _channel_id, _want_reply, _data}, state ->
+      {:reply, "pong", state}
+    end
+  )
 
   # Default data echo
-  :ok = TestServer.SSH.handle(channel)
+  TestServer.SSH.handle(channel)
 
   assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
   assert {:ok, channel_id} = SSHClient.session_channel(conn)
-  assert :ok = SSHClient.send(conn, channel_id, "ping")
-  assert {:ok, "pong"} = SSHClient.receive_data(conn, channel_id)
-  assert :ok = SSHClient.send(conn, channel_id, "hi")
-  assert {:ok, "hi"} = SSHClient.receive_data(conn, channel_id)
-  assert :ok = SSHClient.send(conn, channel_id, "hello")
-  assert {:ok, "hello"} = SSHClient.receive_data(conn, channel_id)
-  assert :ok = SSHClient.close(conn)
+  assert SSHClient.send(conn, channel_id, "ping") == :ok
+  assert SSHClient.receive_data(conn, channel_id) == {:ok, "pong"}
+  assert SSHClient.send(conn, channel_id, "hi") == :ok
+  assert SSHClient.receive_data(conn, channel_id) == {:ok, "hi"}
+  assert SSHClient.send(conn, channel_id, "hello") == :ok
+  assert SSHClient.receive_data(conn, channel_id) == {:ok, "hello"}
+  assert SSHClient.close(conn) == :ok
 end
 ```
 
 By default, only `:exec` and `:data` messages are dispatched to handlers. Use the `:messages` option on `TestServer.SSH.channel/2` to control which message types are dispatched:
 
 ```elixir
-{:ok, channel_1} = TestServer.SSH.channel(messages: :all)
-{:ok, channel_2} = TestServer.SSH.channel(messages: [:data, :env, :pty])
+channel_1 = TestServer.SSH.channel(messages: :all)
+channel_2 = TestServer.SSH.channel(messages: [:data, :env, :pty])
 ```
 
 ### Host keys
@@ -60,8 +58,7 @@ Host keys can be configured in `TestServer.SSH.start/1`. By default host keys ar
 
 ```elixir
 host_key = :public_key.generate_key({:rsa, 2048, 65_537})
-{:ok, instance} = TestServer.SSH.start(host_keys: [host_key])
-
+instance = TestServer.SSH.start!(host_keys: [host_key])
 [%{fingerprint: fingerprint}] = TestServer.SSH.host_keys(instance)
 ```
 
@@ -84,7 +81,7 @@ TestServer.SSH.start(
 Use the `:ipfamily` option to test with IPv6 when starting the test server with `TestServer.SSH.start/1`:
 
 ```elixir
-{:ok, _instance} = TestServer.SSH.start(ipfamily: :inet6)
+TestServer.SSH.start!(ipfamily: :inet6)
 
 assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
 assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port} = SSHClient.sockname(conn)

@@ -4,8 +4,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
   setup do
     Application.ensure_all_started(:bandit)
 
-    {:ok, _instance} =
-      TestServer.HTTP.start(scheme: :https, http_server: {TestServer.HTTP.Server.Bandit, []})
+    TestServer.HTTP.start!(scheme: :https, http_server: {TestServer.HTTP.Server.Bandit, []})
 
     :ok
   end

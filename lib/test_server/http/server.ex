@@ -40,27 +40,24 @@ defmodule TestServer.HTTP.Server do
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
-    port = TestServer.open_port(options)
     scheme = parse_scheme(options)
     {tls_options, x509_options} = maybe_generate_x509_suite(options, scheme)
     ip_family = Keyword.get(options, :ipfamily, :inet)
     test_server_options = [tls: tls_options, ipfamily: ip_family]
     {mod, server_options} = http_server(options)
 
-    case mod.start(instance, port, scheme, test_server_options, server_options) do
-      {:ok, reference, server_options} ->
-        options =
-          options
-          |> Keyword.merge(x509_options)
-          |> Keyword.put(:scheme, scheme)
-          |> Keyword.put(:port, port)
-          |> Keyword.put(:http_server, {mod, server_options})
-          |> Keyword.put(:http_server_reference, reference)
+    with {:ok, port} <- TestServer.open_port(options),
+         {:ok, reference, server_options} <-
+           mod.start(instance, port, scheme, test_server_options, server_options) do
+      options =
+        options
+        |> Keyword.merge(x509_options)
+        |> Keyword.put(:scheme, scheme)
+        |> Keyword.put(:port, port)
+        |> Keyword.put(:http_server, {mod, server_options})
+        |> Keyword.put(:http_server_reference, reference)
 
-        {:ok, options}
-
-      {:error, error} ->
-        {:error, error}
+      {:ok, options}
     end
   end
 

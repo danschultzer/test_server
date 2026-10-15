@@ -105,7 +105,7 @@ WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/2`. By de
 
 ```elixir
 test "WebSocketClient" do
-  {:ok, socket} = TestServer.HTTP.websocket("/ws")
+  socket = TestServer.HTTP.websocket("/ws")
 
   :ok = TestServer.HTTP.websocket_handle(socket)
   :ok = TestServer.HTTP.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi" end)

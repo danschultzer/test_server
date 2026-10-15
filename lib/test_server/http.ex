@@ -81,9 +81,20 @@ defmodule TestServer.HTTP do
       assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
               Req.get(TestServer.HTTP.url(), req_options)
   """
-  @spec start(keyword()) :: {:ok, TestServer.instance()}
+  @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
+  end
+
+  @doc """
+  Same as `start/1`, but returns the instance and raises on failure.
+  """
+  @spec start!(keyword()) :: TestServer.instance()
+  def start!(options \\ []) do
+    case start(options) do
+      {:ok, instance} -> instance
+      {:error, reason} -> TestServer.raise_start_failure!(__MODULE__, options, reason)
+    end
   end
 
   defp verify_instance!(instance) do
@@ -237,7 +248,7 @@ defmodule TestServer.HTTP do
   """
   @spec handle(binary(), keyword()) :: :ok
   def handle(uri, options) when is_binary(uri) do
-    {:ok, instance} = TestServer.autostart_instance(__MODULE__)
+    instance = TestServer.autostart_instance(__MODULE__)
 
     handle(instance, uri, options)
   end
@@ -291,7 +302,7 @@ defmodule TestServer.HTTP do
   """
   @spec plug(plug_module() | plug_fun()) :: :ok
   def plug(plug) do
-    {:ok, instance} = TestServer.autostart_instance(__MODULE__)
+    instance = TestServer.autostart_instance(__MODULE__)
 
     plug(instance, plug)
   end
@@ -350,7 +361,7 @@ defmodule TestServer.HTTP do
     end
   end
 
-  @spec websocket(binary()) :: {:ok, websocket()}
+  @spec websocket(binary()) :: websocket()
   def websocket(uri) when is_binary(uri), do: websocket(uri, [])
 
   @doc """
@@ -366,7 +377,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      {:ok, socket} = TestServer.HTTP.websocket("/ws")
+      socket = TestServer.HTTP.websocket("/ws")
       TestServer.HTTP.websocket_handle(socket)
 
       assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -391,14 +402,14 @@ defmodule TestServer.HTTP do
       assert {:error, %WebSockex.RequestError{code: 403}} =
               WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
   """
-  @spec websocket(binary(), keyword()) :: {:ok, websocket()}
+  @spec websocket(binary(), keyword()) :: websocket()
   def websocket(uri, options) when is_binary(uri) do
-    {:ok, instance} = TestServer.autostart_instance(__MODULE__)
+    instance = TestServer.autostart_instance(__MODULE__)
 
     websocket(instance, uri, options)
   end
 
-  @spec websocket(TestServer.instance(), binary()) :: {:ok, websocket()}
+  @spec websocket(TestServer.instance(), binary()) :: websocket()
   def websocket(instance, uri) when is_pid(instance) and is_binary(uri) do
     websocket(instance, uri, [])
   end
@@ -408,7 +419,7 @@ defmodule TestServer.HTTP do
 
   See `websocket/2` for options.
   """
-  @spec websocket(TestServer.instance(), binary(), keyword()) :: {:ok, websocket()}
+  @spec websocket(TestServer.instance(), binary(), keyword()) :: websocket()
   def websocket(instance, uri, options) do
     options =
       options
@@ -417,7 +428,7 @@ defmodule TestServer.HTTP do
 
     {:ok, %{ref: ref}} = register_route(instance, uri, options)
 
-    {:ok, {instance, ref}}
+    {instance, ref}
   end
 
   @spec websocket_handle(websocket()) :: :ok
@@ -440,7 +451,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      {:ok, socket} = TestServer.HTTP.websocket("/ws")
+      socket = TestServer.HTTP.websocket("/ws")
 
       TestServer.HTTP.websocket_handle(
         socket,
@@ -481,7 +492,7 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      {:ok, socket} = TestServer.HTTP.websocket("/ws")
+      socket = TestServer.HTTP.websocket("/ws")
       {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
       assert TestServer.HTTP.websocket_send(socket, to: fn state ->

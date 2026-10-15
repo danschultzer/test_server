@@ -8,17 +8,8 @@ defmodule TestServer.HTTPTest do
 
   describe "start/1" do
     test "with invalid port" do
-      assert_raise RuntimeError, ~r/Invalid port, got: :invalid/, fn ->
+      assert_raise ArgumentError, ~r/expected a port, got: :invalid/, fn ->
         TestServer.HTTP.start(port: :invalid)
-      end
-
-      assert_raise RuntimeError, ~r/Invalid port, got: 65536/, fn ->
-        TestServer.HTTP.start(port: 65_536)
-      end
-
-      assert_raise RuntimeError, ~r/Could not listen to port 4444, because: :eaddrinuse/, fn ->
-        TestServer.HTTP.start(port: 4444)
-        TestServer.HTTP.start(port: 4444)
       end
     end
 
@@ -41,8 +32,7 @@ defmodule TestServer.HTTPTest do
     end
 
     test "starts with self-signed SSL" do
-      {:ok, instance} = TestServer.HTTP.start(scheme: :https)
-
+      instance = TestServer.HTTP.start!(scheme: :https)
       options = TestServer.HTTP.Instance.get_options(instance)
 
       assert %{cert: _, cacerts: _} = options[:x509_suite]
@@ -71,26 +61,25 @@ defmodule TestServer.HTTPTest do
                  http_options: http_options.(invalid_cacerts)
                )
 
-      assert :ok = TestServer.HTTP.handle("/")
+      TestServer.HTTP.handle("/")
 
       assert {:ok, _} =
                http1_request(TestServer.HTTP.url("/"), http_options: http_options.(valid_cacerts))
     end
 
     test "starts in IPv6-only mode" do
-      {:ok, instance} = TestServer.HTTP.start(ipfamily: :inet6)
+      instance = TestServer.HTTP.start!(ipfamily: :inet6)
       options = TestServer.HTTP.Instance.get_options(instance)
 
       assert options[:ipfamily] == :inet6
 
-      assert :ok =
-               TestServer.HTTP.handle("/",
-                 to: fn conn ->
-                   assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+      TestServer.HTTP.handle("/",
+        to: fn conn ->
+          assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 
-                   Plug.Conn.resp(conn, 200, "OK")
-                 end
-               )
+          Plug.Conn.resp(conn, 200, "OK")
+        end
+      )
 
       assert %{host: hostname} = URI.parse(TestServer.HTTP.url("/"))
 
@@ -107,7 +96,7 @@ defmodule TestServer.HTTPTest do
     end
 
     test "when test stop" do
-      port = TestServer.open_port([])
+      {:ok, port} = TestServer.open_port([])
 
       on_exit(fn ->
         refute :gen_tcp.listen(port, []) == {:error, :eaddrinuse},
@@ -116,6 +105,21 @@ defmodule TestServer.HTTPTest do
 
       assert {:ok, _instance} = TestServer.HTTP.start(port: port)
       assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+    end
+  end
+
+  describe "start!/1" do
+    test "returns instance" do
+      assert instance = TestServer.HTTP.start!()
+      assert is_pid(instance)
+    end
+
+    test "when start fails" do
+      TestServer.HTTP.start!(port: 4444)
+
+      assert_raise RuntimeError,
+                   ~r/EXIT when starting TestServer.HTTP instance on port 4444/,
+                   fn -> TestServer.HTTP.start!(port: 4444) end
     end
   end
 
@@ -128,21 +132,19 @@ defmodule TestServer.HTTPTest do
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
                    fn ->
-                     {:ok, instance} = TestServer.HTTP.start()
-
-                     assert :ok = TestServer.HTTP.stop()
+                     instance = TestServer.HTTP.start!()
+                     :ok = TestServer.HTTP.stop()
 
                      TestServer.HTTP.stop(instance)
                    end
     end
 
     test "stops" do
-      assert {:ok, pid} = TestServer.HTTP.start()
+      instance = TestServer.HTTP.start!()
       url = TestServer.HTTP.url("/")
 
-      assert :ok = TestServer.HTTP.stop()
-      refute Process.alive?(pid)
-
+      assert TestServer.HTTP.stop() == :ok
+      refute Process.alive?(instance)
       assert {:error, {:failed_connect, _}} = http1_request(url)
     end
 
@@ -156,8 +158,8 @@ defmodule TestServer.HTTPTest do
                      TestServer.HTTP.stop()
                    end
 
-      assert :ok = TestServer.HTTP.stop(instance_1)
-      assert :ok = TestServer.HTTP.stop()
+      assert TestServer.HTTP.stop(instance_1) == :ok
+      assert TestServer.HTTP.stop() == :ok
     end
   end
 
@@ -170,16 +172,15 @@ defmodule TestServer.HTTPTest do
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
                    fn ->
-                     {:ok, instance} = TestServer.HTTP.start()
-
-                     assert :ok = TestServer.HTTP.stop()
+                     instance = TestServer.HTTP.start!()
+                     :ok = TestServer.HTTP.stop()
 
                      TestServer.HTTP.url(instance)
                    end
     end
 
     test "with invalid `:host`" do
-      TestServer.HTTP.start()
+      TestServer.HTTP.start!()
 
       assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
         TestServer.HTTP.url("/", host: :invalid)
@@ -187,7 +188,7 @@ defmodule TestServer.HTTPTest do
     end
 
     test "produces routes" do
-      TestServer.HTTP.start()
+      TestServer.HTTP.start!()
 
       assert TestServer.HTTP.url("/") =~ ~r/^http\:\/\/localhost\:[0-9]+\/$/
       refute TestServer.HTTP.url("/") == TestServer.HTTP.url("/path")
@@ -195,40 +196,38 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with `:host`" do
-      TestServer.HTTP.start()
+      TestServer.HTTP.start!()
 
-      assert :ok =
-               TestServer.HTTP.handle("/",
-                 to: fn conn ->
-                   assert conn.remote_ip == {127, 0, 0, 1}
-                   assert conn.host == "custom-host"
+      TestServer.HTTP.handle("/",
+        to: fn conn ->
+          assert conn.remote_ip == {127, 0, 0, 1}
+          assert conn.host == "custom-host"
 
-                   Plug.Conn.resp(conn, 200, "OK")
-                 end
-               )
+          Plug.Conn.resp(conn, 200, "OK")
+        end
+      )
 
       assert {:ok, _} = http1_request(TestServer.HTTP.url("/", host: "custom-host"))
     end
 
     test "with `:host` in IPv6-only mode" do
-      TestServer.HTTP.start(ipfamily: :inet6, http_server: {TestServer.HTTP.Server.Httpd, []})
+      TestServer.HTTP.start!(ipfamily: :inet6, http_server: {TestServer.HTTP.Server.Httpd, []})
 
-      assert :ok =
-               TestServer.HTTP.handle("/",
-                 to: fn conn ->
-                   assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
-                   assert conn.host == "custom-host"
+      TestServer.HTTP.handle("/",
+        to: fn conn ->
+          assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+          assert conn.host == "custom-host"
 
-                   Plug.Conn.resp(conn, 200, "OK")
-                 end
-               )
+          Plug.Conn.resp(conn, 200, "OK")
+        end
+      )
 
       assert {:ok, _} = http1_request(TestServer.HTTP.url("/", host: "custom-host"))
     end
 
     test "with multiple instances" do
-      {:ok, instance_1} = TestServer.HTTP.start()
-      {:ok, instance_2} = TestServer.HTTP.start()
+      instance_1 = TestServer.HTTP.start!()
+      instance_2 = TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.url\/2`/,
@@ -245,9 +244,8 @@ defmodule TestServer.HTTPTest do
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
                    fn ->
-                     {:ok, instance} = TestServer.HTTP.start()
-
-                     assert :ok = TestServer.HTTP.stop()
+                     instance = TestServer.HTTP.start!()
+                     :ok = TestServer.HTTP.stop(instance)
 
                      TestServer.HTTP.handle(instance, "/")
                    end
@@ -264,8 +262,8 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with multiple instances" do
-      {:ok, instance_1} = TestServer.HTTP.start()
-      {:ok, _instance_2} = TestServer.HTTP.start()
+      instance_1 = TestServer.HTTP.start!()
+      _instance_2 = TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.handle\/2`/,
@@ -273,7 +271,7 @@ defmodule TestServer.HTTPTest do
                      TestServer.HTTP.handle("/")
                    end
 
-      assert :ok = TestServer.HTTP.handle(instance_1, "/")
+      TestServer.HTTP.handle(instance_1, "/")
 
       TestServer.HTTP.stop(instance_1)
     end
@@ -283,9 +281,9 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle("/")
 
-          assert :ok = TestServer.HTTP.handle("/")
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/path"))
         end
       end
@@ -298,8 +296,8 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-          assert :ok = TestServer.HTTP.handle("/", via: :post)
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle("/", via: :post)
 
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/"))
         end
@@ -313,9 +311,9 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle("/")
 
-          assert :ok = TestServer.HTTP.handle("/")
           assert {:ok, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/"))
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/?a=1"))
         end
@@ -331,7 +329,7 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          assert :ok = TestServer.HTTP.handle("/")
+          TestServer.HTTP.handle("/")
         end
       end
 
@@ -346,7 +344,8 @@ defmodule TestServer.HTTPTest do
         def call(conn, _options), do: Plug.Conn.resp(conn, 200, to_string(__MODULE__))
       end
 
-      assert :ok = TestServer.HTTP.handle("/", to: ToPlug)
+      TestServer.HTTP.handle("/", to: ToPlug)
+
       assert http1_request(TestServer.HTTP.url("/")) == {:ok, to_string(ToPlug)}
     end
 
@@ -355,9 +354,9 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle("/", to: fn _conn -> raise "boom" end)
 
-          assert :ok = TestServer.HTTP.handle("/", to: fn _conn -> raise "boom" end)
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/"))
         end
       end
@@ -372,9 +371,9 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle("/", to: fn conn -> Plug.Conn.halt(conn) end)
 
-          assert :ok = TestServer.HTTP.handle("/", to: fn conn -> Plug.Conn.halt(conn) end)
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/"))
         end
       end
@@ -384,10 +383,9 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with `:to` function" do
-      assert :ok =
-               TestServer.HTTP.handle("/",
-                 to: fn conn -> Plug.Conn.resp(conn, 200, "function called") end
-               )
+      TestServer.HTTP.handle("/",
+        to: fn conn -> Plug.Conn.resp(conn, 200, "function called") end
+      )
 
       assert http1_request(TestServer.HTTP.url("/")) == {:ok, "function called"}
     end
@@ -397,12 +395,8 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-
-          assert :ok =
-                   TestServer.HTTP.handle("/",
-                     match: fn _conn -> raise "boom" end
-                   )
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle("/", match: fn _conn -> raise "boom" end)
 
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/"))
         end
@@ -414,20 +408,20 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with `:match` function" do
-      assert :ok =
-               TestServer.HTTP.handle("/",
-                 match: fn
-                   %{params: %{"a" => "1"}} = _conn -> true
-                   _conn -> false
-                 end
-               )
+      TestServer.HTTP.handle("/",
+        match: fn
+          %{params: %{"a" => "1"}} = _conn -> true
+          _conn -> false
+        end
+      )
 
       assert {:ok, _} = http1_request(TestServer.HTTP.url("/ignore") <> "?a=1")
     end
 
     test "with `:via` option" do
-      assert :ok = TestServer.HTTP.handle("/", via: :get)
-      assert :ok = TestServer.HTTP.handle("/", via: :post)
+      TestServer.HTTP.handle("/", via: :get)
+      TestServer.HTTP.handle("/", via: :post)
+
       assert {:ok, _} = http1_request(TestServer.HTTP.url("/"))
       assert {:ok, _} = http1_request(TestServer.HTTP.url("/"), method: :post)
     end
@@ -435,23 +429,23 @@ defmodule TestServer.HTTPTest do
     # `:httpd` has no HTTP/2 support
     unless System.get_env("HTTP_SERVER") == "Httpd" do
       test "with HTTP/2" do
-        {:ok, _instance} = TestServer.HTTP.start(scheme: :https)
+        TestServer.HTTP.start!(scheme: :https)
+        TestServer.HTTP.handle("/")
 
-        assert :ok = TestServer.HTTP.handle("/")
         assert {:ok, "HTTP/2"} = http2_request(TestServer.HTTP.url())
       end
 
       test "with HTTP/2 with `:to` function" do
-        {:ok, _instance} = TestServer.HTTP.start(scheme: :https)
+        TestServer.HTTP.start!(scheme: :https)
 
-        assert :ok =
-                 TestServer.HTTP.handle("/",
-                   to: fn conn ->
-                     assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
-                     assert {:ok, body, _data} = Plug.Conn.read_body(conn)
-                     Plug.Conn.resp(conn, 200, body)
-                   end
-                 )
+        TestServer.HTTP.handle("/",
+          to: fn conn ->
+            assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
+            assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+
+            Plug.Conn.resp(conn, 200, body)
+          end
+        )
 
         assert {:ok, "test"} = http2_request(TestServer.HTTP.url(), method: :post, body: "test")
       end
@@ -466,16 +460,13 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with plug function" do
-      assert :ok =
-               TestServer.HTTP.plug(fn conn ->
-                 assert {:ok, body, _data} = Plug.Conn.read_body(conn)
-                 %{conn | params: %{"plug" => "anonymous function", body: body}}
-               end)
+      TestServer.HTTP.plug(fn conn ->
+        assert {:ok, body, _data} = Plug.Conn.read_body(conn)
 
-      assert :ok =
-               TestServer.HTTP.handle("/",
-                 to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params))
-               )
+        %{conn | params: %{"plug" => "anonymous function", body: body}}
+      end)
+
+      TestServer.HTTP.handle("/", to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params)))
 
       assert {:ok, query} = http1_request(TestServer.HTTP.url("/"))
       assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => ""}
@@ -488,8 +479,9 @@ defmodule TestServer.HTTPTest do
         def call(conn, _options), do: %{conn | params: %{"plug" => to_string(__MODULE__)}}
       end
 
-      assert :ok = TestServer.HTTP.plug(ModulePlug)
-      assert :ok = TestServer.HTTP.handle("/", to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
+      TestServer.HTTP.plug(ModulePlug)
+      TestServer.HTTP.handle("/", to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
+
       assert http1_request(TestServer.HTTP.url("/")) == {:ok, to_string(ModulePlug)}
     end
 
@@ -498,9 +490,9 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.plug(fn _conn -> raise "boom" end)
 
-          assert :ok = TestServer.HTTP.plug(fn _conn -> raise "boom" end)
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/"))
         end
       end
@@ -515,10 +507,10 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.plug(fn conn -> Plug.Conn.halt(conn) end)
+          TestServer.HTTP.handle("/")
 
-          assert :ok = TestServer.HTTP.plug(fn conn -> Plug.Conn.halt(conn) end)
-          assert :ok = TestServer.HTTP.handle("/")
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/"))
         end
       end
@@ -537,16 +529,15 @@ defmodule TestServer.HTTPTest do
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
                    fn ->
-                     {:ok, instance} = TestServer.HTTP.start()
-
-                     assert :ok = TestServer.HTTP.stop()
+                     instance = TestServer.HTTP.start!()
+                     :ok = TestServer.HTTP.stop()
 
                      TestServer.HTTP.x509_suite(instance)
                    end
     end
 
     test "when instance not running in http" do
-      TestServer.HTTP.start()
+      TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running with `\[scheme: :https\]` option/,
@@ -564,7 +555,7 @@ defmodule TestServer.HTTPTest do
         cacerts: suite.chain ++ suite.cacerts
       ]
 
-      TestServer.HTTP.start(scheme: :https, tls: tls_options)
+      TestServer.HTTP.start!(scheme: :https, tls: tls_options)
 
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is running with custom SSL/,
@@ -579,7 +570,7 @@ defmodule TestServer.HTTPTest do
     describe "websocket/3" do
       test "returns 501" do
         # Test with WebSockex client
-        assert {:ok, _socket} = TestServer.HTTP.websocket("/ws")
+        TestServer.HTTP.websocket("/ws")
 
         assert {:error, %WebSockex.RequestError{code: 501}} =
                  WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -597,7 +588,8 @@ defmodule TestServer.HTTPTest do
           }
 
         # Test the body response
-        assert {:ok, _socket} = TestServer.HTTP.websocket("/ws")
+        TestServer.HTTP.websocket("/ws")
+
         assert {:ok, {{_, 501, _}, _headers, body}} = :httpc.request(:get, request, [], [])
         assert to_string(body) == "WebSocket is not supported with httpd!"
       end
@@ -615,8 +607,8 @@ defmodule TestServer.HTTPTest do
   else
     describe "websocket/3" do
       test "when instance not running" do
-        {:ok, instance} = TestServer.HTTP.start()
-        assert :ok = TestServer.HTTP.stop()
+        instance = TestServer.HTTP.start!()
+        :ok = TestServer.HTTP.stop()
 
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
@@ -640,8 +632,8 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with multiple instances" do
-        {:ok, _instance_1} = TestServer.HTTP.start()
-        {:ok, _instance_2} = TestServer.HTTP.start()
+        TestServer.HTTP.start!()
+        TestServer.HTTP.start!()
 
         assert_raise RuntimeError,
                      ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.websocket\/2`/,
@@ -651,26 +643,26 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with handshake callback function with set conn" do
-        assert {:ok, _socket} =
-                 TestServer.HTTP.websocket("/ws",
-                   to: fn conn ->
-                     Plug.Conn.resp(conn, 403, "Forbidden")
-                   end
-                 )
+        _socket =
+          TestServer.HTTP.websocket("/ws",
+            to: fn conn ->
+              Plug.Conn.resp(conn, 403, "Forbidden")
+            end
+          )
 
         assert {:error, %WebSockex.RequestError{code: 403}} =
                  WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
       end
 
       test "with handshake callback function with unset conn" do
-        assert {:ok, _socket} =
-                 TestServer.HTTP.websocket("/ws",
-                   to: fn conn ->
-                     assert Plug.Conn.get_req_header(conn, "upgrade") == ["websocket"]
+        _socket =
+          TestServer.HTTP.websocket("/ws",
+            to: fn conn ->
+              assert Plug.Conn.get_req_header(conn, "upgrade") == ["websocket"]
 
-                     conn
-                   end
-                 )
+              conn
+            end
+          )
 
         assert {:ok, _client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
       end
@@ -678,9 +670,9 @@ defmodule TestServer.HTTPTest do
 
     describe "websocket_handle/3" do
       test "when instance not running" do
-        {:ok, instance} = TestServer.HTTP.start()
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
-        assert :ok = TestServer.HTTP.stop(instance)
+        instance = TestServer.HTTP.start!()
+        socket = TestServer.HTTP.websocket("/ws")
+        :ok = TestServer.HTTP.stop(instance)
 
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
@@ -690,7 +682,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with invalid options" do
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+        socket = TestServer.HTTP.websocket("/ws")
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
           TestServer.HTTP.websocket_handle(socket, to: :invalid)
@@ -708,10 +700,11 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+            socket = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, _client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert :ok = TestServer.HTTP.websocket_handle(socket)
+
+            TestServer.HTTP.websocket_handle(socket)
           end
         end
 
@@ -724,8 +717,8 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, _socket} = TestServer.HTTP.websocket("/ws")
+            TestServer.HTTP.start!(suppress_warning: true)
+            TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
@@ -743,9 +736,10 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
-            assert :ok = TestServer.HTTP.websocket_handle(socket)
+            TestServer.HTTP.start!(suppress_warning: true)
+            socket = TestServer.HTTP.websocket("/ws")
+
+            TestServer.HTTP.websocket_handle(socket)
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert WebSocketClient.send_message(client, "ping") == {:ok, "ping"}
@@ -765,13 +759,12 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+            TestServer.HTTP.start!(suppress_warning: true)
+            socket = TestServer.HTTP.websocket("/ws")
 
-            assert :ok =
-                     TestServer.HTTP.websocket_handle(socket,
-                       to: fn _frame, _state -> raise "boom" end
-                     )
+            TestServer.HTTP.websocket_handle(socket,
+              to: fn _frame, _state -> raise "boom" end
+            )
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
@@ -789,13 +782,12 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+            TestServer.HTTP.start!(suppress_warning: true)
+            socket = TestServer.HTTP.websocket("/ws")
 
-            assert :ok =
-                     TestServer.HTTP.websocket_handle(socket,
-                       to: fn _frame, _state -> :invalid end
-                     )
+            TestServer.HTTP.websocket_handle(socket,
+              to: fn _frame, _state -> :invalid end
+            )
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
@@ -808,12 +800,11 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with `:to` function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+        socket = TestServer.HTTP.websocket("/ws")
 
-        assert :ok =
-                 TestServer.HTTP.websocket_handle(socket,
-                   to: fn {:text, _any}, state -> {:reply, {:text, "function called"}, state} end
-                 )
+        TestServer.HTTP.websocket_handle(socket,
+          to: fn {:text, _any}, state -> {:reply, {:text, "function called"}, state} end
+        )
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
         assert WebSocketClient.send_message(client, "ping") == {:ok, "function called"}
@@ -824,13 +815,13 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+            TestServer.HTTP.start!(suppress_warning: true)
 
-            assert :ok =
-                     TestServer.HTTP.websocket_handle(socket,
-                       match: fn _frame, _state -> raise "boom" end
-                     )
+            socket = TestServer.HTTP.websocket("/ws")
+
+            TestServer.HTTP.websocket_handle(socket,
+              match: fn _frame, _state -> raise "boom" end
+            )
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert {:ok, msg} = WebSocketClient.send_message(client, "ping")
@@ -844,23 +835,28 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with `:match` function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+        socket = TestServer.HTTP.websocket("/ws")
 
-        assert :ok =
-                 TestServer.HTTP.websocket_handle(socket,
-                   match: fn {:text, message}, _state -> message == "hello" end
-                 )
+        TestServer.HTTP.websocket_handle(socket,
+          match: fn {:text, message}, _state -> message == "first" end,
+          to: fn {:text, _any}, state -> {:reply, {:text, "pong"}, state} end
+        )
+
+        TestServer.HTTP.websocket_handle(socket,
+          match: fn {:text, message}, _state -> message == "second" end
+        )
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-        assert WebSocketClient.send_message(client, "hello") == {:ok, "hello"}
+        assert WebSocketClient.send_message(client, "second") == {:ok, "second"}
+        assert WebSocketClient.send_message(client, "first") == {:ok, "pong"}
       end
     end
 
     describe "websocket_send/2" do
       test "when instance not running" do
-        {:ok, instance} = TestServer.HTTP.start()
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
-        assert :ok = TestServer.HTTP.stop(instance)
+        instance = TestServer.HTTP.start!()
+        socket = TestServer.HTTP.websocket("/ws")
+        :ok = TestServer.HTTP.stop(instance)
 
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
@@ -874,11 +870,13 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+            TestServer.HTTP.start!(suppress_warning: true)
+            socket = TestServer.HTTP.websocket("/ws")
+
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-            assert :ok = TestServer.HTTP.websocket_send(socket, to: fn _state -> :invalid end)
+            TestServer.HTTP.websocket_send(socket, to: fn _state -> :invalid end)
+
             assert {:ok, message} = WebSocketClient.receive_message(client)
             assert message =~ "(RuntimeError) Invalid callback response, got: :invalid."
           end
@@ -893,12 +891,13 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            {:ok, _instance} = TestServer.HTTP.start(suppress_warning: true)
-            assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+            TestServer.HTTP.start!(suppress_warning: true)
+
+            socket = TestServer.HTTP.websocket("/ws")
+
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-            assert :ok =
-                     TestServer.HTTP.websocket_send(socket, to: fn _state -> raise "boom" end)
+            TestServer.HTTP.websocket_send(socket, to: fn _state -> raise "boom" end)
 
             assert {:ok, message} = WebSocketClient.receive_message(client)
             assert message =~ "(RuntimeError) boom"
@@ -911,24 +910,25 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with callback function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+        socket = TestServer.HTTP.websocket("/ws")
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-        assert :ok =
-                 TestServer.HTTP.websocket_send(socket,
-                   to: fn state ->
-                     {:reply, {:text, "pong"}, state}
-                   end
-                 )
+        TestServer.HTTP.websocket_send(socket,
+          to: fn state ->
+            {:reply, {:text, "pong"}, state}
+          end
+        )
 
         assert {:ok, "pong"} = WebSocketClient.receive_message(client)
       end
 
       test "with default callback function" do
-        assert {:ok, socket} = TestServer.HTTP.websocket("/ws")
+        socket = TestServer.HTTP.websocket("/ws")
+
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-        assert :ok = TestServer.HTTP.websocket_send(socket)
+        TestServer.HTTP.websocket_send(socket)
+
         assert {:ok, "ping"} = WebSocketClient.receive_message(client)
       end
     end

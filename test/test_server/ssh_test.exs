@@ -536,16 +536,17 @@ defmodule TestServer.SSHTest do
     test "with multiple channels" do
       channel_1 = TestServer.SSH.channel()
       channel_2 = TestServer.SSH.channel()
-      :ok = TestServer.SSH.handle(channel_1, to: fn _data, state -> {:reply, "one", state} end)
-      :ok = TestServer.SSH.handle(channel_2, to: fn _data, state -> {:reply, "two", state} end)
+
+      TestServer.SSH.handle(channel_1, to: fn _data, state -> {:reply, "channel 1", state} end)
+      TestServer.SSH.handle(channel_2, to: fn _data, state -> {:reply, "channel 2", state} end)
 
       assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
       assert {:ok, channel_id_1} = SSHClient.session_channel(conn)
       assert {:ok, channel_id_2} = SSHClient.session_channel(conn)
       assert SSHClient.exec(conn, channel_id_2, "ping") == :ok
       assert SSHClient.exec(conn, channel_id_1, "ping") == :ok
-      assert {:ok, %{data: "two"}} = SSHClient.receive_until_closed(conn, channel_id_1)
-      assert {:ok, %{data: "one"}} = SSHClient.receive_until_closed(conn, channel_id_2)
+      assert {:ok, %{data: "channel 2"}} = SSHClient.receive_until_closed(conn, channel_id_1)
+      assert {:ok, %{data: "channel 1"}} = SSHClient.receive_until_closed(conn, channel_id_2)
     end
 
     test "with `messages: :all` option" do
@@ -602,7 +603,7 @@ defmodule TestServer.SSHTest do
       assert :ssh_connection.ptty_alloc(conn, channel_id, term: ~c"xterm-256color") == :success
       assert :ssh_connection.send_eof(conn, channel_id) == :ok
       assert SSHClient.send(conn, channel_id, "ping") == :ok
-      assert {:ok, "pong"} = SSHClient.receive_data(conn, channel_id)
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "pong"}
       assert SSHClient.close(conn, channel_id) == :ok
     end
 
@@ -718,7 +719,7 @@ defmodule TestServer.SSHTest do
           assert {:ok, conn, channel_id} = unquote(__MODULE__).ssh_shell()
           assert SSHClient.send(conn, channel_id, "first") == :ok
           assert SSHClient.send(conn, channel_id, "second") == :ok
-          assert {:ok, "first"} = SSHClient.receive_data(conn, channel_id)
+          assert SSHClient.receive_data(conn, channel_id) == {:ok, "first"}
           assert {:ok, message} = SSHClient.receive_data(conn, channel_id)
           assert message =~ "received an unexpected SSH message"
           assert message =~ "The following handlers have been processed:"
@@ -779,8 +780,8 @@ defmodule TestServer.SSHTest do
 
       assert {:ok, conn, channel_id} = ssh_shell()
       assert SSHClient.send(conn, channel_id, "ping") == :ok
-      assert {:ok, "first"} = SSHClient.receive_data(conn, channel_id, 0)
-      assert {:ok, "second"} = SSHClient.receive_data(conn, channel_id, 2)
+      assert SSHClient.receive_data(conn, channel_id, 0) == {:ok, "first"}
+      assert SSHClient.receive_data(conn, channel_id, 2) == {:ok, "second"}
     end
 
     test "with `:to` 3-arity function returning `{:stop, channel_id, state}` response" do
@@ -934,7 +935,7 @@ defmodule TestServer.SSHTest do
       assert {:ok, conn, channel_id} = ssh_shell()
       assert SSHClient.send(conn, channel_id, "ping") == :ok
       assert SSHClient.send(conn, channel_id, "ping") == :ok
-      assert {:ok, "value"} = SSHClient.receive_data(conn, channel_id)
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "value"}
     end
 
     test "when `:match` function raises exception" do
@@ -982,9 +983,9 @@ defmodule TestServer.SSHTest do
 
       assert {:ok, conn, channel_id} = ssh_shell()
       assert SSHClient.send(conn, channel_id, "second") == :ok
-      assert {:ok, "second"} = SSHClient.receive_data(conn, channel_id)
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "second"}
       assert SSHClient.send(conn, channel_id, "first") == :ok
-      assert {:ok, "pong"} = SSHClient.receive_data(conn, channel_id)
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "pong"}
     end
   end
 

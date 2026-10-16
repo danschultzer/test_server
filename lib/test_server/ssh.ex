@@ -94,20 +94,16 @@ defmodule TestServer.SSH do
         auth_keys: [{"user", auth_public_key}]
       )
 
-      channel = TestServer.SSH.channel()
+      TestServer.SSH.handle(
+        to: fn {:data, _channel_id, _want_reply, _data}, state ->
+          {:reply, "pong", state}
+        end,
+        match: fn {:data, _channel_id, _want_reply, data}, _state ->
+          data == "ping"
+        end
+      )
 
-      :ok =
-        TestServer.SSH.handle(
-          channel,
-          to: fn {:data, _channel_id, _want_reply, _data}, state ->
-            {:reply, "pong", state}
-          end,
-          match: fn {:data, _channel_id, _want_reply, data}, _state ->
-            data == "ping"
-          end
-        )
-
-      :ok = TestServer.SSH.handle(channel)
+      TestServer.SSH.handle()
 
       [%{fingerprint: host_fingerprint}] = TestServer.SSH.host_keys()
 
@@ -123,11 +119,11 @@ defmodule TestServer.SSH do
         )
 
       assert {:ok, channel_id} = SSHClient.session_channel(conn)
-      assert :ok = SSHClient.send(conn, channel_id, "echo")
-      assert {:ok, "echo"} = SSHClient.receive_data(conn, channel_id)
-      assert :ok = SSHClient.send(conn, channel_id, "ping")
-      assert {:ok, "pong"} = SSHClient.receive_data(conn, channel_id)
-      assert :ok = SSHClient.close(conn)
+      assert SSHClient.send(conn, channel_id, "echo") == :ok
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "echo"}
+      assert SSHClient.send(conn, channel_id, "ping") == :ok
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "pong"}
+      assert SSHClient.close(conn) == :ok
   """
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
@@ -252,14 +248,20 @@ defmodule TestServer.SSH do
 
   ## Examples
 
-      channel = TestServer.SSH.channel()
-      :ok = TestServer.SSH.handle(channel)
+      channel_1 = TestServer.SSH.channel()
+      channel_2 = TestServer.SSH.channel()
+
+      TestServer.SSH.handle(channel_1, to: fn _data, state -> {:reply, "channel 1", state} end)
+      TestServer.SSH.handle(channel_2, to: fn _data, state -> {:reply, "channel 2", state} end)
 
       assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
-      assert {:ok, channel_id} = SSHClient.session_channel(conn)
-      assert :ok = SSHClient.exec(conn, channel_id, "ping")
-      assert {:ok, "ping"} = SSHClient.receive_data(conn, channel_id)
-      assert :ok = SSHClient.close(conn)
+      assert {:ok, channel_id_1} = SSHClient.session_channel(conn)
+      assert {:ok, channel_id_2} = SSHClient.session_channel(conn)
+      assert SSHClient.exec(conn, channel_id_2, "ping") == :ok
+      assert SSHClient.exec(conn, channel_id_1, "ping") == :ok
+      assert SSHClient.receive_data(conn, channel_id_1) == {:ok, "channel 2"}
+      assert SSHClient.receive_data(conn, channel_id_2) == {:ok, "channel 1"}
+      assert SSHClient.close(conn) == :ok
   """
   @spec channel(keyword()) :: channel()
   def channel(options) when is_list(options) do
@@ -345,28 +347,23 @@ defmodule TestServer.SSH do
 
   ## Examples
 
-      channel = TestServer.SSH.channel()
+      TestServer.SSH.handle(
+        to: fn {:data, _channel_id, _want_reply, _data}, state ->
+          {:reply, "pong", state}
+        end,
+        match: fn {:data, _channel_id, _want_reply, data}, _state ->
+          data == "ping"
+        end
+      )
 
-      :ok =
-        TestServer.SSH.handle(
-          channel,
-          to: fn {:data, _channel_id, _want_reply, _data}, state ->
-            {:reply, "pong", state}
-          end,
-          match: fn {:data, _channel_id, _want_reply, data}, _state ->
-            data == "ping"
-          end
-        )
-
-      :ok = TestServer.SSH.handle(channel)
+      TestServer.SSH.handle()
 
       assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
       assert {:ok, channel_id} = SSHClient.session_channel(conn)
-      assert :ok = SSHClient.send(conn, channel_id, "echo")
-      assert {:ok, "echo"} = SSHClient.receive_data(conn, channel_id)
-      assert :ok = SSHClient.send(conn, channel_id, "ping")
-      assert {:ok, "pong"} = SSHClient.receive_data(conn, channel_id)
-      assert :ok = SSHClient.close(conn)
+      assert SSHClient.send(conn, channel_id, "echo") == :ok
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "echo"}
+      assert SSHClient.send(conn, channel_id, "ping") == :ok
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "pong"}
   """
   @spec handle(channel(), keyword()) :: :ok
   def handle({instance, channel_ref} = _channel, options) do

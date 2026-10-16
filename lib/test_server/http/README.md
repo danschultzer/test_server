@@ -15,7 +15,7 @@ test "fetch_url/1" do
   # The test server will autostart the current test server, if not already running
   TestServer.HTTP.handle("/", via: :get)
 
-  {:ok, "HTTP"} = MyModule.fetch_url(TestServer.HTTP.url())
+  assert MyModule.fetch_url(TestServer.HTTP.url()) == {:ok, "HTTP"}
 end
 ```
 
@@ -50,8 +50,8 @@ When a route is matched it'll be removed from active routes list. The route will
 TestServer.HTTP.handle("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "first"))
 TestServer.HTTP.handle("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "second"))
 
-{:ok, "first"} = fetch_request()
-{:ok, "second"} = fetch_request()
+assert fetch_request() == {:ok, "first"}
+assert fetch_request() == {:ok, "second"}
 ```
 
 Plugs can be added to the pipeline with `TestServer.HTTP.plug/1`. All plugs will run before any routes are matched. `Plug.Conn.fetch_query_params/1` is used if no plugs are set.
@@ -98,7 +98,7 @@ assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
 
 ### WebSocket
 
-WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/2`. By default, `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be send from the test server with `TestServer.HTTP.websocket_send/2`.
+WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/2`. By default, `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be sent from the test server with `TestServer.HTTP.websocket_send/2`.
 
 ```elixir
 test "WebSocketClient" do
@@ -108,19 +108,20 @@ test "WebSocketClient" do
   TestServer.HTTP.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi" end)
   TestServer.HTTP.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
 
-  {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
+  assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-  :ok = WebSocketClient.send(client, "hello")
-  {:ok, "hello"} = WebSocketClient.receive(client)
+  assert WebSocketClient.send(client, "hello") == :ok
+  assert WebSocketClient.receive(client) == {:ok, "hello"}
 
-  :ok = WebSocketClient.send(client, "ping")
-  {:ok, "pong"} = WebSocketClient.receive(client)
+  assert WebSocketClient.send(client, "ping") == :ok
+  assert WebSocketClient.receive(client) == {:ok, "pong"}
 
-  :ok = WebSocketClient.send(client, "hi")
-  {:ok, "hi"} = WebSocketClient.receive(client)
+  assert WebSocketClient.send(client, "hi") == :ok
+  assert WebSocketClient.receive(client) == {:ok, "hi"}
 
   TestServer.HTTP.websocket_send(socket, to: fn state -> {:reply, {:text, "ping"}, state} end)
-  {:ok, "ping"} = WebSocketClient.receive(client)
+  
+  assert WebSocketClient.receive(client) == {:ok, "ping"}
 end
 ```
 

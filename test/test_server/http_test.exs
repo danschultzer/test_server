@@ -83,8 +83,8 @@ defmodule TestServer.HTTPTest do
 
       assert %{host: hostname} = URI.parse(TestServer.HTTP.url("/"))
 
-      assert {:ok, {0, 0, 0, 0, 0, 0, 0, 1}} ==
-               :inet.getaddr(String.to_charlist(hostname), :inet6)
+      assert :inet.getaddr(String.to_charlist(hostname), :inet6) ==
+               {:ok, {0, 0, 0, 0, 0, 0, 0, 1}}
 
       assert {:ok, _} = http1_request(TestServer.HTTP.url("/"))
     end
@@ -432,7 +432,7 @@ defmodule TestServer.HTTPTest do
         TestServer.HTTP.start!(scheme: :https)
         TestServer.HTTP.handle("/")
 
-        assert {:ok, "HTTP/2"} = http2_request(TestServer.HTTP.url())
+        assert http2_request(TestServer.HTTP.url()) == {:ok, "HTTP/2"}
       end
 
       test "with HTTP/2 with `:to` function" do
@@ -447,7 +447,7 @@ defmodule TestServer.HTTPTest do
           end
         )
 
-        assert {:ok, "test"} = http2_request(TestServer.HTTP.url(), method: :post, body: "test")
+        assert http2_request(TestServer.HTTP.url(), method: :post, body: "test") == {:ok, "test"}
       end
     end
   end
@@ -919,7 +919,7 @@ defmodule TestServer.HTTPTest do
           end
         )
 
-        assert {:ok, "pong"} = WebSocketClient.receive_message(client)
+        assert WebSocketClient.receive_message(client) == {:ok, "pong"}
       end
 
       test "with default callback function" do
@@ -929,7 +929,7 @@ defmodule TestServer.HTTPTest do
 
         TestServer.HTTP.websocket_send(socket)
 
-        assert {:ok, "ping"} = WebSocketClient.receive_message(client)
+        assert WebSocketClient.receive_message(client) == {:ok, "ping"}
       end
     end
   end

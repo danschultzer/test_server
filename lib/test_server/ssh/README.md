@@ -6,18 +6,18 @@ Mock SSH endpoint with channel and message expectations, and password/public key
 
 ## Usage
 
-Add session channel expectations with `TestServer.SSH.channel/1`:
+Add message expectations with `TestServer.SSH.handle/2`:
 
 ```elixir
-test "SSHClient" do
-  channel = TestServer.SSH.channel()
-
-  TestServer.SSH.handle(channel)
+test "send/3" do
+  # The test server will autostart the current test server, if not already
+  # running, and a channel expectation will be set up if not already set.
+  TestServer.SSH.handle()
 
   assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
   assert {:ok, channel_id} = SSHClient.session_channel(conn)
-  assert :ok = SSHClient.send(conn, channel_id, "hello")
-  assert {:ok, "hello"} = SSHClient.receive_data(conn, channel_id)
+  assert SSHClient.send(conn, channel_id, "echo") == :ok
+  assert SSHClient.receive_data(conn, channel_id) == {:ok, "echo"}
 end
 ```
 
@@ -48,16 +48,34 @@ When a message is matched the handle will be removed from active list. The handl
 TestServer.SSH.handle(fn _, state -> {:reply, "first", state} end)
 TestServer.SSH.handle(fn _, state -> {:reply, "second", state} end)
 
-{:ok, conn} = SSHClient.connect(TestServer.SSH.address())
-{:ok, channel_id} = SSHClient.session_channel(conn)
-:ok = SSHClient.send(conn, channel_id, "hello")
-{:ok, "first"} = SSHClient.receive_data(conn, channel_id)
-:ok = SSHClient.send(conn, channel_id, "hello")
-{:ok, "second"} = SSHClient.receive_data(conn, channel_id)
+assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+assert {:ok, channel_id} = SSHClient.session_channel(conn)
+assert SSHClient.send(conn, channel_id, "hello") == :ok
+assert SSHClient.receive_data(conn, channel_id) == {:ok, "first"}
+assert SSHClient.send(conn, channel_id, "hello") == :ok
+assert SSHClient.receive_data(conn, channel_id) == {:ok, "second"}
 ```
 
-By default, `:exec` and `:data` messages are dispatched. Use `:messages` to
-control the message types:
+Use `TestServer.SSH.channel/2` to expect multiple session channels:
+
+```elixir
+channel_1 = TestServer.SSH.channel()
+channel_2 = TestServer.SSH.channel()
+
+TestServer.SSH.handle(channel_1, to: fn _data, state -> {:reply, "channel 1", state} end)
+TestServer.SSH.handle(channel_2, to: fn _data, state -> {:reply, "channel 2", state} end)
+
+assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+assert {:ok, channel_id_1} = SSHClient.session_channel(conn)
+assert {:ok, channel_id_2} = SSHClient.session_channel(conn)
+assert SSHClient.exec(conn, channel_id_2, "ping") == :ok
+assert SSHClient.exec(conn, channel_id_1, "ping") == :ok
+assert SSHClient.receive_data(conn, channel_id_1) == {:ok, "channel 2"}
+assert SSHClient.receive_data(conn, channel_id_2) == {:ok, "channel 1"}
+assert SSHClient.close(conn) == :ok
+```
+
+By default channel expectations sets up the channel to only dispatch `:exec` and `:data` message types. `:messages` can be set to control the message types:
 
 ```elixir
 channel_1 = TestServer.SSH.channel(messages: :all)

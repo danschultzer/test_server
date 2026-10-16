@@ -464,8 +464,7 @@ defmodule TestServer.HTTP do
 
       TestServer.HTTP.websocket_handle(socket)
 
-      {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-
+      assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
       assert WebSocketClient.send_message(client, "echo") == {:ok, "echo"}
       assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
   """
@@ -493,11 +492,12 @@ defmodule TestServer.HTTP do
   ## Examples
 
       socket = TestServer.HTTP.websocket("/ws")
-      {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-      assert TestServer.HTTP.websocket_send(socket, to: fn state ->
+      assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
+
+      TestServer.HTTP.websocket_send(socket, to: fn state ->
         {:reply, {:text, "hello"}, state}
-      end) == :ok
+      end)
 
       assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """

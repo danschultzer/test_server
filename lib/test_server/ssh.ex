@@ -175,10 +175,11 @@ defmodule TestServer.SSH do
   ## Examples
 
       _instance = TestServer.SSH.start!()
-      {address, port} = TestServer.SSH.address()
+      address = TestServer.SSH.address()
       :ok = TestServer.SSH.stop()
 
-      assert SSHClient.connect(TestServer.SSH.address()) == {:error, :econnrefused}
+      assert {:error, reason} = SSHClient.connect(address)
+      assert reason in [:econnrefused, :econnreset]
   """
   @spec stop() :: :ok | {:error, term()}
   def stop, do: stop(TestServer.fetch_instance!(__MODULE__))
@@ -283,7 +284,7 @@ defmodule TestServer.SSH do
 
     options = Keyword.put_new(options, :messages, [:exec, :data])
 
-    {:ok, channel} = Instance.register(instance, {:channel, {options, stacktrace}})
+    {:ok, channel} = Instance.register(instance, {:channel, options, stacktrace})
 
     {instance, channel.ref}
   end
@@ -374,7 +375,7 @@ defmodule TestServer.SSH do
 
     options = Keyword.put_new(options, :to, &default_handler/2)
 
-    {:ok, _handler} = Instance.register(instance, {:handle, {channel_ref, options, stacktrace}})
+    {:ok, _handler} = Instance.register(instance, {:handle, channel_ref, options, stacktrace})
 
     :ok
   end

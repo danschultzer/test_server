@@ -87,29 +87,35 @@ if Code.ensure_loaded?(Plug.Cowboy) do
         {:ok, req, options} ->
           {:ok, req, options}
 
-        {Plug.Cowboy.Handler, req, {_http_server, {socket, state}}, _} ->
-          {:cowboy_websocket, req, {socket, state}}
+        {Plug.Cowboy.Handler, req, {_http_server, {instance, websocket_ref, state}}, _} ->
+          {:cowboy_websocket, req, {instance, websocket_ref, state}}
       end
     end
 
     # WebSocket callbacks
 
     @impl :cowboy_websocket
-    def websocket_init({socket, state}) do
-      {:ok, {socket, state}}
+    def websocket_init({instance, websocket_ref, state}) do
+      {:ok, {instance, websocket_ref, state}}
     end
 
     @impl :cowboy_websocket
-    def websocket_handle(frame, {socket, state}) do
+    def websocket_handle(frame, state) when frame in [:ping, :pong],
+      do: {:ok, state}
+
+    def websocket_handle({opcode, _payload}, state) when opcode in [:ping, :pong],
+      do: {:ok, state}
+
+    def websocket_handle(frame, {instance, websocket_ref, state}) do
       frame
-      |> WebSocket.handle_frame({socket, state})
+      |> WebSocket.handle_frame({instance, websocket_ref, state})
       |> handle_reply()
     end
 
     @impl :cowboy_websocket
-    def websocket_info({options, stacktrace}, {socket, state}) do
-      {options, stacktrace}
-      |> WebSocket.handle_info({socket, state})
+    def websocket_info({:send, {options, stacktrace}}, {instance, websocket_ref, state}) do
+      {:send, {options, stacktrace}}
+      |> WebSocket.handle_info({instance, websocket_ref, state})
       |> handle_reply()
     end
 

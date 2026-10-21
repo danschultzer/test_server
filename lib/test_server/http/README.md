@@ -72,15 +72,7 @@ TestServer.HTTP.plug(MyPlug)
 
 ### HTTPS
 
-By default the test server is set up to serve plain HTTP. HTTPS can be enabled with the `:scheme` option when calling `TestServer.HTTP.start/1`.
-
-Custom SSL certificates can also be used by defining the `:tls` option:
-
-```elixir
-TestServer.HTTP.start!(scheme: :https, tls: [keyfile: key, certfile: cert])
-```
-
-A self-signed certificate suite is automatically generated if you don't set the `:tls` options:
+By default the test server is set up to serve plain HTTP. HTTPS can be enabled with the `:scheme` option when calling `TestServer.HTTP.start/1`. A self-signed certificate suite is automatically generated:
 
 ```elixir
 TestServer.HTTP.start!(scheme: :https)
@@ -96,17 +88,23 @@ assert {:ok, %Req.Response{status: 200, body: "HTTP/2"}} =
         Req.get(TestServer.HTTP.url(), req_options)
 ```
 
+Custom TLS certificates can be used by setting the `:tls` option:
+
+```elixir
+TestServer.HTTP.start!(scheme: :https, tls: [keyfile: key, certfile: cert])
+```
+
 ### WebSocket
 
 WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/2`. By default, `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be sent from the test server with `TestServer.HTTP.websocket_send/2`.
 
 ```elixir
 test "WebSocketClient" do
-  socket = TestServer.HTTP.websocket("/ws")
+  websocket = TestServer.HTTP.websocket("/ws")
 
-  TestServer.HTTP.websocket_handle(socket)
-  TestServer.HTTP.websocket_handle(socket, match: fn {:text, message}, _state -> message == "hi" end)
-  TestServer.HTTP.websocket_handle(socket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
+  TestServer.HTTP.websocket_handle(websocket)
+  TestServer.HTTP.websocket_handle(websocket, match: fn {:text, message}, _state -> message == "hi" end)
+  TestServer.HTTP.websocket_handle(websocket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
 
   assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
@@ -119,7 +117,7 @@ test "WebSocketClient" do
   assert WebSocketClient.send(client, "hi") == :ok
   assert WebSocketClient.receive(client) == {:ok, "hi"}
 
-  TestServer.HTTP.websocket_send(socket, to: fn state -> {:reply, {:text, "ping"}, state} end)
+  TestServer.HTTP.websocket_send(websocket, to: fn state -> {:reply, {:text, "ping"}, state} end)
   
   assert WebSocketClient.receive(client) == {:ok, "ping"}
 end

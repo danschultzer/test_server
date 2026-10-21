@@ -44,7 +44,7 @@ defmodule TestServerTest do
       end
     end
 
-    test "when verify_fn fails" do
+    test "when verify_fn raises exception" do
       Process.register(self(), __MODULE__)
 
       defmodule VerificationFailsTest do
@@ -70,7 +70,7 @@ defmodule TestServerTest do
   end
 
   describe "open_port/1" do
-    test "with invalid port" do
+    test "with invalid `:port` option" do
       assert_raise ArgumentError, "expected a port, got: :invalid", fn ->
         TestServer.open_port(port: :invalid)
       end
@@ -88,12 +88,13 @@ defmodule TestServerTest do
       assert message == "Could not listen to port #{port}, because: :eaddrinuse"
     end
 
-    test "without port option" do
+    test "with missing `:port` option" do
       assert {:ok, port} = TestServer.open_port([])
+      assert is_integer(port)
       refute port_in_use?(port)
     end
 
-    test "with port option" do
+    test "with `:port` option" do
       assert {:ok, port} = TestServer.open_port(port: {0, ip: {127, 0, 0, 1}})
       refute port_in_use?(port)
     end

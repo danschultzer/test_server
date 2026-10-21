@@ -8,9 +8,19 @@ defmodule TestServer.HTTP.Plug do
 
   def call(conn, {http_server, args, instance}) do
     case Instance.dispatch(instance, {:plug, conn}) do
-      {:ok, %{state: :unset, private: %{websocket: {socket, state}}} = conn} ->
-        :ok = Instance.put_websocket_connection(socket, http_server.socket_pid(conn))
-        Plug.Conn.upgrade_adapter(conn, :websocket, {http_server, {socket, state}, args})
+      {:ok,
+       %{state: :unset, private: %{test_server: %{websocket: true, route_ref: route_ref}}} = conn} ->
+        {:ok, websocket_ref, state} =
+          Instance.dispatch(
+            instance,
+            {:websocket, {:upgrade, route_ref, http_server.socket_pid(conn)}}
+          )
+
+        Plug.Conn.upgrade_adapter(
+          conn,
+          :websocket,
+          {http_server, {instance, websocket_ref, state}, args}
+        )
 
       {:ok, conn} ->
         conn

@@ -13,24 +13,24 @@ defmodule TestServer.SSH.Instance do
     GenServer.stop(instance)
   end
 
-  @spec register(TestServer.instance(), {:channel, {keyword(), TestServer.stacktrace()}}) ::
+  @spec register(TestServer.instance(), {:channel, keyword(), TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.SSH.channel_ref()}}
-  def register(instance, {:channel, {options, stacktrace}}) do
-    options[:messages] && ensure_messages!(options[:messages])
+  def register(instance, {:channel, options, stacktrace}) do
+    Keyword.has_key?(options, :messages) && ensure_messages!(options[:messages])
 
-    GenServer.call(instance, {:register, {:channel, {options, stacktrace}}})
+    GenServer.call(instance, {:register, {:channel, options, stacktrace}})
   end
 
   @spec register(
           TestServer.instance(),
-          {:handle, {TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}}
+          {:handle, TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}
         ) ::
           {:ok, map()}
-  def register(instance, {:handle, {channel_ref, options, stacktrace}}) do
-    options[:to] && ensure_function!(options[:to])
-    options[:match] && ensure_function!(options[:match])
+  def register(instance, {:handle, channel_ref, options, stacktrace}) do
+    Keyword.has_key?(options, :to) && ensure_function!(options[:to])
+    Keyword.has_key?(options, :match) && ensure_function!(options[:match])
 
-    GenServer.call(instance, {:register, {:handle, {channel_ref, options, stacktrace}}})
+    GenServer.call(instance, {:register, {:handle, channel_ref, options, stacktrace}})
   end
 
   @message_events ~w(exec data env pty shell eof)a
@@ -60,7 +60,7 @@ defmodule TestServer.SSH.Instance do
           TestServer.instance(),
           {:channel_up, :ssh.channel_id(), :ssh.connection_ref()}
         ) ::
-          {:ok, {TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}}
+          {:ok, {TestServer.SSH.channel_ref(), keyword()}}
           | {:error, :not_found}
   def dispatch(instance, {:channel_up, channel_id, connection}) do
     GenServer.call(instance, {:dispatch, {:channel_up, channel_id, connection}})
@@ -68,19 +68,19 @@ defmodule TestServer.SSH.Instance do
 
   @spec dispatch(
           TestServer.instance(),
-          {:handle, :ssh.channel_id(), :ssh.connection_ref(), :ssh_connection.channel_msg(),
-           TestServer.SSH.state()}
+          {:handle, TestServer.SSH.channel_ref(), :ssh.connection_ref(),
+           :ssh_connection.channel_msg(), TestServer.SSH.state()}
         ) ::
           {:raw, {:ok, TestServer.SSH.state()}}
           | {:raw, {:stop, :ssh.channel_id(), TestServer.SSH.state()}}
-          | {:reply, {binary(), keyword()}, TestServer.SSH.state()}
+          | {:reply, {iodata(), keyword()}, TestServer.SSH.state()}
           | {:ok, TestServer.SSH.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(instance, {:handle, channel_ref, connection, message, channel_state}) do
     GenServer.call(
       instance,
-      {:dispatch, {:handle, channel_ref, connection, {message, channel_state}}}
+      {:dispatch, {:handle, channel_ref, connection, message, channel_state}}
     )
   end
 
@@ -140,7 +140,7 @@ defmodule TestServer.SSH.Instance do
   end
 
   @impl true
-  def handle_call({:register, {:channel, {options, stacktrace}}}, _from, state) do
+  def handle_call({:register, {:channel, options, stacktrace}}, _from, state) do
     channel = %{
       ref: make_ref(),
       options: options,
@@ -158,34 +158,32 @@ defmodule TestServer.SSH.Instance do
         {:reply, {:error, :not_found}, state}
 
       index ->
-        updated_channel = %{
+        channel = %{
           Enum.at(state.channels, index)
           | channel_id: channel_id,
             connection_ref: connection_ref
         }
 
-        channels = List.replace_at(state.channels, index, updated_channel)
+        channels = List.replace_at(state.channels, index, channel)
 
-        {:reply, {:ok, updated_channel}, %{state | channels: channels}}
+        {:reply, {:ok, {channel.ref, channel.options}}, %{state | channels: channels}}
     end
   end
 
-  def handle_call({:register, {:handle, {channel_ref, options, stacktrace}}}, _from, state) do
+  def handle_call({:register, {:handle, channel_ref, options, stacktrace}}, _from, state) do
     handler = %{
-      ref: make_ref(),
       channel_ref: channel_ref,
       match: Keyword.get(options, :match),
       to: Keyword.fetch!(options, :to),
       stacktrace: stacktrace,
-      suspended: false,
-      received: []
+      suspended: false
     }
 
     {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
   end
 
   def handle_call(
-        {:dispatch, {:handle, channel_ref, connection, {message, channel_state}}},
+        {:dispatch, {:handle, channel_ref, connection, message, channel_state}},
         _from,
         state
       ) do
@@ -219,7 +217,7 @@ defmodule TestServer.SSH.Instance do
 
         handlers =
           List.update_at(state.handlers, index, fn handler ->
-            %{handler | suspended: true, received: handler.received ++ [message]}
+            %{handler | suspended: true}
           end)
 
         {result, %{state | handlers: handlers}}
@@ -284,7 +282,7 @@ defmodule TestServer.SSH.Instance do
 
         {:reply, {data, options}, state}
 
-      {:reply, data, state} when is_binary(data) ->
+      {:reply, data, state} ->
         {:reply, {data, []}, state}
 
       {:ok, state} ->

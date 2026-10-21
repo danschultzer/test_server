@@ -14,7 +14,8 @@ defmodule TestServer.HTTP do
   @type plug_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
   @type match_fun :: (conn :: Plug.Conn.t() -> boolean())
 
-  @type websocket :: {TestServer.instance(), route_ref()}
+  @type websocket_ref :: reference()
+  @type websocket :: {TestServer.instance(), websocket_ref()}
   @type websocket_frame :: {:text | :binary, iodata()}
   @type websocket_state :: term()
   @type websocket_handler_fun :: (frame :: websocket_frame(), state :: websocket_state() ->
@@ -57,13 +58,13 @@ defmodule TestServer.HTTP do
       `{TestServer.HTTP.Server.Httpd, []}` depending on which web server is
       available in the project dependencies;
 
-    * `:tls`              - Passthru options for TLS configuration handled by
+    * `:tls`              - passthru options for TLS configuration handled by
       the webserver;
 
-    * `:ipfamily`         - The IP address type to use, either `:inet` or
+    * `:ipfamily`         - the IP address type to use, either `:inet` or
       `:inet6`. Defaults to `:inet`;
 
-    * `:suppress_warning` - Suppresses IO warnings on expectation failures
+    * `:suppress_warning` - suppresses IO warnings on expectation failures
       related to this instance. Defaults to `false`;
 
   ## Examples
@@ -278,7 +279,7 @@ defmodule TestServer.HTTP do
     [_register_route, _first_module_entry | stacktrace] =
       TestServer.pruned_stacktrace(__MODULE__)
 
-    Instance.register(instance, {:plug_router_to, {uri, options, stacktrace}})
+    Instance.register(instance, {:plug_router_to, uri, options, stacktrace})
   end
 
   defp default_handler(conn) do
@@ -316,7 +317,7 @@ defmodule TestServer.HTTP do
   def plug(instance, plug) do
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
-    {:ok, _plug} = Instance.register(instance, {:plug, {plug, stacktrace}})
+    {:ok, _plug} = Instance.register(instance, {:plug, plug, stacktrace})
 
     :ok
   end
@@ -350,11 +351,11 @@ defmodule TestServer.HTTP do
     options = Instance.options(instance)
 
     cond do
-      not (options[:scheme] == :https) ->
+      options[:scheme] != :https ->
         raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with `[scheme: :https]` option"
 
       not Keyword.has_key?(options, :x509_suite) ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom SSL"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom certificates"
 
       true ->
         options[:x509_suite]
@@ -377,8 +378,8 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      socket = TestServer.HTTP.websocket("/ws")
-      TestServer.HTTP.websocket_handle(socket)
+      websocket = TestServer.HTTP.websocket("/ws")
+      TestServer.HTTP.websocket_handle(websocket)
 
       assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
       assert WebSocketClient.send_message(client, "echo") == {:ok, "echo"}
@@ -432,7 +433,7 @@ defmodule TestServer.HTTP do
   end
 
   @spec websocket_handle(websocket()) :: :ok
-  def websocket_handle(socket), do: websocket_handle(socket, [])
+  def websocket_handle(websocket), do: websocket_handle(websocket, [])
 
   @doc """
   Adds a message handler to a websocket instance.
@@ -451,10 +452,10 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      socket = TestServer.HTTP.websocket("/ws")
+      websocket = TestServer.HTTP.websocket("/ws")
 
       TestServer.HTTP.websocket_handle(
-        socket,
+        websocket,
         to: fn _frame, state ->
           {:reply, {:text, "pong"}, state}
         end,
@@ -462,27 +463,31 @@ defmodule TestServer.HTTP do
           frame == {:text, "ping"}
         end)
 
-      TestServer.HTTP.websocket_handle(socket)
+      TestServer.HTTP.websocket_handle(websocket)
 
       assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
       assert WebSocketClient.send_message(client, "echo") == {:ok, "echo"}
       assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
   """
   @spec websocket_handle(websocket(), keyword()) :: :ok
-  def websocket_handle({instance, _route_ref} = socket, options) do
+  def websocket_handle({instance, websocket_ref}, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :to, &default_websocket_handler/2)
 
-    {:ok, _handler} = Instance.register(socket, {:websocket, {:handle, options, stacktrace}})
+    {:ok, _handler} =
+      Instance.register(instance, {:websocket, {:handle, websocket_ref, options, stacktrace}})
 
     :ok
   end
 
   defp default_websocket_handler(frame, state),
     do: {:reply, frame, state}
+
+  @spec websocket_send(websocket()) :: :ok
+  def websocket_send(websocket), do: websocket_send(websocket, [])
 
   @doc """
   Sends a message to a websocket instance.
@@ -491,29 +496,39 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      socket = TestServer.HTTP.websocket("/ws")
+      websocket = TestServer.HTTP.websocket("/ws")
 
       assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-      TestServer.HTTP.websocket_send(socket, to: fn state ->
+      TestServer.HTTP.websocket_send(websocket, to: fn state ->
         {:reply, {:text, "hello"}, state}
       end)
 
       assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """
   @spec websocket_send(websocket(), keyword()) :: :ok
-  def websocket_send({instance, _route_ref} = socket, options \\ []) do
+  def websocket_send({instance, websocket_ref}, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :to, &default_websocket_send/1)
 
-    for pid <- Instance.websocket_connections(socket) do
-      send(pid, {options, stacktrace})
-    end
+    case Instance.register(instance, {:websocket, {:send, websocket_ref, options}}) do
+      {:ok, pid} ->
+        Kernel.send(pid, {:send, {options, stacktrace}})
 
-    :ok
+        :ok
+
+      {:error, :einval} ->
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket, because the websocket does not exist"
+
+      {:error, :enotconn} ->
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket, because no client has connected to it"
+
+      {:error, :closed} ->
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket, because client has disconnected"
+    end
   end
 
   defp default_websocket_send(state), do: {:reply, {:text, "ping"}, state}

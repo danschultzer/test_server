@@ -283,7 +283,7 @@ defmodule TestServer.SSH do
 
     options = Keyword.put_new(options, :messages, [:exec, :data])
 
-    {:ok, channel} = Instance.register(instance, {:channel, {options, stacktrace}})
+    {:ok, channel} = Instance.register(instance, {:channel, options, stacktrace})
 
     {instance, channel.ref}
   end
@@ -374,7 +374,7 @@ defmodule TestServer.SSH do
 
     options = Keyword.put_new(options, :to, &default_handler/2)
 
-    {:ok, _handler} = Instance.register(instance, {:handle, {channel_ref, options, stacktrace}})
+    {:ok, _handler} = Instance.register(instance, {:handle, channel_ref, options, stacktrace})
 
     :ok
   end

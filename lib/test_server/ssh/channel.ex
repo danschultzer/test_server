@@ -5,22 +5,22 @@ defmodule TestServer.SSH.Channel do
 
   alias TestServer.SSH.Instance
 
-  defstruct [:instance, :channel, :state]
+  defstruct [:instance, :channel_id, :channel_ref, :options, :channel_state]
 
   @impl true
   def init(options) do
-    {:ok, %__MODULE__{instance: Keyword.fetch!(options, :instance), state: %{}}}
+    {:ok, %__MODULE__{instance: Keyword.fetch!(options, :instance), channel_state: %{}}}
   end
 
   @impl true
   def handle_msg({:EXIT, _pid, _reason}, state) do
-    {:stop, state.channel.channel_id, state}
+    {:stop, state.channel_id, state}
   end
 
   def handle_msg({:ssh_channel_up, channel_id, connection}, state) do
     case Instance.dispatch(state.instance, {:channel_up, channel_id, connection}) do
-      {:ok, channel} ->
-        {:ok, %{state | channel: channel}}
+      {:ok, {channel_ref, options}} ->
+        {:ok, %{state | channel_id: channel_id, channel_ref: channel_ref, options: options}}
 
       {:error, :not_found} ->
         message =
@@ -80,14 +80,14 @@ defmodule TestServer.SSH.Channel do
   @impl true
   def handle_ssh_msg({:ssh_cm, connection, frame}, state) do
     type = elem(frame, 0)
-    messages = Keyword.fetch!(state.channel.options, :messages)
+    messages = Keyword.fetch!(state.options, :messages)
 
     case dispatch(messages, type, connection, frame, state) do
       {:raw, {:ok, channel_state}} ->
-        {:ok, %{state | state: channel_state}}
+        {:ok, %{state | channel_state: channel_state}}
 
       {:raw, {:stop, channel_id, channel_state}} ->
-        {:stop, channel_id, %{state | state: channel_state}}
+        {:stop, channel_id, %{state | channel_state: channel_state}}
 
       response ->
         respond(response, connection, frame, state)
@@ -99,11 +99,11 @@ defmodule TestServer.SSH.Channel do
       true ->
         Instance.dispatch(
           state.instance,
-          {:handle, state.channel.ref, connection, frame, state.state}
+          {:handle, state.channel_ref, connection, frame, state.channel_state}
         )
 
       false ->
-        {:ok, state.state}
+        {:ok, state.channel_state}
     end
   end
 
@@ -170,7 +170,7 @@ defmodule TestServer.SSH.Channel do
          } = reply,
          {:ok, channel_state}
        ) do
-    %{reply | state: %{state | state: channel_state}}
+    %{reply | state: %{state | channel_state: channel_state}}
   end
 
   defp send_response(
@@ -185,7 +185,7 @@ defmodule TestServer.SSH.Channel do
 
     :ssh_connection.send(connection, channel_id, data_type_code, data)
 
-    %{reply | state: %{state | state: channel_state}}
+    %{reply | state: %{state | channel_state: channel_state}}
   end
 
   defp send_response(
@@ -274,6 +274,7 @@ defmodule TestServer.SSH.Channel do
     exit_status =
       case response do
         {:reply, {_data, options}, _channel_state} -> Keyword.get(options, :exit_status, 0)
+        {:error, _reason} -> 1
         _other -> 0
       end
 

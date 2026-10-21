@@ -355,15 +355,6 @@ defmodule TestServer.SSHTest do
                    end
     end
 
-    test "stops" do
-      instance = TestServer.SSH.start!()
-      address = TestServer.SSH.address()
-
-      assert TestServer.SSH.stop() == :ok
-      refute Process.alive?(instance)
-      assert SSHClient.connect(address) == {:error, :econnrefused}
-    end
-
     test "with multiple instances" do
       {:ok, instance_1} = TestServer.SSH.start()
       {:ok, _instance_2} = TestServer.SSH.start()
@@ -376,6 +367,15 @@ defmodule TestServer.SSHTest do
 
       assert TestServer.SSH.stop(instance_1) == :ok
       assert TestServer.SSH.stop() == :ok
+    end
+
+    test "stops" do
+      instance = TestServer.SSH.start!()
+      address = TestServer.SSH.address()
+
+      assert TestServer.SSH.stop() == :ok
+      refute Process.alive?(instance)
+      assert SSHClient.connect(address) == {:error, :econnrefused}
     end
   end
 
@@ -393,6 +393,19 @@ defmodule TestServer.SSHTest do
 
                      TestServer.SSH.address(instance)
                    end
+    end
+
+    test "with multiple instances" do
+      instance_1 = TestServer.SSH.start!()
+      instance_2 = TestServer.SSH.start!()
+
+      assert_raise RuntimeError,
+                   ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.address\/1`/,
+                   fn ->
+                     TestServer.SSH.address()
+                   end
+
+      refute TestServer.SSH.address(instance_1) == TestServer.SSH.address(instance_2)
     end
 
     test "with invalid `:host`" do
@@ -422,19 +435,6 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.start!(ipfamily: :inet6)
 
       assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
-    end
-
-    test "with multiple instances" do
-      instance_1 = TestServer.SSH.start!()
-      instance_2 = TestServer.SSH.start!()
-
-      assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.address\/1`/,
-                   fn ->
-                     TestServer.SSH.address()
-                   end
-
-      refute TestServer.SSH.address(instance_1) == TestServer.SSH.address(instance_2)
     end
   end
 
@@ -523,7 +523,10 @@ defmodule TestServer.SSHTest do
           assert {:ok, channel_id_1} = SSHClient.session_channel(conn)
           assert {:ok, channel_id_2} = SSHClient.session_channel(conn)
           assert SSHClient.exec(conn, channel_id_1, "ping") == :ok
-          assert {:ok, %{data: "ping"}} = SSHClient.receive_until_closed(conn, channel_id_1)
+
+          assert {:ok, %{data: "ping", exit_status: 0}} =
+                   SSHClient.receive_until_closed(conn, channel_id_1)
+
           assert SSHClient.exec(conn, channel_id_2, "ping") == {:error, :closed}
         end
       end
@@ -545,8 +548,12 @@ defmodule TestServer.SSHTest do
       assert {:ok, channel_id_2} = SSHClient.session_channel(conn)
       assert SSHClient.exec(conn, channel_id_2, "ping") == :ok
       assert SSHClient.exec(conn, channel_id_1, "ping") == :ok
-      assert {:ok, %{data: "channel 2"}} = SSHClient.receive_until_closed(conn, channel_id_1)
-      assert {:ok, %{data: "channel 1"}} = SSHClient.receive_until_closed(conn, channel_id_2)
+
+      assert {:ok, %{data: "channel 2", exit_status: 0}} =
+               SSHClient.receive_until_closed(conn, channel_id_1)
+
+      assert {:ok, %{data: "channel 1", exit_status: 0}} =
+               SSHClient.receive_until_closed(conn, channel_id_2)
     end
 
     test "with `messages: :all` option" do
@@ -619,7 +626,10 @@ defmodule TestServer.SSHTest do
       assert {:ok, conn, channel_id} = ssh_shell()
       assert SSHClient.send(conn, channel_id, "ping") == :ok
       assert SSHClient.exec(conn, channel_id, "ping") == :ok
-      assert {:ok, %{data: nil}} = SSHClient.receive_until_closed(conn, channel_id)
+
+      assert {:ok, %{data: nil, exit_status: 0}} =
+               SSHClient.receive_until_closed(conn, channel_id)
+
       assert SSHClient.close(conn, channel_id) == :ok
 
       TestServer.SSH.stop()
@@ -691,7 +701,7 @@ defmodule TestServer.SSHTest do
     end
 
     test "when receiving unexpected message" do
-      defmodule UnexpectedMessageTest do
+      defmodule HandleUnexpectedMessageTest do
         use ExUnit.Case
 
         test "fails" do
@@ -699,13 +709,18 @@ defmodule TestServer.SSHTest do
           TestServer.SSH.channel()
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
-          assert data =~ "received an unexpected SSH message"
+
+          send(__MODULE__, {:data, data})
         end
       end
+
+      Process.register(self(), HandleUnexpectedMessageTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "received an unexpected SSH message"
       refute io =~ "The following handlers have been processed:"
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "when receiving unexpected message after processed handlers" do
@@ -720,15 +735,19 @@ defmodule TestServer.SSHTest do
           assert SSHClient.send(conn, channel_id, "first") == :ok
           assert SSHClient.send(conn, channel_id, "second") == :ok
           assert SSHClient.receive_data(conn, channel_id) == {:ok, "first"}
-          assert {:ok, message} = SSHClient.receive_data(conn, channel_id)
-          assert message =~ "received an unexpected SSH message"
-          assert message =~ "The following handlers have been processed:"
+          assert {:ok, data} = SSHClient.receive_data(conn, channel_id)
+
+          send(__MODULE__, {:data, data})
         end
       end
+
+      Process.register(self(), HandleUnexpectedMessageAfterProcessedTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "received an unexpected SSH message"
       assert io =~ "The following handlers have been processed:"
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "with `:to` 3-arity function raising exception" do
@@ -740,13 +759,18 @@ defmodule TestServer.SSHTest do
           TestServer.SSH.handle(to: fn _msg, _connection, _state -> raise "boom" end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
-          assert data =~ "(RuntimeError) boom"
+
+          send(__MODULE__, {:data, data})
         end
       end
+
+      Process.register(self(), HandleTo3ArityFunctionRaiseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/3 in TestServer.SSHTest.HandleTo3ArityFunctionRaiseTest"
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "with `:to` 3-arity function with invalid response" do
@@ -758,12 +782,17 @@ defmodule TestServer.SSHTest do
           TestServer.SSH.handle(to: fn _msg, _connection, _state -> :invalid end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
-          assert data =~ "(RuntimeError) Invalid callback response, got: :invalid."
+
+          send(__MODULE__, {:data, data})
         end
       end
 
+      Process.register(self(), HandleTo3ArityFunctionInvalidResponseTest)
+
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "with `:to` 3-arity function returning `{:ok, state}` response" do
@@ -803,7 +832,8 @@ defmodule TestServer.SSHTest do
                   {:data, 0, 0, "first"},
                   {:data, 0, 2, "second"},
                   {:closed, 0}
-                ]
+                ],
+                exit_status: nil
               }} = ssh_exec("ping")
     end
 
@@ -816,13 +846,18 @@ defmodule TestServer.SSHTest do
           TestServer.SSH.handle(to: fn _msg, _state -> raise "boom" end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
-          assert data =~ "(RuntimeError) boom"
+
+          send(__MODULE__, {:data, data})
         end
       end
+
+      Process.register(self(), HandleTo2ArityFunctionRaiseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.SSHTest.HandleTo2ArityFunctionRaiseTest"
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "with `:to` 2-arity function with invalid response" do
@@ -834,12 +869,17 @@ defmodule TestServer.SSHTest do
           TestServer.SSH.handle(to: fn _msg, _state -> :invalid end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
-          assert data =~ "(RuntimeError) Invalid callback response, got: :invalid."
+
+          send(__MODULE__, {:data, data})
         end
       end
 
+      Process.register(self(), HandleTo2ArityFunctionInvalidResponseTest)
+
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "with `:to` 2-arity function with `{:reply, data, state}` response" do
@@ -914,17 +954,18 @@ defmodule TestServer.SSHTest do
             end
           )
 
-          assert {:ok, result} = unquote(__MODULE__).ssh_exec("ping")
+          assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
 
-          assert result.data =~
-                   "(RuntimeError) Invalid options in callback response, got: [invalid: 1]."
-
-          assert result.exit_status == 0
+          send(__MODULE__, {:data, data})
         end
       end
 
+      Process.register(self(), HandleTo2ArityFunctionInvalidOptionsTest)
+
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "(RuntimeError) Invalid options in callback response, got: [invalid: 1]."
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "with `:to` 2-arity function with `{:ok, state}` response" do
@@ -951,14 +992,19 @@ defmodule TestServer.SSHTest do
             end
           )
 
-          assert {:ok, %{data: data}} = unquote(__MODULE__).ssh_exec("ping")
-          assert data =~ "(RuntimeError) boom"
+          assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
+
+          send(__MODULE__, {:data, data})
         end
       end
+
+      Process.register(self(), MatchFunctionRaiseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.SSHTest.MatchFunctionRaiseTest"
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
     end
 
     test "with `:match` function" do
@@ -968,7 +1014,7 @@ defmodule TestServer.SSHTest do
         end
       )
 
-      assert {:ok, %{data: "ping"}} = ssh_exec("ping")
+      assert {:ok, %{data: "ping", exit_status: 0}} = ssh_exec("ping")
     end
 
     test "with `:match` function filtering multiple handlers" do
@@ -1176,5 +1222,17 @@ defmodule TestServer.SSHTest do
     def close(conn, channel_id) do
       :ssh_connection.close(conn, channel_id)
     end
+  end
+
+  defp assert_io_ssh_data(io, message) do
+    assert normalize_exception_message(io) =~ normalize_exception_message(message)
+  end
+
+  defp normalize_exception_message(message) do
+    message
+    |> String.replace(~r/\e\[[0-9;]*[mK]/, "")
+    |> String.replace(~r/\n\s*stacktrace:\s*\n/, "\n")
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
   end
 end

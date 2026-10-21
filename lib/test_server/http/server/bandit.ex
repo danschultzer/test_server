@@ -72,19 +72,20 @@ if Code.ensure_loaded?(Bandit) do
     # WebSocket
 
     @impl WebSock
-    def init({socket, state}) do
-      {:ok, {socket, state}}
+    def init({instance, websocket_ref, state}) do
+      {:ok, {instance, websocket_ref, state}}
     end
 
     @impl WebSock
-    def handle_in({data, opcode: opcode}, {socket, state}),
-      do: WebSocket.handle_frame({opcode, data}, {socket, state})
+    def handle_in({data, opcode: opcode}, {instance, websocket_ref, state}),
+      do: WebSocket.handle_frame({opcode, data}, {instance, websocket_ref, state})
 
     @impl WebSock
-    def handle_info({options, stacktrace}, {socket, state}),
-      do: WebSocket.handle_info({options, stacktrace}, {socket, state})
+    def handle_info({:send, {options, stacktrace}}, {instance, websocket_ref, state}),
+      do: WebSocket.handle_info({:send, {options, stacktrace}}, {instance, websocket_ref, state})
 
-    def handle_info(_, {socket, state}), do: {:ok, {socket, state}}
+    def handle_info(_, {instance, websocket_ref, state}),
+      do: {:ok, {instance, websocket_ref, state}}
 
     @impl WebSock
     def terminate(_reason, _state), do: :ok

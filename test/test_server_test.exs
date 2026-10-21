@@ -44,7 +44,7 @@ defmodule TestServerTest do
       end
     end
 
-    test "when verify_fn fails" do
+    test "when verify_fn raises exception" do
       Process.register(self(), __MODULE__)
 
       defmodule VerificationFailsTest do

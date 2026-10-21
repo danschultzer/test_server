@@ -167,6 +167,7 @@ defmodule TestServer do
     end
   end
 
+  @doc false
   @spec report_error(keyword(), {struct(), TestServer.stacktrace()}) :: :ok
   def report_error(options, {exception, stacktrace}) do
     caller = Keyword.fetch!(options, :caller)

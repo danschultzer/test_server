@@ -79,7 +79,7 @@ TestServer.HTTP.start!(scheme: :https)
 
 req_options = [
   connect_options: [
-    transport_opts: [cacerts: TestServer.HTTP.x509_suite().cacerts],
+    transport_opts: [cacerts: TestServer.HTTP.cacerts()],
     protocols: [:http2]
   ]
 ]

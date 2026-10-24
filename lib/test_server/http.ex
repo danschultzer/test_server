@@ -27,8 +27,6 @@ defmodule TestServer.HTTP do
   @type websocket_reply ::
           {:reply, websocket_frame(), websocket_state()} | {:ok, websocket_state()}
 
-  @type x509_suite :: %{cert: binary(), cacerts: [binary()]}
-
   @doc """
   Same as `start/1`, but returns the instance and raises on failure.
   """
@@ -59,7 +57,9 @@ defmodule TestServer.HTTP do
       available in the project dependencies;
 
     * `:tls`              - passthru options for TLS configuration handled by
-      the webserver;
+      the webserver. Default will autogenerate key and certificates when
+      neither `:key` nor `:keyfile` is set and `:scheme` is `:https`. The CA
+      certificates can be fetched from `cacerts/1`;
 
     * `:ipfamily`         - the IP address type to use, either `:inet` or
       `:inet6`. Defaults to `:inet`;
@@ -85,7 +85,7 @@ defmodule TestServer.HTTP do
 
       req_options = [
         connect_options: [
-          transport_opts: [cacerts: TestServer.HTTP.x509_suite().cacerts],
+          transport_opts: [cacerts: TestServer.HTTP.cacerts()],
           protocols: [:http2]
         ]
       ]
@@ -323,29 +323,29 @@ defmodule TestServer.HTTP do
   end
 
   @doc """
-  Fetches the generated x509 suite for the current test server.
+  Fetches the generated CA certificates for the current test server.
 
   ## Examples
 
       TestServer.HTTP.start!(scheme: :https)
       TestServer.HTTP.handle("/")
 
-      %{cert: _, cacerts: cacerts} = TestServer.HTTP.x509_suite()
+      cacerts = TestServer.HTTP.cacerts()
       req_options = [connect_options: [transport_opts: [cacerts: cacerts]]]
 
       assert {:ok, %Req.Response{status: 200, body: "HTTP/1.1"}} =
               Req.get(TestServer.HTTP.url(), req_options)
   """
-  @spec x509_suite() :: x509_suite()
-  def x509_suite, do: x509_suite(TestServer.fetch_instance!(__MODULE__))
+  @spec cacerts() :: TestServer.cacerts()
+  def cacerts, do: cacerts(TestServer.fetch_instance!(__MODULE__))
 
   @doc """
-  Fetches the generated x509 suite for a test server instance.
+  Fetches the generated CA certificates for a test server instance.
 
-  See `x509_suite/0` for more.
+  See `cacerts/0` for more.
   """
-  @spec x509_suite(TestServer.instance()) :: x509_suite()
-  def x509_suite(instance) do
+  @spec cacerts(TestServer.instance()) :: TestServer.cacerts()
+  def cacerts(instance) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     options = Instance.options(instance)
@@ -354,11 +354,11 @@ defmodule TestServer.HTTP do
       options[:scheme] != :https ->
         raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with `[scheme: :https]` option"
 
-      not Keyword.has_key?(options, :x509_suite) ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom certificates"
+      not Keyword.has_key?(options, :cacerts) ->
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom `:tls` certificate options"
 
       true ->
-        options[:x509_suite]
+        Keyword.fetch!(options, :cacerts)
     end
   end
 

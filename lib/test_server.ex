@@ -8,6 +8,7 @@ defmodule TestServer do
 
   @type instance :: pid()
   @type stacktrace :: list()
+  @type cacerts :: [binary()]
 
   alias TestServer.InstanceManager
 
@@ -180,5 +181,32 @@ defmodule TestServer do
     end)
 
     :ok
+  end
+
+  @doc false
+  @spec put_tls_options(keyword()) :: keyword()
+  def put_tls_options(options) do
+    tls_options = Keyword.get(options, :tls, [])
+
+    case Keyword.take(tls_options, [:key, :keyfile]) do
+      [] ->
+        suite = X509.Test.Suite.new()
+        server_key = X509.PrivateKey.to_der(suite.server_key)
+        cert = X509.Certificate.to_der(suite.valid)
+
+        tls =
+          [
+            key: {:RSAPrivateKey, server_key},
+            cert: cert,
+            cacerts: suite.chain ++ suite.cacerts
+          ]
+
+        options
+        |> Keyword.put(:tls, Keyword.merge(tls, tls_options))
+        |> Keyword.put(:cacerts, suite.cacerts)
+
+      _any ->
+        options
+    end
   end
 end

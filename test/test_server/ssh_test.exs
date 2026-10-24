@@ -1035,7 +1035,7 @@ defmodule TestServer.SSHTest do
     end
   end
 
-  describe "host_keys/0" do
+  describe "host_keys/1" do
     test "when instance not running" do
       assert_raise RuntimeError, "No current TestServer.SSH.Instance running", fn ->
         TestServer.SSH.host_keys()

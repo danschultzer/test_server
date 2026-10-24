@@ -83,7 +83,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
     pools = %{
       default: [
         protocols: [:http2],
-        conn_opts: [transport_opts: [cacerts: TestServer.HTTP.x509_suite().cacerts]]
+        conn_opts: [transport_opts: [cacerts: TestServer.HTTP.cacerts()]]
       ]
     }
 

@@ -41,9 +41,9 @@ defmodule TestServer.HTTP.Server do
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
     scheme = parse_scheme(options)
-    {tls_options, x509_options} = maybe_generate_x509_suite(options, scheme)
+    options = put_tls_options(options, scheme)
     ip_family = Keyword.get(options, :ipfamily, :inet)
-    test_server_options = [tls: tls_options, ipfamily: ip_family]
+    test_server_options = [tls: Keyword.get(options, :tls, []), ipfamily: ip_family]
     {mod, server_options} = http_server(options)
 
     with {:ok, port} <- TestServer.open_port(options),
@@ -51,7 +51,6 @@ defmodule TestServer.HTTP.Server do
            mod.start(instance, port, scheme, test_server_options, server_options) do
       options =
         options
-        |> Keyword.merge(x509_options)
         |> Keyword.put(:scheme, scheme)
         |> Keyword.put(:port, port)
         |> Keyword.put(:http_server, {mod, server_options})
@@ -69,29 +68,8 @@ defmodule TestServer.HTTP.Server do
     scheme
   end
 
-  defp maybe_generate_x509_suite(options, :https) do
-    tls_options = Keyword.get(options, :tls, [])
-
-    case Keyword.take(tls_options, [:key, :keyfile]) do
-      [] ->
-        suite = X509.Test.Suite.new()
-        server_key = X509.PrivateKey.to_der(suite.server_key)
-        cert = X509.Certificate.to_der(suite.valid)
-
-        {[
-           key: {:RSAPrivateKey, server_key},
-           cert: cert,
-           cacerts: suite.chain ++ suite.cacerts
-         ], x509_suite: %{cert: cert, cacerts: suite.cacerts}}
-
-      [_ | _] ->
-        {tls_options, []}
-    end
-  end
-
-  defp maybe_generate_x509_suite(_options, :http) do
-    {[], []}
-  end
+  defp put_tls_options(options, :https), do: TestServer.put_tls_options(options)
+  defp put_tls_options(options, :http), do: options
 
   defp http_server(options) do
     case options[:http_server] || Application.get_env(:test_server, :http_server) ||

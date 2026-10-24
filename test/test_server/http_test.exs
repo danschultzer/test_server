@@ -35,36 +35,40 @@ defmodule TestServer.HTTPTest do
       instance = TestServer.HTTP.start!(scheme: :https)
       options = TestServer.HTTP.Instance.options(instance)
 
-      assert %{cert: _, cacerts: _} = options[:x509_suite]
+      assert Keyword.has_key?(options, :cacerts)
 
-      http_options =
-        fn cacerts ->
-          [
-            ssl: [
-              verify: :verify_peer,
-              depth: 99,
-              cacerts: cacerts,
-              verify_fun: {&:ssl_verify_hostname.verify_fun/3, check_hostname: ~c"localhost"},
-              customize_hostname_check: [
-                match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
-              ],
-              log_level: :warning
-            ]
-          ]
-        end
-
-      %{cacerts: valid_cacerts} = TestServer.HTTP.x509_suite()
+      valid_cacerts = TestServer.HTTP.cacerts()
       %{cacerts: invalid_cacerts} = X509.Test.Suite.new()
 
       assert {:error, {:failed_connect, _}} =
                http1_request(TestServer.HTTP.url("/"),
-                 http_options: http_options.(invalid_cacerts)
+                 http_options: [ssl: tls_options(invalid_cacerts)]
                )
 
       TestServer.HTTP.handle("/")
 
       assert {:ok, _} =
-               http1_request(TestServer.HTTP.url("/"), http_options: http_options.(valid_cacerts))
+               http1_request(TestServer.HTTP.url("/"),
+                 http_options: [ssl: tls_options(valid_cacerts)]
+               )
+    end
+
+    test "starts with custom TLS certificates" do
+      options = TestServer.put_tls_options([])
+      tls = Keyword.fetch!(options, :tls)
+      cacerts = Keyword.fetch!(options, :cacerts)
+      instance = TestServer.HTTP.start!(scheme: :https, tls: tls)
+      options = TestServer.HTTP.Instance.options(instance)
+
+      refute Keyword.has_key?(options, :cacerts)
+
+      TestServer.HTTP.handle("/")
+
+      assert {:ok, _response} =
+               http1_request(
+                 TestServer.HTTP.url("/"),
+                 http_options: [ssl: tls_options(cacerts)]
+               )
     end
 
     test "starts in IPv6-only mode" do
@@ -520,10 +524,10 @@ defmodule TestServer.HTTPTest do
     end
   end
 
-  describe "x509_suite/1" do
+  describe "cacerts/1" do
     test "when instance not running" do
       assert_raise RuntimeError, "No current TestServer.HTTP.Instance running", fn ->
-        TestServer.HTTP.x509_suite()
+        TestServer.HTTP.cacerts()
       end
 
       assert_raise RuntimeError,
@@ -532,7 +536,7 @@ defmodule TestServer.HTTPTest do
                      instance = TestServer.HTTP.start!()
                      :ok = TestServer.HTTP.stop()
 
-                     TestServer.HTTP.x509_suite(instance)
+                     TestServer.HTTP.cacerts(instance)
                    end
     end
 
@@ -542,7 +546,7 @@ defmodule TestServer.HTTPTest do
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running with `\[scheme: :https\]` option/,
                    fn ->
-                     TestServer.HTTP.x509_suite()
+                     TestServer.HTTP.cacerts()
                    end
     end
 
@@ -558,9 +562,9 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.start!(scheme: :https, tls: tls_options)
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is running with custom certificates/,
+                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is running with custom `:tls` certificate options/,
                    fn ->
-                     TestServer.HTTP.x509_suite()
+                     TestServer.HTTP.cacerts()
                    end
     end
   end
@@ -595,8 +599,8 @@ defmodule TestServer.HTTPTest do
       end
     end
 
-    describe "websocket_handle/3" do
-      # No tests for `websocket_handle/3` as `websocket/3` always returns
+    describe "websocket_handle/2" do
+      # No tests for `websocket_handle/2` as `websocket/2` always returns
       # a 501 response, so no websocket is ever initialized to be handled.
     end
 
@@ -1122,7 +1126,7 @@ defmodule TestServer.HTTPTest do
       pools = %{
         default: [
           protocols: [:http2],
-          conn_opts: [transport_opts: [cacerts: TestServer.HTTP.x509_suite().cacerts]]
+          conn_opts: [transport_opts: [cacerts: TestServer.HTTP.cacerts()]]
         ]
       }
 
@@ -1153,6 +1157,17 @@ defmodule TestServer.HTTPTest do
           {:error, error}
       end
     end
+  end
+
+  defp tls_options(cacerts) do
+    [
+      verify: :verify_peer,
+      cacerts: cacerts,
+      customize_hostname_check: [
+        match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+      ],
+      log_level: :warning
+    ]
   end
 
   defmodule WebSocketClient do

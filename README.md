@@ -12,8 +12,9 @@ No fuzz ExUnit test server to mock third party services.
 - [`TestServer.HTTP`](lib/test_server/http/README.md) - HTTP/1, HTTP/2, and WebSocket.
 - [`TestServer.SSH`](lib/test_server/ssh/README.md) - SSH exec and shell.
 - [`TestServer.TCP`](lib/test_server/tcp/README.md) - TCP socket endpoints.
+- [`TestServer.UDP`](lib/test_server/udp/README.md) - UDP datagram endpoints.
 
-TLS are supported with automatically generated certificates.
+TLS and DTLS are supported with automatically generated certificates.
 
 <!-- MDOC !-->
 

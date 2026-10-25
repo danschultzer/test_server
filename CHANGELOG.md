@@ -10,7 +10,7 @@ All public functions in `TestServer` have been moved to `TestServer.HTTP`. The
 HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
 `TestServer.HTTP.Server.*`. `add/2` has been renamed to `handle/2`, `websocket_init/3` has been renamed to `websocket/3` and now returns the websocket directly instead of `{:ok, websocket}`, and `websocket_info/2` has been renamed to `websocket_send/2` and now takes options as second argument. `x509_suite/0` has been replaced by `TestServer.HTTP.cacerts/0` that provides the CA certificates directly.
 
-TestServer now has SSH support with `TestServer.SSH` and TCP support with `TestServer.TCP`.
+TestServer now has SSH support with `TestServer.SSH`, TCP support with `TestServer.TCP`, and UDP support with `TestServer.UDP`.
 
 - `TestServer.HTTP.start/1` now returns `{:error, reason}` instead of raising
 - HTTP and WebSocket handlers no longer requires a path in the arguments

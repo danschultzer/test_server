@@ -193,19 +193,20 @@ defmodule TestServer do
   end
 
   @doc false
-  @spec put_tls_options(keyword()) :: keyword()
-  def put_tls_options(options) do
+  @spec put_tls_options(keyword(), keyword()) :: keyword()
+  def put_tls_options(options, x509_opts \\ []) do
     tls_options = Keyword.get(options, :tls, [])
 
     case Keyword.take(tls_options, [:key, :keyfile]) do
       [] ->
-        suite = X509.Test.Suite.new()
+        suite = X509.Test.Suite.new(x509_opts)
+        type = elem(suite.server_key, 0)
         server_key = X509.PrivateKey.to_der(suite.server_key)
         cert = X509.Certificate.to_der(suite.valid)
 
         tls =
           [
-            key: {:RSAPrivateKey, server_key},
+            key: {type, server_key},
             cert: cert,
             cacerts: suite.chain ++ suite.cacerts
           ]

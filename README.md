@@ -7,19 +7,12 @@
 
 No fuzz ExUnit test server to mock third party services.
 
-Features:
-
-- HTTP/1
-- HTTP/2
-- WebSocket
-- SSH
-- Built-in TLS with self-signed certificates
-- Plug route matching
-
 ## Protocols
 
 - [`TestServer.HTTP`](lib/test_server/http/README.md) - HTTP/1, HTTP/2, and WebSocket.
 - [`TestServer.SSH`](lib/test_server/ssh/README.md) - SSH exec and shell.
+
+TLS are supported with automatically generated certificates.
 
 <!-- MDOC !-->
 

@@ -13,7 +13,7 @@ Add request expectations with `TestServer.HTTP.handle/2`:
 ```elixir
 test "fetch_url/1" do
   # The test server will autostart the current test server, if not already running
-  TestServer.HTTP.handle("/path", via: :get)
+  TestServer.HTTP.handle("/path", method: :get)
 
   assert HTTPClient.fetch_url(TestServer.HTTP.url("/path")) == {:ok, "HTTP"}
 end
@@ -32,17 +32,18 @@ TestServer.HTTP.handle(to: MyPlug)
 The path can be passed as the first argument or defined with the `:path` option. By default any path is matched.
 
 ```elixir
+TestServer.HTTP.handle()
 TestServer.HTTP.handle("/path")
 TestServer.HTTP.handle(path: "/path")
 ```
 
-The method listened to can be defined with `:via` option. By default any method is matched.
+The method listened to can be defined with `:method` option. By default any method is matched.
 
 ```elixir
-TestServer.HTTP.handle(via: :post)
+TestServer.HTTP.handle(method: :post)
 ```
 
-A custom match function can be set with the `:match` option. The `:path` and `:via` options, if set, are matched on first:
+A custom match function can be set with the `:match` option. The `:path` and `:method` options, if set, are matched on first:
 
 ```elixir
 TestServer.HTTP.handle(match: fn

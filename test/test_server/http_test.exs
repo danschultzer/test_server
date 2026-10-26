@@ -279,9 +279,9 @@ defmodule TestServer.HTTPTest do
       end
     end
 
-    test "with invalid `:via` option" do
-      assert_raise ArgumentError, ~r/expected :via to be an atom or list, got: %{}/, fn ->
-        TestServer.HTTP.handle(via: %{})
+    test "with invalid `:method` option" do
+      assert_raise ArgumentError, ~r/expected :method to be an atom or list, got: %{}/, fn ->
+        TestServer.HTTP.handle(method: %{})
       end
     end
 
@@ -399,13 +399,29 @@ defmodule TestServer.HTTPTest do
       assert io =~ "Active handlers:"
     end
 
-    test "with `:via` option when method doesn't match" do
+    test "with `:method` option when method doesn't match" do
       defmodule HandleMethodMismatchTest do
         use ExUnit.Case
 
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
-          TestServer.HTTP.handle(via: :post)
+          TestServer.HTTP.handle(method: :post)
+
+          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+        end
+      end
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "received an unexpected GET request at /."
+    end
+
+    test "with `method: []` option" do
+      defmodule HandleMethodEmptyTest do
+        use ExUnit.Case
+
+        test "fails" do
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle(method: [])
 
           assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
         end
@@ -444,15 +460,15 @@ defmodule TestServer.HTTPTest do
       assert http1_request(TestServer.HTTP.url("/1")) == {:ok, "1"}
     end
 
-    test "with no `:via` option" do
+    test "with no `:method` option" do
       TestServer.HTTP.handle()
 
       assert {:ok, _} = http1_request(TestServer.HTTP.url(), method: :post)
     end
 
-    test "with an empty `:via` option" do
+    test "with an empty `:method` option" do
       TestServer.HTTP.handle(
-        via: [],
+        method: [],
         to: fn _conn ->
           flunk("Handler should not be called")
         end
@@ -465,10 +481,10 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.stop()
     end
 
-    test "with `:via` option" do
-      TestServer.HTTP.handle(via: :get, to: &Plug.Conn.resp(&1, 200, ":get"))
-      TestServer.HTTP.handle(via: [:post, :get], to: &Plug.Conn.resp(&1, 200, "[:post, :get]"))
-      TestServer.HTTP.handle(via: :post, to: &Plug.Conn.resp(&1, 200, ":post"))
+    test "with `:method` option" do
+      TestServer.HTTP.handle(method: :get, to: &Plug.Conn.resp(&1, 200, ":get"))
+      TestServer.HTTP.handle(method: [:post, :get], to: &Plug.Conn.resp(&1, 200, "[:post, :get]"))
+      TestServer.HTTP.handle(method: :post, to: &Plug.Conn.resp(&1, 200, ":post"))
 
       assert http1_request(TestServer.HTTP.url(), method: :post) == {:ok, "[:post, :get]"}
       assert http1_request(TestServer.HTTP.url()) == {:ok, ":get"}
@@ -558,10 +574,10 @@ defmodule TestServer.HTTPTest do
       assert http1_request(TestServer.HTTP.url() <> "?a=1") == {:ok, "1"}
     end
 
-    test "with `:match` function with `:path` and `:via` options" do
+    test "with `:match` function with `:path` and `:method` options" do
       TestServer.HTTP.handle(
         path: "/path",
-        via: :post,
+        method: :post,
         match: fn
           %{params: %{"a" => "1"}} = _conn -> true
           _conn -> false

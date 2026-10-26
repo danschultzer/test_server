@@ -22,7 +22,7 @@ defmodule TestServer.HTTP.Instance do
     ensure_plug!(options[:to])
     Keyword.has_key?(options, :match) && ensure_function!(options[:match])
     Keyword.has_key?(options, :path) && ensure_binary!(options[:path])
-    Keyword.has_key?(options, :via) && ensure_via!(options[:via])
+    Keyword.has_key?(options, :method) && ensure_method!(options[:method])
 
     options = put_match_function(options)
 
@@ -77,11 +77,11 @@ defmodule TestServer.HTTP.Instance do
   defp ensure_binary!(value),
     do: raise(ArgumentError, "expected a binary, got: #{inspect(value)}")
 
-  defp ensure_via!(via) when is_atom(via), do: :ok
-  defp ensure_via!(via) when is_list(via), do: :ok
+  defp ensure_method!(method) when is_atom(method), do: :ok
+  defp ensure_method!(method) when is_list(method), do: :ok
 
-  defp ensure_via!(via),
-    do: raise(ArgumentError, "expected :via to be an atom or list, got: #{inspect(via)}")
+  defp ensure_method!(method),
+    do: raise(ArgumentError, "expected :method to be an atom or list, got: #{inspect(method)}")
 
   defp ensure_function!(fun) when is_function(fun), do: :ok
   defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
@@ -207,7 +207,7 @@ defmodule TestServer.HTTP.Instance do
     handler = %{
       ref: make_ref(),
       path: Keyword.get(options, :path),
-      methods: Keyword.get(options, :via),
+      methods: Keyword.get(options, :method),
       match: Keyword.get(options, :match),
       to: Keyword.fetch!(options, :to),
       websocket: Keyword.get(options, :websocket),
@@ -323,7 +323,7 @@ defmodule TestServer.HTTP.Instance do
       end
 
     match_method_fn =
-      case Keyword.fetch(options, :via) do
+      case Keyword.fetch(options, :method) do
         :error ->
           nil
 

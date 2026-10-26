@@ -17,9 +17,10 @@ if Code.ensure_loaded?(Bandit) do
 
     @impl Plug.Conn.Adapter
     def read_req_body({plug_pid, payload}, options) do
-      with {:ok, data, payload} <-
-             send_and_receive(plug_pid, :read_req_body, [payload, options]) do
-        {:ok, data, {plug_pid, payload}}
+      case send_and_receive(plug_pid, :read_req_body, [payload, options]) do
+        {:ok, data, payload} -> {:ok, data, {plug_pid, payload}}
+        {:more, data, payload} -> {:more, data, {plug_pid, payload}}
+        {:error, reason} -> {:error, reason}
       end
     end
 

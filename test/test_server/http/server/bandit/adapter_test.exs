@@ -2,7 +2,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
   use ExUnit.Case
 
   setup do
-    Application.ensure_all_started(:bandit)
+    {:ok, _} = Application.ensure_all_started(:bandit)
 
     TestServer.HTTP.start!(scheme: :https, http_server: {TestServer.HTTP.Server.Bandit, []})
 
@@ -71,8 +71,22 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
   test "Plug.Conn.read_body/1" do
     TestServer.HTTP.handle("/",
       to: fn conn ->
-        assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+        assert {:ok, body, conn} = Plug.Conn.read_body(conn)
+
         Plug.Conn.resp(conn, 200, body)
+      end
+    )
+
+    assert http2_request(TestServer.HTTP.url(), method: :post, body: "test") == {:ok, "test"}
+  end
+
+  test "Plug.Conn.read_body/2 when returning `:more`" do
+    TestServer.HTTP.handle("/",
+      to: fn conn ->
+        assert {:more, body, conn} = Plug.Conn.read_body(conn, length: 1)
+        assert {:ok, rest, conn} = Plug.Conn.read_body(conn)
+
+        Plug.Conn.resp(conn, 200, body <> rest)
       end
     )
 
@@ -87,8 +101,8 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
       ]
     }
 
-    unless Process.whereis(Finch) do
-      {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
+    unless Process.whereis(__MODULE__.Finch) do
+      {:ok, _pid} = Finch.start_link(name: __MODULE__.Finch, pools: pools)
     end
 
     headers = Keyword.get(options, :headers, [])
@@ -97,7 +111,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
     options
     |> Keyword.get(:method, :get)
     |> Finch.build(url, headers, body)
-    |> Finch.request(Finch)
+    |> Finch.request(__MODULE__.Finch)
     |> case do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}

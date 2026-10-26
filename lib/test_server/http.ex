@@ -224,7 +224,7 @@ defmodule TestServer.HTTP do
       binary. The path can also be passed as the first argument. Defaults to
       any path;
 
-    * `:via`       - matches the handler against some specific HTTP method(s)
+    * `:method`    - matches the handler against some specific HTTP method(s)
       specified as an atom, like `:get` or `:put`, or a list, like
       `[:get, :post]`. Defaults to any method;
 
@@ -404,9 +404,9 @@ defmodule TestServer.HTTP do
       assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
       assert WebSocketClient.send_message(client, "echo") == {:ok, "echo"}
 
-  `:via` and `:match` are called during the HTTP handshake:
+  `:method` and `:match` are called during the HTTP handshake:
 
-      TestServer.HTTP.websocket("/ws", via: :get, match: fn conn ->
+      TestServer.HTTP.websocket("/ws", method: :get, match: fn conn ->
         conn.params["token"] == "secret"
       end)
 

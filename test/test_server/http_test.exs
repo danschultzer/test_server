@@ -7,6 +7,12 @@ defmodule TestServer.HTTPTest do
   alias __MODULE__.WebSocketClient
 
   describe "start/1" do
+    test "with invalid options" do
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.HTTP.start(invalid: :option)
+      end
+    end
+
     test "with invalid `:port` option" do
       assert_raise ArgumentError, ~r/expected a port, got: :invalid/, fn ->
         TestServer.HTTP.start(port: :invalid)
@@ -150,9 +156,7 @@ defmodule TestServer.HTTPTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.stop\/0`/,
-                   fn ->
-                     TestServer.HTTP.stop()
-                   end
+                   fn -> TestServer.HTTP.stop() end
 
       assert TestServer.HTTP.stop(instance_1) == :ok
       assert TestServer.HTTP.stop() == :ok
@@ -190,11 +194,17 @@ defmodule TestServer.HTTPTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.url\/2`/,
-                   fn ->
-                     TestServer.HTTP.url()
-                   end
+                   fn -> TestServer.HTTP.url() end
 
       refute TestServer.HTTP.url(instance_1) == TestServer.HTTP.url(instance_2)
+    end
+
+    test "with invalid options" do
+      TestServer.HTTP.start!()
+
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.HTTP.url(invalid: :option)
+      end
     end
 
     test "returns" do
@@ -262,15 +272,19 @@ defmodule TestServer.HTTPTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.handle\/1`/,
-                   fn ->
-                     TestServer.HTTP.handle()
-                   end
+                   fn -> TestServer.HTTP.handle() end
 
       TestServer.HTTP.handle(instance_1)
 
       assert {:ok, _} = http1_request(TestServer.HTTP.url(instance_1))
 
       TestServer.HTTP.stop(instance_1)
+    end
+
+    test "with invalid options" do
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.HTTP.handle(invalid: :option)
+      end
     end
 
     test "with invalid `:path` option" do
@@ -706,9 +720,7 @@ defmodule TestServer.HTTPTest do
 
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running with `\[scheme: :https\]` option/,
-                   fn ->
-                     TestServer.HTTP.cacerts()
-                   end
+                   fn -> TestServer.HTTP.cacerts() end
     end
 
     test "when started with `scheme: :https` option with `:tls` option with custom certificates" do
@@ -718,9 +730,7 @@ defmodule TestServer.HTTPTest do
 
       assert_raise RuntimeError,
                    ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is running with custom `:tls` certificate options/,
-                   fn ->
-                     TestServer.HTTP.cacerts()
-                   end
+                   fn -> TestServer.HTTP.cacerts() end
     end
   end
 
@@ -771,9 +781,7 @@ defmodule TestServer.HTTPTest do
 
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
-                     fn ->
-                       TestServer.HTTP.websocket(instance, path: "/ws")
-                     end
+                     fn -> TestServer.HTTP.websocket(instance, path: "/ws") end
       end
 
       test "with multiple instances" do
@@ -782,12 +790,14 @@ defmodule TestServer.HTTPTest do
 
         assert_raise RuntimeError,
                      ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.websocket\/1`/,
-                     fn ->
-                       TestServer.HTTP.websocket("/ws")
-                     end
+                     fn -> TestServer.HTTP.websocket("/ws") end
       end
 
       test "with invalid options" do
+        assert_raise ArgumentError, ~r/unknown keys/, fn ->
+          TestServer.HTTP.websocket(invalid: :option)
+        end
+
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
           TestServer.HTTP.websocket(to: :invalid)
         end
@@ -826,9 +836,7 @@ defmodule TestServer.HTTPTest do
         # Ensure that the websocket was not accepted
         assert_raise RuntimeError,
                      ~r/cannot send to the websocket, because no client has connected to it/,
-                     fn ->
-                       TestServer.HTTP.websocket_send(websocket)
-                     end
+                     fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
       test "with `:to` function returning unset conn" do
@@ -852,13 +860,15 @@ defmodule TestServer.HTTPTest do
 
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
-                     fn ->
-                       TestServer.HTTP.websocket_handle(websocket)
-                     end
+                     fn -> TestServer.HTTP.websocket_handle(websocket) end
       end
 
       test "with invalid options" do
         websocket = TestServer.HTTP.websocket("/ws")
+
+        assert_raise ArgumentError, ~r/unknown keys/, fn ->
+          TestServer.HTTP.websocket_handle(websocket, invalid: :option)
+        end
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
           TestServer.HTTP.websocket_handle(websocket, to: :invalid)
@@ -1103,15 +1113,17 @@ defmodule TestServer.HTTPTest do
 
         assert_raise RuntimeError,
                      ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
-                     fn ->
-                       TestServer.HTTP.websocket_send(websocket)
-                     end
+                     fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
       test "with invalid options" do
         websocket = TestServer.HTTP.websocket("/ws")
 
         assert {:ok, _client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
+
+        assert_raise ArgumentError, ~r/unknown keys/, fn ->
+          TestServer.HTTP.websocket_send(websocket, invalid: :option)
+        end
 
         assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
           TestServer.HTTP.websocket_send(websocket, to: :invalid)
@@ -1123,9 +1135,7 @@ defmodule TestServer.HTTPTest do
 
         assert_raise RuntimeError,
                      ~r/cannot send to the websocket, because no client has connected to it/,
-                     fn ->
-                       TestServer.HTTP.websocket_send(websocket)
-                     end
+                     fn -> TestServer.HTTP.websocket_send(websocket) end
 
         TestServer.HTTP.stop()
       end
@@ -1135,9 +1145,7 @@ defmodule TestServer.HTTPTest do
 
         assert_raise RuntimeError,
                      ~r/cannot send to the websocket, because the websocket does not exist/,
-                     fn ->
-                       TestServer.HTTP.websocket_send({instance, make_ref()})
-                     end
+                     fn -> TestServer.HTTP.websocket_send({instance, make_ref()}) end
       end
 
       test "when client has disconnected" do
@@ -1150,9 +1158,7 @@ defmodule TestServer.HTTPTest do
 
         assert_raise RuntimeError,
                      ~r/cannot send to the websocket, because client has disconnected/,
-                     fn ->
-                       TestServer.HTTP.websocket_send(websocket)
-                     end
+                     fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
       test "sends" do

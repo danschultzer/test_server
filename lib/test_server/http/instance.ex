@@ -47,8 +47,8 @@ defmodule TestServer.HTTP.Instance do
         instance,
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
       ) do
-    Keyword.has_key?(options, :match) && ensure_function!(options[:match])
     ensure_function!(options[:to])
+    Keyword.has_key?(options, :match) && ensure_function!(options[:match])
 
     GenServer.call(
       instance,

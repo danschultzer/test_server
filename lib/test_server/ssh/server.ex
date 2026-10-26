@@ -55,7 +55,7 @@ defmodule TestServer.SSH.Server do
 
     daemon_options =
       options
-      |> Keyword.take([:auth_methods, :no_auth_needed, :user_passwords])
+      |> Keyword.take([:no_auth_needed, :user_passwords])
       |> normalize_user_passwords()
       |> Keyword.put_new(
         :no_auth_needed,

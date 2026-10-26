@@ -127,6 +127,18 @@ defmodule TestServer.SSH do
   """
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
+    Keyword.validate!(options, [
+      :port,
+      :host_keys,
+      :auth_keys,
+      :user_passwords,
+      :no_auth_needed,
+      :ipfamily,
+      :suppress_ssh_strict_kex_ordering_log,
+      :daemon,
+      :suppress_warning
+    ])
+
     TestServer.start_instance(__MODULE__, options, &verify!/1)
   end
 
@@ -227,6 +239,7 @@ defmodule TestServer.SSH do
   """
   @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
+    Keyword.validate!(options, [:host])
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     host = TestServer.host(options)
@@ -278,6 +291,7 @@ defmodule TestServer.SSH do
   """
   @spec channel(TestServer.instance(), keyword()) :: channel()
   def channel(instance, options) do
+    Keyword.validate!(options, [:messages])
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
@@ -368,6 +382,7 @@ defmodule TestServer.SSH do
   """
   @spec handle(channel(), keyword()) :: :ok
   def handle({instance, channel_ref} = _channel, options) do
+    Keyword.validate!(options, [:match, :to])
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] =

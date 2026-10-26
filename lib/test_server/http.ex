@@ -95,6 +95,7 @@ defmodule TestServer.HTTP do
   """
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
+    Keyword.validate!(options, [:port, :scheme, :http_server, :tls, :ipfamily, :suppress_warning])
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
   end
 
@@ -201,6 +202,7 @@ defmodule TestServer.HTTP do
   """
   @spec url(TestServer.instance(), binary(), keyword()) :: binary()
   def url(instance, uri, options) do
+    Keyword.validate!(options, [:host])
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     domain = TestServer.host(options)
@@ -275,6 +277,8 @@ defmodule TestServer.HTTP do
   """
   @spec handle(TestServer.instance(), keyword()) :: :ok
   def handle(instance, options) when is_pid(instance) and is_list(options) do
+    Keyword.validate!(options, [:path, :method, :match, :to])
+
     {:ok, _handler} = register_handler(instance, options)
 
     :ok
@@ -292,12 +296,12 @@ defmodule TestServer.HTTP do
   end
 
   defp register_handler(instance, options) do
-    options = Keyword.put_new(options, :to, &default_handler/1)
-
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_register_handler, _first_module_entry | stacktrace] =
       TestServer.pruned_stacktrace(__MODULE__)
+
+    options = Keyword.put_new(options, :to, &default_handler/1)
 
     Instance.register(instance, {:handle, options, stacktrace})
   end
@@ -336,7 +340,6 @@ defmodule TestServer.HTTP do
   @spec plug(TestServer.instance(), plug_module() | plug_fun()) :: :ok
   def plug(instance, plug) do
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     {:ok, _plug} = Instance.register(instance, {:plug, plug, stacktrace})
 
     :ok
@@ -447,6 +450,8 @@ defmodule TestServer.HTTP do
   """
   @spec websocket(TestServer.instance(), keyword()) :: websocket()
   def websocket(instance, options) when is_pid(instance) and is_list(options) do
+    Keyword.validate!(options, [:path, :method, :match, :to])
+
     options =
       options
       |> Keyword.put(:websocket, true)
@@ -507,6 +512,7 @@ defmodule TestServer.HTTP do
   """
   @spec websocket_handle(websocket(), keyword()) :: :ok
   def websocket_handle({instance, websocket_ref}, options) do
+    Keyword.validate!(options, [:to, :match])
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
@@ -544,6 +550,7 @@ defmodule TestServer.HTTP do
   """
   @spec websocket_send(websocket(), keyword()) :: :ok
   def websocket_send({instance, websocket_ref}, options) do
+    Keyword.validate!(options, [:to])
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)

@@ -8,6 +8,12 @@ defmodule TestServer.SSHTest do
   alias __MODULE__.SSHClient
 
   describe "start/1" do
+    test "with invalid options" do
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.SSH.start(invalid: :option)
+      end
+    end
+
     test "with invalid `:port` option" do
       assert_raise ArgumentError, ~r/expected a port, got: :invalid/, fn ->
         TestServer.SSH.start(port: :invalid)
@@ -362,9 +368,7 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.stop\/0`/,
-                   fn ->
-                     TestServer.SSH.stop()
-                   end
+                   fn -> TestServer.SSH.stop() end
 
       assert TestServer.SSH.stop(instance_1) == :ok
       assert TestServer.SSH.stop() == :ok
@@ -403,11 +407,17 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.address\/1`/,
-                   fn ->
-                     TestServer.SSH.address()
-                   end
+                   fn -> TestServer.SSH.address() end
 
       refute TestServer.SSH.address(instance_1) == TestServer.SSH.address(instance_2)
+    end
+
+    test "with invalid options" do
+      TestServer.SSH.start!()
+
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.SSH.address(invalid: :option)
+      end
     end
 
     test "returns" do
@@ -447,9 +457,7 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is not running/,
-                   fn ->
-                     TestServer.SSH.channel(instance, [])
-                   end
+                   fn -> TestServer.SSH.channel(instance, []) end
     end
 
     test "with multiple instances" do
@@ -458,9 +466,7 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.channel\/1`/,
-                   fn ->
-                     TestServer.SSH.channel()
-                   end
+                   fn -> TestServer.SSH.channel() end
 
       assert TestServer.SSH.channel(instance_1, [])
 
@@ -468,15 +474,17 @@ defmodule TestServer.SSHTest do
     end
 
     test "with invalid options" do
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.SSH.channel(invalid: :option)
+      end
+
       assert_raise ArgumentError, ~r/expected :all, got: :invalid/, fn ->
         TestServer.SSH.channel(messages: :invalid)
       end
 
       assert_raise ArgumentError,
                    ~r/expected list to only include \[:exec, :data, :env, :pty, :shell, :eof\], got: \[:invalid\]/,
-                   fn ->
-                     TestServer.SSH.channel(messages: [:invalid])
-                   end
+                   fn -> TestServer.SSH.channel(messages: [:invalid]) end
     end
 
     test "when no channel up message received" do
@@ -645,9 +653,7 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.handle\/1`/,
-                   fn ->
-                     TestServer.SSH.handle()
-                   end
+                   fn -> TestServer.SSH.handle() end
     end
 
     test "with multiple channels" do
@@ -656,9 +662,7 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/Multiple channels available, please pass channel to `TestServer\.SSH\.handle\/2`/,
-                   fn ->
-                     TestServer.SSH.handle()
-                   end
+                   fn -> TestServer.SSH.handle() end
 
       TestServer.SSH.stop()
     end
@@ -669,12 +673,14 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is not running/,
-                   fn ->
-                     TestServer.SSH.handle(channel)
-                   end
+                   fn -> TestServer.SSH.handle(channel) end
     end
 
     test "with invalid options" do
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.SSH.handle(invalid: :option)
+      end
+
       assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
         TestServer.SSH.handle(to: :invalid)
       end
@@ -1076,9 +1082,7 @@ defmodule TestServer.SSHTest do
 
       assert_raise RuntimeError,
                    ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is running with `\[host_keys: function\]` option/,
-                   fn ->
-                     TestServer.SSH.host_keys()
-                   end
+                   fn -> TestServer.SSH.host_keys() end
     end
   end
 

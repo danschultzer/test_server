@@ -62,7 +62,7 @@ TestServer.HTTP.plug(fn conn ->
 end)
 
 TestServer.HTTP.plug(fn conn ->
-  {:ok, body, _conn} = Plug.Conn.read_body(conn, [])
+  {:ok, body, conn} = Plug.Conn.read_body(conn, [])
 
   %{conn | body_params: Jason.decode!(body)}
 end)

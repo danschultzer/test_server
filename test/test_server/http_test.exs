@@ -487,7 +487,7 @@ defmodule TestServer.HTTPTest do
         TestServer.HTTP.handle("/",
           to: fn conn ->
             assert Plug.Conn.get_http_protocol(conn) == :"HTTP/2"
-            assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+            assert {:ok, body, conn} = Plug.Conn.read_body(conn)
 
             Plug.Conn.resp(conn, 200, body)
           end
@@ -507,15 +507,15 @@ defmodule TestServer.HTTPTest do
 
     test "with plug function" do
       TestServer.HTTP.plug(fn conn ->
-        assert {:ok, body, _data} = Plug.Conn.read_body(conn)
+        assert {:ok, body, conn} = Plug.Conn.read_body(conn)
 
         %{conn | params: %{"plug" => "anonymous function", body: body}}
       end)
 
       TestServer.HTTP.handle("/", to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params)))
 
-      assert {:ok, query} = http1_request(TestServer.HTTP.url("/"))
-      assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => ""}
+      assert {:ok, query} = http1_request(TestServer.HTTP.url("/"), method: :post)
+      assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => "OK"}
     end
 
     test "with plug module" do
@@ -1198,8 +1198,8 @@ defmodule TestServer.HTTPTest do
         ]
       }
 
-      unless Process.whereis(Finch) do
-        {:ok, _pid} = Finch.start_link(name: Finch, pools: pools)
+      unless Process.whereis(__MODULE__.Finch) do
+        {:ok, _pid} = Finch.start_link(name: __MODULE__.Finch, pools: pools)
       end
 
       headers = Keyword.get(options, :headers, [])
@@ -1208,7 +1208,7 @@ defmodule TestServer.HTTPTest do
       options
       |> Keyword.get(:method, :get)
       |> Finch.build(url, headers, body)
-      |> Finch.request(Finch)
+      |> Finch.request(__MODULE__.Finch)
       |> case do
         {:ok, %{status: 200, body: body}} ->
           {:ok, body}

@@ -8,7 +8,7 @@ defmodule TestServer.HTTP do
   alias Plug.Conn
   alias TestServer.HTTP.{Instance, Server}
 
-  @type route_ref :: reference()
+  @type handler_ref :: reference()
   @type handler_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
   @type plug_module :: module()
   @type plug_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
@@ -75,7 +75,7 @@ defmodule TestServer.HTTP do
         http_server: {TestServer.HTTP.Server.Bandit, [ip: :any]}
       )
 
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 
@@ -99,23 +99,23 @@ defmodule TestServer.HTTP do
   end
 
   defp verify_instance!(instance) do
-    verify_routes!(instance)
+    verify_handlers!(instance)
     verify_websocket_handlers!(instance)
   end
 
-  defp verify_routes!(instance) do
+  defp verify_handlers!(instance) do
     instance
-    |> Instance.routes()
+    |> Instance.handlers()
     |> Enum.reject(& &1.suspended)
     |> case do
       [] ->
         :ok
 
-      active_routes ->
+      active_handlers ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} did not receive a request for these routes before the test ended:
+        #{TestServer.format_instance(__MODULE__, instance)} did not receive a request for these handlers before the test ended:
 
-        #{Instance.format_routes(active_routes)}
+        #{Instance.format_handlers(active_handlers)}
         """
     end
   end
@@ -209,30 +209,34 @@ defmodule TestServer.HTTP do
     "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{uri}"
   end
 
-  @spec handle(binary()) :: :ok
-  def handle(uri), do: handle(uri, [])
+  def handle, do: handle([])
 
   @doc """
-  Adds a route to the current test server.
+  Adds a request handler to the current test server.
 
-  Matching routes are handled FIFO (first in, first out). Any requests to
-  routes not added to the TestServer and any routes that isn't matched will
-  raise an error in the test case.
+  Handlers are matched FIFO (first in, first out). Any requests not matched by
+  a handler, or any handlers not consumed by a request, will raise an error in
+  the test case.
 
   ## Options
 
-    * `:via`       - matches the route against some specific HTTP method(s)
-      specified as an atom, like `:get` or `:put`, or a list, like `[:get, :post]`;
+    * `:path`      - matches the handler against a specific path defined as a
+      binary. The path can also be passed as the first argument. Defaults to
+      any path;
+
+    * `:via`       - matches the handler against some specific HTTP method(s)
+      specified as an atom, like `:get` or `:put`, or a list, like
+      `[:get, :post]`. Defaults to any method;
 
     * `:match`     - an `t:match_fun/0` function that returns a boolean.
-      Defaults to matching with arguments of uri and `:via` option;
+      Defaults to matching anything;
 
     * `:to`        - a `t:handler_fun/0` or `t:plug_module/0` that will be
-      called when the route matches, defaults to return the http scheme;
+      called when the handler matches. Defaults to return the HTTP protocol;
 
   ## Examples
 
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         match: fn conn ->
           conn.query_params["a"] == "1"
         end,
@@ -240,46 +244,62 @@ defmodule TestServer.HTTP do
           Plug.Conn.resp(conn, 200, "a = 1")
         end)
 
-      TestServer.HTTP.handle("/", to: &Plug.Conn.resp(&1, 200, "PONG"))
+      TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, "PONG"))
       TestServer.HTTP.handle("/")
 
-      assert {:ok, %Req.Response{status: 200, body: "PONG"}} = Req.get(TestServer.HTTP.url("/"))
-      assert {:ok, %Req.Response{status: 200, body: "HTTP/1.1"}} = Req.post(TestServer.HTTP.url("/"))
+      assert {:ok, %Req.Response{status: 200, body: "PONG"}} = Req.get(TestServer.HTTP.url())
+      assert {:ok, %Req.Response{status: 200, body: "HTTP/1.1"}} = Req.post(TestServer.HTTP.url())
       assert {:ok, %Req.Response{status: 200, body: "a = 1"}} = Req.get(TestServer.HTTP.url("/?a=1"))
   """
-  @spec handle(binary(), keyword()) :: :ok
-  def handle(uri, options) when is_binary(uri) do
+  @spec handle(keyword()) :: :ok
+  def handle(options) when is_list(options) do
     instance = TestServer.autostart_instance(__MODULE__)
 
-    handle(instance, uri, options)
+    handle(instance, options)
   end
 
+  @spec handle(binary()) :: :ok
+  def handle(path) when is_binary(path), do: handle(path, [])
+
+  @spec handle(TestServer.instance()) :: :ok
+  def handle(instance) when is_pid(instance), do: handle(instance, [])
+
   @spec handle(TestServer.instance(), binary()) :: :ok
-  def handle(instance, uri) when is_pid(instance) and is_binary(uri),
-    do: handle(instance, uri, [])
+  def handle(instance, path) when is_pid(instance) and is_binary(path),
+    do: handle(instance, path, [])
 
   @doc """
-  Adds a route to a test server instance.
+  Adds a request handler to a test server instance.
 
-  See `handle/2` for options.
+  See `handle/1` for options.
   """
-  @spec handle(TestServer.instance(), binary(), keyword()) :: :ok
-  def handle(instance, uri, options)
-      when is_pid(instance) and is_binary(uri) and is_list(options) do
-    options = Keyword.put_new(options, :to, &default_handler/1)
-
-    {:ok, _route} = register_route(instance, uri, options)
+  @spec handle(TestServer.instance(), keyword()) :: :ok
+  def handle(instance, options) when is_pid(instance) and is_list(options) do
+    {:ok, _handler} = register_handler(instance, options)
 
     :ok
   end
 
-  defp register_route(instance, uri, options) do
+  @spec handle(binary(), keyword()) :: :ok
+  def handle(path, options) when is_binary(path) and is_list(options) do
+    handle(Keyword.put(options, :path, path))
+  end
+
+  @spec handle(TestServer.instance(), binary(), keyword()) :: :ok
+  def handle(instance, path, options)
+      when is_pid(instance) and is_binary(path) and is_list(options) do
+    handle(instance, Keyword.put(options, :path, path))
+  end
+
+  defp register_handler(instance, options) do
+    options = Keyword.put_new(options, :to, &default_handler/1)
+
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_register_route, _first_module_entry | stacktrace] =
+    [_register_handler, _first_module_entry | stacktrace] =
       TestServer.pruned_stacktrace(__MODULE__)
 
-    Instance.register(instance, {:plug_router_to, uri, options, stacktrace})
+    Instance.register(instance, {:handle, options, stacktrace})
   end
 
   defp default_handler(conn) do
@@ -289,7 +309,7 @@ defmodule TestServer.HTTP do
   @doc """
   Adds a plug to the current test server.
 
-  This plug will be called for all requests before route is matched.
+  This plug will be called for all requests before a handler is matched.
 
   ## Examples
 
@@ -328,7 +348,7 @@ defmodule TestServer.HTTP do
   ## Examples
 
       TestServer.HTTP.start!(scheme: :https)
-      TestServer.HTTP.handle("/")
+      TestServer.HTTP.handle()
 
       cacerts = TestServer.HTTP.cacerts()
       req_options = [connect_options: [transport_opts: [cacerts: cacerts]]]
@@ -362,19 +382,19 @@ defmodule TestServer.HTTP do
     end
   end
 
-  @spec websocket(binary()) :: websocket()
-  def websocket(uri) when is_binary(uri), do: websocket(uri, [])
+  def websocket, do: websocket([])
 
   @doc """
-  Adds a websocket route to current test server.
+  Adds a websocket endpoint to current test server.
 
-  The `:to` option can be overridden the same way as for `handle/2`, and will
+  The `:to` option can be overridden the same way as for `handle/1`, and will
   be called during the HTTP handshake. If the `conn.state` is `:unset` the
   websocket will be initiated otherwise response is returned as-is.
 
   ## Options
 
-  Takes the same options as `handle/2`, except `:to`.
+  Takes the same options as `handle/1`. A path passed as the first argument is
+  shorthand for `:path`.
 
   ## Examples
 
@@ -403,33 +423,49 @@ defmodule TestServer.HTTP do
       assert {:error, %WebSockex.RequestError{code: 403}} =
               WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
   """
-  @spec websocket(binary(), keyword()) :: websocket()
-  def websocket(uri, options) when is_binary(uri) do
+  @spec websocket(keyword()) :: websocket()
+  def websocket(options) when is_list(options) do
     instance = TestServer.autostart_instance(__MODULE__)
 
-    websocket(instance, uri, options)
+    websocket(instance, options)
   end
+
+  @spec websocket(binary()) :: websocket()
+  def websocket(path) when is_binary(path), do: websocket(path, [])
+
+  @spec websocket(TestServer.instance()) :: websocket()
+  def websocket(instance) when is_pid(instance), do: websocket(instance, [])
 
   @spec websocket(TestServer.instance(), binary()) :: websocket()
-  def websocket(instance, uri) when is_pid(instance) and is_binary(uri) do
-    websocket(instance, uri, [])
-  end
+  def websocket(instance, path) when is_pid(instance) and is_binary(path),
+    do: websocket(instance, path, [])
 
   @doc """
-  Adds a websocket route to a test server.
+  Adds a websocket endpoint to a test server instance.
 
-  See `websocket/2` for options.
+  See `websocket/1` for options.
   """
-  @spec websocket(TestServer.instance(), binary(), keyword()) :: websocket()
-  def websocket(instance, uri, options) do
+  @spec websocket(TestServer.instance(), keyword()) :: websocket()
+  def websocket(instance, options) when is_pid(instance) and is_list(options) do
     options =
       options
       |> Keyword.put(:websocket, true)
       |> Keyword.put_new(:to, & &1)
 
-    {:ok, %{ref: ref}} = register_route(instance, uri, options)
+    {:ok, %{ref: ref}} = register_handler(instance, options)
 
     {instance, ref}
+  end
+
+  @spec websocket(binary(), keyword()) :: websocket()
+  def websocket(path, options) when is_binary(path) and is_list(options) do
+    websocket(Keyword.put(options, :path, path))
+  end
+
+  @spec websocket(TestServer.instance(), binary(), keyword()) :: websocket()
+  def websocket(instance, path, options)
+      when is_pid(instance) and is_binary(path) and is_list(options) do
+    websocket(instance, Keyword.put(options, :path, path))
   end
 
   @spec websocket_handle(websocket()) :: :ok

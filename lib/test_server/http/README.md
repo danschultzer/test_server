@@ -2,59 +2,66 @@
 
 <!-- MDOC !-->
 
-Mock HTTP/1, HTTP/2, and WebSocket endpoints with route expectations, plug pipelines, and TLS support.
+Mock HTTP/1, HTTP/2, and WebSocket endpoints with plug pipelines and TLS support.
 
 ## Usage
 
 ### HTTP
 
-Add route request expectations with `TestServer.HTTP.handle/2`:
+Add request expectations with `TestServer.HTTP.handle/2`:
 
 ```elixir
 test "fetch_url/1" do
   # The test server will autostart the current test server, if not already running
-  TestServer.HTTP.handle("/", via: :get)
+  TestServer.HTTP.handle("/path", via: :get)
 
-  assert MyModule.fetch_url(TestServer.HTTP.url()) == {:ok, "HTTP"}
+  assert HTTPClient.fetch_url(TestServer.HTTP.url("/path")) == {:ok, "HTTP"}
 end
 ```
 
-`TestServer.HTTP.handle/2` can route a request to an anonymous function or plug with `:to` option.
+`TestServer.HTTP.handle/2` can route a request to an anonymous function or plug with the `:to` option.
 
 ```elixir
-TestServer.HTTP.handle("/", to: fn conn ->
+TestServer.HTTP.handle(to: fn conn ->
   Plug.Conn.send_resp(conn, 200, "OK")
 end)
 
-TestServer.HTTP.handle("/", to: MyPlug)
+TestServer.HTTP.handle(to: MyPlug)
+```
+
+The path can be passed as the first argument or defined with the `:path` option. By default any path is matched.
+
+```elixir
+TestServer.HTTP.handle("/path")
+TestServer.HTTP.handle(path: "/path")
 ```
 
 The method listened to can be defined with `:via` option. By default any method is matched.
 
 ```elixir
-TestServer.HTTP.handle("/", via: :post)
+TestServer.HTTP.handle(via: :post)
 ```
 
-A custom match function can be set with `:match` option:
+A custom match function can be set with the `:match` option. The `:path` and `:via` options, if set, are matched on first:
 
 ```elixir
-TestServer.HTTP.handle("/", match: fn
+TestServer.HTTP.handle(match: fn
   %{params: %{"a" => "1"}} = _conn -> true
   _conn -> false
 end)
 ```
 
-When a route is matched it'll be removed from active routes list. The route will be triggered in the order they were added:
+When a handler is matched it is removed from the active handlers list. Handlers are triggered in the order they were added:
 
 ```elixir
-TestServer.HTTP.handle("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "first"))
-TestServer.HTTP.handle("/", via: :get, to: &Plug.Conn.send_resp(&1, 200, "second"))
+TestServer.HTTP.handle(to: &Plug.Conn.send_resp(&1, 200, "first"))
+TestServer.HTTP.handle(to: &Plug.Conn.send_resp(&1, 200, "second"))
 
-assert fetch_request() == {:ok, "first"}
-assert fetch_request() == {:ok, "second"}
+assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "first"}
+assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "second"}
 ```
 
-Plugs can be added to the pipeline with `TestServer.HTTP.plug/1`. All plugs will run before any routes are matched. `Plug.Conn.fetch_query_params/1` is used if no plugs are set.
+Plugs can be added to the pipeline with `TestServer.HTTP.plug/1`. All plugs will run before any handlers are matched. `Plug.Conn.fetch_query_params/1` is used if no plugs are set.
 
 ```elixir
 TestServer.HTTP.plug(fn conn ->
@@ -96,7 +103,7 @@ TestServer.HTTP.start!(scheme: :https, tls: [keyfile: key, certfile: cert])
 
 ### WebSocket
 
-WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/2`. By default, `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be sent from the test server with `TestServer.HTTP.websocket_send/2`.
+WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/1`. By default any path is matched, and `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be sent from the test server with `TestServer.HTTP.websocket_send/2`.
 
 ```elixir
 test "WebSocketClient" do
@@ -142,7 +149,7 @@ Use the `:ipfamily` option to test with IPv6 when starting the test server with 
 ```elixir
 TestServer.HTTP.start!(ipfamily: :inet6)
 
-TestServer.HTTP.handle("/",
+TestServer.HTTP.handle(
   to: fn conn ->
     assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
 

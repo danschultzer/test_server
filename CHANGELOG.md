@@ -13,6 +13,7 @@ HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
 TestServer now has SSH support with `TestServer.SSH`.
 
 - `TestServer.HTTP.start/1` now returns `{:error, reason}` instead of raising
+- HTTP and WebSocket handlers no longer requires a path in the arguments
 - Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.handle/2` and `TestServer.HTTP.websocket_handle/2`
 - Fixed UTF-8 response body handling for `TestServer.HTTP.Server.Httpd`
 - Fixed invalid host header port parsing in `TestServer.HTTP.Server.Httpd`

@@ -9,11 +9,12 @@ defmodule TestServer.HTTP.Plug do
   def call(conn, {http_server, args, instance}) do
     case Instance.dispatch(instance, {:plug, conn}) do
       {:ok,
-       %{state: :unset, private: %{test_server: %{websocket: true, route_ref: route_ref}}} = conn} ->
+       %{state: :unset, private: %{test_server: %{websocket: true, handler_ref: handler_ref}}} =
+           conn} ->
         {:ok, websocket_ref, state} =
           Instance.dispatch(
             instance,
-            {:websocket, {:upgrade, route_ref, http_server.socket_pid(conn)}}
+            {:websocket, {:upgrade, handler_ref, http_server.socket_pid(conn)}}
           )
 
         Plug.Conn.upgrade_adapter(
@@ -29,7 +30,7 @@ defmodule TestServer.HTTP.Plug do
         message =
           "#{TestServer.format_instance(TestServer.HTTP, instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
           |> append_formatted_params(conn)
-          |> append_formatted_routes(instance)
+          |> append_formatted_handlers(instance)
 
         resp_error(conn, instance, {RuntimeError.exception(message), []})
 
@@ -52,37 +53,37 @@ defmodule TestServer.HTTP.Plug do
     end
   end
 
-  defp append_formatted_routes(message, instance) do
-    routes = Enum.split_with(Instance.routes(instance), &(not &1.suspended))
+  defp append_formatted_handlers(message, instance) do
+    handlers = Enum.split_with(Instance.handlers(instance), &(not &1.suspended))
 
     """
     #{message}
 
-    #{format_routes(routes)}
+    #{format_handlers(handlers)}
     """
   end
 
-  defp format_routes({[], suspended_routes}) do
-    message = "No active routes."
+  defp format_handlers({[], suspended_handlers}) do
+    message = "No active handlers."
 
-    case suspended_routes do
+    case suspended_handlers do
       [] ->
         message
 
-      suspended_routes ->
+      suspended_handlers ->
         """
-        #{message} The following routes have been processed:
+        #{message} The following handlers have been processed:
 
-        #{Instance.format_routes(suspended_routes)}
+        #{Instance.format_handlers(suspended_handlers)}
         """
     end
   end
 
-  defp format_routes({active_routes, _suspended_routes}) do
+  defp format_handlers({active_handlers, _suspended_handlers}) do
     """
-    Active routes:
+    Active handlers:
 
-    #{Instance.format_routes(active_routes)}
+    #{Instance.format_handlers(active_handlers)}
     """
   end
 

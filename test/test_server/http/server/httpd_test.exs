@@ -13,7 +13,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
 
   describe "conn/1" do
     test "with no host header" do
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           refute List.keyfind(conn.req_headers, "host", 0)
           assert conn.host == ""
@@ -24,11 +24,11 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       )
 
       assert {:ok, {200, _headers, "OK"}} =
-               http_request(:get, TestServer.HTTP.url("/"), [], version: ~c"HTTP/1.0")
+               http_request(:get, TestServer.HTTP.url(), [], version: ~c"HTTP/1.0")
     end
 
     test "with host header without port" do
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "localhost"
           refute conn.port
@@ -38,11 +38,11 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       )
 
       assert {:ok, {200, _headers, "OK"}} =
-               http_request(:get, TestServer.HTTP.url("/"), [{"Host", "localhost"}])
+               http_request(:get, TestServer.HTTP.url(), [{"Host", "localhost"}])
     end
 
     test "with host header with invalid port" do
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "localhost"
           refute conn.port
@@ -52,11 +52,11 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       )
 
       assert {:ok, {200, _headers, "OK"}} =
-               http_request(:get, TestServer.HTTP.url("/"), [{"Host", "localhost:invalid"}])
+               http_request(:get, TestServer.HTTP.url(), [{"Host", "localhost:invalid"}])
     end
 
     test "with host header with extra colon" do
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "localhost"
           refute conn.port
@@ -66,12 +66,12 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       )
 
       assert {:ok, {200, _headers, "OK"}} =
-               http_request(:get, TestServer.HTTP.url("/"), [{"Host", "localhost:8080:8081"}])
+               http_request(:get, TestServer.HTTP.url(), [{"Host", "localhost:8080:8081"}])
     end
 
     @tag ipfamily: :inet6
     test "with IPv6 host header" do
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "::1"
           assert conn.port == 8080
@@ -81,12 +81,12 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       )
 
       assert {:ok, {200, _headers, "OK"}} =
-               http_request(:get, TestServer.HTTP.url("/"), [{"Host", "[::1]:8080"}])
+               http_request(:get, TestServer.HTTP.url(), [{"Host", "[::1]:8080"}])
     end
 
     @tag ipfamily: :inet6
     test "with IPv6 host header without port" do
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "::1"
           refute conn.port
@@ -96,11 +96,11 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       )
 
       assert {:ok, {200, _headers, "OK"}} =
-               http_request(:get, TestServer.HTTP.url("/"), [{"Host", "[::1]"}])
+               http_request(:get, TestServer.HTTP.url(), [{"Host", "[::1]"}])
     end
 
     test "with extra query segment" do
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.query_string == "foo=bar"
 
@@ -143,13 +143,13 @@ defmodule TestServer.HTTP.Server.HttpdTest do
     test "with UTF-8 content" do
       body = "héllo 👋"
 
-      TestServer.HTTP.handle("/",
+      TestServer.HTTP.handle(
         to: fn conn ->
           Plug.Conn.resp(conn, 200, body)
         end
       )
 
-      assert {:ok, {200, headers, ^body}} = http_request(:get, TestServer.HTTP.url("/"))
+      assert {:ok, {200, headers, ^body}} = http_request(:get, TestServer.HTTP.url())
       assert List.keyfind(headers, "content-length", 0) == {"content-length", "11"}
     end
   end

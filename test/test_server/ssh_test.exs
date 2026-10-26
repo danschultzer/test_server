@@ -509,8 +509,8 @@ defmodule TestServer.SSHTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "No available channels"
-      refute io =~ "The following channels have been used:"
+      assert io =~ "No channels registered."
+      refute io =~ "The following channels were registered:"
     end
 
     test "when receiving unexpected channel up message after used channels" do
@@ -534,8 +534,8 @@ defmodule TestServer.SSHTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "No available channels"
-      assert io =~ "The following channels have been used:"
+      refute io =~ "No channels registered."
+      assert io =~ "The following channels were registered:"
     end
 
     test "with multiple channels" do

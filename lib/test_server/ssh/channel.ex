@@ -36,36 +36,20 @@ defmodule TestServer.SSH.Channel do
   end
 
   defp append_formatted_channels(message, instance) do
-    channels = Enum.split_with(Instance.channels(instance), &is_nil(&1.channel_id))
-
     """
     #{message}
 
-    #{format_channels(channels)}
+    #{format_channels(Instance.channels(instance))}
     """
   end
 
-  defp format_channels({[], used_channels}) do
-    message = "No available channels."
+  defp format_channels([]), do: "No channels registered."
 
-    case used_channels do
-      [] ->
-        message
-
-      used_channels ->
-        """
-        #{message} The following channels have been used:
-
-        #{Instance.format_channels(used_channels)}
-        """
-    end
-  end
-
-  defp format_channels({available_channels, _used_channels}) do
+  defp format_channels(channels) do
     """
-    Available channels:
+    The following channels were registered:
 
-    #{Instance.format_channels(available_channels)}
+    #{Instance.format_channels(channels)}
     """
   end
 

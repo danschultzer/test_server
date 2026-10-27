@@ -6,7 +6,7 @@ defmodule TestServer.TCP.Server do
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
-    {default_transport, transports} = validate_transports!(Keyword.get(options, :transport, :tcp))
+    {default_transport, transports} = validate_transport!(options)
     port = TestServer.validate_port!(options)
 
     options =
@@ -34,22 +34,22 @@ defmodule TestServer.TCP.Server do
     end
   end
 
-  defp validate_transports!(transport) do
+  defp validate_transport!(options) do
+    transport = Keyword.get(options, :transport, :tcp)
     transports = List.wrap(transport)
+    not_empty? = transports != []
+    valid? = transports -- [:tcp, :tls] == []
 
-    transports == [] &&
-      raise ArgumentError, "expected transport or list of transports, got: #{inspect(transport)}"
+    case not_empty? and valid? do
+      true ->
+        default_transport = (:tcp in transports && :tcp) || List.first(transports)
 
-    transports -- [:tcp, :tls] != [] &&
-      raise ArgumentError, "expected :tcp or :tls transport, got: #{inspect(transport)}"
+        {default_transport, transports}
 
-    default_transport =
-      case :tcp in transports do
-        true -> :tcp
-        false -> List.first(transports)
-      end
-
-    {default_transport, transports}
+      false ->
+        raise ArgumentError,
+              "expected :transport to be :tcp, :tls, or a non-empty list of those values, got: #{inspect(transport)}"
+    end
   end
 
   defp put_tls_options(options, transports) do
@@ -91,9 +91,7 @@ defmodule TestServer.TCP.Server do
 
       {:error, reason} ->
         exception =
-          RuntimeError.exception(
-            "Could not listen to port #{inspect(port)}, because: #{inspect(reason)}"
-          )
+          RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")
 
         {:error, exception}
     end
@@ -119,7 +117,7 @@ defmodule TestServer.TCP.Server do
         :ok
 
       {:error, reason} ->
-        raise "Could not accept TCP connection, because: #{inspect(reason)}"
+        raise "could not accept TCP connection: #{inspect(reason)}"
     end
   end
 
@@ -232,12 +230,12 @@ defmodule TestServer.TCP.Server do
         {:ok, socket, state}
 
       {:tcp_error, ^raw_socket, reason} ->
-        message = "TCP receive failed, because: #{inspect(reason)}"
+        message = "could not receive TCP data: #{inspect(reason)}"
 
         {:error, RuntimeError.exception(message)}
 
       {:ssl_error, ^raw_socket, reason} ->
-        message = "TCP receive failed, because: #{inspect(reason)}"
+        message = "could not receive TCP data: #{inspect(reason)}"
 
         {:error, RuntimeError.exception(message)}
 
@@ -304,7 +302,7 @@ defmodule TestServer.TCP.Server do
       {false, :tcp, :tls} ->
         reason =
           RuntimeError.exception(
-            "TCP transport can't upgrade to TLS without `transport: [:tcp, :tls]` option"
+            "cannot upgrade TCP transport to TLS without the [transport: [:tcp, :tls]] option"
           )
 
         {:error, reason}
@@ -312,7 +310,7 @@ defmodule TestServer.TCP.Server do
       {_tls?, current_transport, new_transport} ->
         reason =
           RuntimeError.exception(
-            "TCP transport can only upgrade from TCP to TLS, got: #{inspect(current_transport)} to #{inspect(new_transport)}"
+            "can only upgrade TCP transport from TCP to TLS, got: #{inspect(current_transport)} to #{inspect(new_transport)}"
           )
 
         {:error, reason}
@@ -325,7 +323,7 @@ defmodule TestServer.TCP.Server do
         {:ok, socket, state}
 
       {:error, reason} ->
-        exception = RuntimeError.exception("TCP reply failed, because: #{inspect(reason)}")
+        exception = RuntimeError.exception("could not send TCP reply: #{inspect(reason)}")
 
         {:error, exception}
     end
@@ -357,8 +355,7 @@ defmodule TestServer.TCP.Server do
         {:ok, tls_socket, state}
 
       {:error, reason} ->
-        {:error,
-         RuntimeError.exception("TCP transport upgrade failed, because: #{inspect(reason)}")}
+        {:error, RuntimeError.exception("could not upgrade TCP transport: #{inspect(reason)}")}
     end
   end
 

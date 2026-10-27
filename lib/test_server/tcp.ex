@@ -35,7 +35,7 @@ defmodule TestServer.TCP do
   end
 
   @doc """
-  Start a test server TCP instance.
+  Starts a test server TCP instance.
 
   The instance will be terminated when the test case finishes.
 
@@ -209,10 +209,10 @@ defmodule TestServer.TCP do
 
     cond do
       :tls not in options[:transport] ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with `[transport: :tls]` or `[transport: [:tcp, :tls]]` options"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with the [transport: :tls] or [transport: [:tcp, :tls]] options"
 
       not Keyword.has_key?(options, :cacerts) ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom `:tls` certificate options"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom :tls certificate options"
 
       true ->
         Keyword.fetch!(options, :cacerts)
@@ -277,7 +277,7 @@ defmodule TestServer.TCP do
           connection(instance)
 
         _multiple_connections ->
-          raise "Multiple connections available, please pass connection to `TestServer.TCP.handle/2`"
+          raise "multiple connections are available; pass the connection to TestServer.TCP.handle/2"
       end
 
     handle(connection, options)
@@ -388,13 +388,13 @@ defmodule TestServer.TCP do
         :ok
 
       {:error, :einval} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection, because the connection does not exist"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection because the connection does not exist"
 
       {:error, :enotconn} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection, because no client has connected to it"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection because no client has connected to it"
 
       {:error, :closed} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection, because client has disconnected"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection because the client has disconnected"
     end
   end
 

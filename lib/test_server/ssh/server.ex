@@ -133,7 +133,8 @@ defmodule TestServer.SSH.Server do
         }
 
       other ->
-        raise "Unsupported host key format: #{inspect(other)}"
+        raise ArgumentError,
+              "expected :host_keys to contain supported private keys, got: #{inspect(other)}"
     end)
   end
 
@@ -182,10 +183,10 @@ defmodule TestServer.SSH.Server do
 
   @ssh_strict_kex_filter :test_server_suppress_ssh_strict_kex_ordering
 
-  # Erlang's ssh_transport module logs "server will use strict KEX ordering" at debug
-  # level using logger:debug/1 (bare string, no metadata). Because there's no module
-  # metadata, set_module_level/set_application_level can't target it. We use a primary
-  # filter that drops this specific debug message.
+  # Erlang's ssh_transport module logs "server will use strict KEX ordering" at
+  # debug level using logger:debug/1 (bare string, no metadata). Because
+  # there's no module metadata, set_module_level/set_application_level can't
+  # target it. We use a primary filter that drops this specific debug message.
   defp install_strict_kex_filter do
     %{filters: filters} = :logger.get_primary_config()
 

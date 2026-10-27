@@ -43,7 +43,7 @@ defmodule TestServer.SSH do
   end
 
   @doc """
-  Start a test server SSH instance.
+  Starts a test server SSH instance.
 
   The instance will be terminated when the test case finishes.
 
@@ -95,11 +95,11 @@ defmodule TestServer.SSH do
       )
 
       TestServer.SSH.handle(
-        to: fn {:data, _channel_id, _want_reply, _data}, state ->
-          {:reply, "pong", state}
-        end,
         match: fn {:data, _channel_id, _want_reply, data}, _state ->
           data == "ping"
+        end,
+        to: fn {:data, _channel_id, _want_reply, _data}, state ->
+          {:reply, "pong", state}
         end
       )
 
@@ -318,7 +318,7 @@ defmodule TestServer.SSH do
           channel(instance, [])
 
         _multiple_channels ->
-          raise "Multiple channels available, please pass channel to `TestServer.SSH.handle/2`"
+          raise "multiple channels are available; pass the channel to TestServer.SSH.handle/2"
       end
 
     handle(channel, options)
@@ -357,17 +357,17 @@ defmodule TestServer.SSH do
     * `:data_type_code` - an integer SSH data type code to send with the reply,
       defaults to `0` (SSH_MSG_CHANNEL_DATA);
 
-    * `:exit_status`    - an integer exit status to send when finishing an `:exec`
-      channel, defaults to `0`. Ignored for other channel types;
+    * `:exit_status`    - an integer exit status to send when finishing an
+      `:exec` channel, defaults to `0`. Ignored for other channel types;
 
   ## Examples
 
       TestServer.SSH.handle(
-        to: fn {:data, _channel_id, _want_reply, _data}, state ->
-          {:reply, "pong", state}
-        end,
         match: fn {:data, _channel_id, _want_reply, data}, _state ->
           data == "ping"
+        end,
+        to: fn {:data, _channel_id, _want_reply, _data}, state ->
+          {:reply, "pong", state}
         end
       )
 
@@ -438,7 +438,7 @@ defmodule TestServer.SSH do
         options[:host_keys]
 
       false ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with `[host_keys: function]` option"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with the [host_keys: function] option"
     end
   end
 end

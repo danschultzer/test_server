@@ -15,23 +15,31 @@ defmodule TestServer.TCPTest do
     end
 
     test "with invalid `:transport` option" do
-      assert_raise ArgumentError, ~r/expected :tcp or :tls transport, got: :invalid/, fn ->
-        TestServer.TCP.start(transport: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :transport to be :tcp, :tls, or a non-empty list of those values, got: :invalid/,
+                   fn ->
+                     TestServer.TCP.start(transport: :invalid)
+                   end
 
-      assert_raise ArgumentError, ~r/expected transport or list of transports, got: \[\]/, fn ->
-        TestServer.TCP.start(transport: [])
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :transport to be :tcp, :tls, or a non-empty list of those values, got: \[\]/,
+                   fn ->
+                     TestServer.TCP.start(transport: [])
+                   end
 
-      assert_raise ArgumentError, ~r/expected :tcp or :tls transport, got: \[:tcp, :udp\]/, fn ->
-        TestServer.TCP.start(transport: [:tcp, :udp])
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :transport to be :tcp, :tls, or a non-empty list of those values, got: \[:tcp, :udp\]/,
+                   fn ->
+                     TestServer.TCP.start(transport: [:tcp, :udp])
+                   end
     end
 
     test "with invalid `:port` option" do
-      assert_raise ArgumentError, ~r/expected a port, got: :invalid/, fn ->
-        TestServer.TCP.start(port: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :port to be an integer from 0 to 65535, got: :invalid/,
+                   fn ->
+                     TestServer.TCP.start(port: :invalid)
+                   end
     end
 
     test "when port is in use" do
@@ -39,7 +47,7 @@ defmodule TestServer.TCPTest do
       {_, port} = TestServer.TCP.address(instance)
 
       assert {:error, %RuntimeError{message: message}} = TestServer.TCP.start(port: port)
-      assert message == "Could not listen to port #{port}, because: :eaddrinuse"
+      assert message == "could not listen on port #{port}: :eaddrinuse"
     end
 
     test "with multiple instances" do
@@ -158,14 +166,14 @@ defmodule TestServer.TCPTest do
       port = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/EXIT when starting TestServer.TCP instance on port #{port}/,
+                   ~r/could not start TestServer.TCP instance on port #{port}/,
                    fn -> TestServer.TCP.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.TCP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.TCP.Instance is running", fn ->
         TestServer.TCP.stop()
       end
 
@@ -184,7 +192,7 @@ defmodule TestServer.TCPTest do
       {:ok, _instance_2} = TestServer.TCP.start()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.TCP\.stop\/0`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.stop\/1/,
                    fn -> TestServer.TCP.stop() end
 
       assert TestServer.TCP.stop(instance_1) == :ok
@@ -231,7 +239,7 @@ defmodule TestServer.TCPTest do
 
   describe "address/2" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.TCP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.TCP.Instance is running", fn ->
         TestServer.TCP.address()
       end
 
@@ -250,7 +258,7 @@ defmodule TestServer.TCPTest do
       instance_2 = TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.TCP\.address\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.address\/2/,
                    fn -> TestServer.TCP.address() end
 
       refute TestServer.TCP.address(instance_1) == TestServer.TCP.address(instance_2)
@@ -274,9 +282,11 @@ defmodule TestServer.TCPTest do
     test "with invalid `:host` option" do
       TestServer.TCP.start!()
 
-      assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
-        TestServer.TCP.address(host: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   fn ->
+                     TestServer.TCP.address(host: :invalid)
+                   end
     end
 
     test "with `:host` option" do
@@ -300,7 +310,7 @@ defmodule TestServer.TCPTest do
 
   describe "cacerts/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.TCP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.TCP.Instance is running", fn ->
         TestServer.TCP.cacerts()
       end
 
@@ -318,7 +328,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running with `\[transport: :tls\]` or `\[transport: \[:tcp, :tls\]\]` options/,
+                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running with the \[transport: :tls\] or \[transport: \[:tcp, :tls\]\] options/,
                    fn -> TestServer.TCP.cacerts() end
     end
 
@@ -328,7 +338,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!(transport: :tls, tls: tls_options)
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is running with custom `:tls` certificate options/,
+                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is running with custom :tls certificate options/,
                    fn -> TestServer.TCP.cacerts() end
     end
   end
@@ -348,7 +358,7 @@ defmodule TestServer.TCPTest do
       {:ok, _instance_2} = TestServer.TCP.start()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.TCP\.connection\/0`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.connection\/1/,
                    fn -> TestServer.TCP.connection() end
 
       assert TestServer.TCP.connection(instance_1)
@@ -446,7 +456,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.TCP\.handle\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.handle\/2/,
                    fn -> TestServer.TCP.handle() end
     end
 
@@ -455,7 +465,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.connection()
 
       assert_raise RuntimeError,
-                   ~r/Multiple connections available, please pass connection to `TestServer\.TCP\.handle\/2`/,
+                   ~r/multiple connections are available; pass the connection to TestServer\.TCP\.handle\/2/,
                    fn -> TestServer.TCP.handle() end
 
       TestServer.TCP.stop()
@@ -477,12 +487,12 @@ defmodule TestServer.TCPTest do
         TestServer.TCP.handle(connection, invalid: :option)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.TCP.handle(connection, to: :invalid)
+      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
+        TestServer.TCP.handle(connection, match: :invalid)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.TCP.handle(connection, match: :invalid)
+      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
+        TestServer.TCP.handle(connection, to: :invalid)
       end
 
       TestServer.TCP.stop()
@@ -552,6 +562,8 @@ defmodule TestServer.TCPTest do
       assert io =~ "received unexpected TCP data"
       assert io =~ "Active handlers:"
       refute io =~ "The following handlers have been processed:"
+      assert io =~ ~r/test\/test_server\/tcp_test\.exs:\d+/
+      assert io =~ "HandleUnexpectedDataBeforeProcessedTest.\"test fails\"/1"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -627,9 +639,9 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleTCPErrorTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "TCP receive failed, because: :test"
+      assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
-      assert data =~ "TCP receive failed, because: :test"
+      assert data =~ "could not receive TCP data: :test"
     end
 
     # It's not possible to test actual SSL errors in a controlled manner so
@@ -661,9 +673,9 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleSSLErrorTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "TCP receive failed, because: :test"
+      assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
-      assert data =~ "TCP receive failed, because: :test"
+      assert data =~ "could not receive TCP data: :test"
     end
 
     test "when `:to` function raises exception" do
@@ -711,7 +723,7 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -745,7 +757,7 @@ defmodule TestServer.TCPTest do
                  send(self(), {:log, log})
                end)
 
-      assert io =~ "TCP reply failed, because:"
+      assert io =~ "could not send TCP reply: :einval"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
       assert_received {:log, log}
@@ -784,7 +796,7 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleToReplyResponseInvalidReplyOptionsTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "Invalid options in callback response, got: [invalid: true]"
+      assert io =~ "invalid options in callback response, got: [invalid: true]"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -812,7 +824,7 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleToReplyResponseInvalidUpgradeOptionsTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "TCP transport can only upgrade from TCP to TLS, got: :tcp to :udp"
+      assert io =~ "can only upgrade TCP transport from TCP to TLS, got: :tcp to :udp"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -842,7 +854,7 @@ defmodule TestServer.TCPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
 
       assert io =~
-               "TCP transport can't upgrade to TLS without `transport: [:tcp, :tls]` option"
+               "cannot upgrade TCP transport to TLS without the [transport: [:tcp, :tls]] option"
 
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
@@ -873,7 +885,7 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleToReplyResponseInvalidTransportSwitchTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "TCP transport can only upgrade from TCP to TLS, got: :tls to :tls"
+      assert io =~ "can only upgrade TCP transport from TCP to TLS, got: :tls to :tls"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -900,7 +912,7 @@ defmodule TestServer.TCPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "TCP transport upgrade failed, because: :closed"
+      assert io =~ "could not upgrade TCP transport: :closed"
     end
 
     test "when `:to` function returns `{:reply, {data, options}, state}` with reply option `upgrade: :tls`" do
@@ -1008,19 +1020,21 @@ defmodule TestServer.TCPTest do
         TestServer.TCP.send(connection, invalid: :option)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
         TestServer.TCP.send(connection, to: :invalid)
       end
 
-      assert_raise ArgumentError, ~r/expected positive integer, got: :invalid/, fn ->
-        TestServer.TCP.send(connection, timeout: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :timeout to be a positive integer, got: :invalid/,
+                   fn ->
+                     TestServer.TCP.send(connection, timeout: :invalid)
+                   end
 
-      assert_raise ArgumentError, ~r/expected positive integer, got: 0/, fn ->
+      assert_raise ArgumentError, ~r/expected :timeout to be a positive integer, got: 0/, fn ->
         TestServer.TCP.send(connection, timeout: 0)
       end
 
-      assert_raise ArgumentError, ~r/expected positive integer, got: -1/, fn ->
+      assert_raise ArgumentError, ~r/expected :timeout to be a positive integer, got: -1/, fn ->
         TestServer.TCP.send(connection, timeout: -1)
       end
 
@@ -1031,7 +1045,7 @@ defmodule TestServer.TCPTest do
       instance = TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection, because the connection does not exist/,
+                   ~r/cannot send to the connection because the connection does not exist/,
                    fn -> TestServer.TCP.send({instance, make_ref()}) end
     end
 
@@ -1039,7 +1053,7 @@ defmodule TestServer.TCPTest do
       connection = TestServer.TCP.connection()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection, because no client has connected to it/,
+                   ~r/cannot send to the connection because no client has connected to it/,
                    fn -> TestServer.TCP.send(connection, timeout: 1) end
 
       TestServer.TCP.stop()
@@ -1059,7 +1073,7 @@ defmodule TestServer.TCPTest do
       assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection, because client has disconnected/,
+                   ~r/cannot send to the connection because the client has disconnected/,
                    fn -> TestServer.TCP.send(connection) end
     end
 
@@ -1077,7 +1091,7 @@ defmodule TestServer.TCPTest do
       assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection, because client has disconnected/,
+                   ~r/cannot send to the connection because the client has disconnected/,
                    fn -> TestServer.TCP.send(connection) end
     end
 
@@ -1175,7 +1189,7 @@ defmodule TestServer.TCPTest do
       Process.register(self(), SendToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -1210,7 +1224,7 @@ defmodule TestServer.TCPTest do
                  send(self(), {:log, log})
                end)
 
-      assert io =~ "TCP reply failed, because:"
+      assert io =~ "could not send TCP reply: :einval"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
       assert_received {:log, log}

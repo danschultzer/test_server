@@ -19,12 +19,9 @@ defmodule TestServer.HTTP.Instance do
         ) ::
           {:ok, %{ref: TestServer.HTTP.handler_ref()}}
   def register(instance, {:handle, options, stacktrace}) do
-    ensure_plug!(options[:to])
-    Keyword.has_key?(options, :match) && ensure_function!(options[:match])
-    Keyword.has_key?(options, :path) && ensure_binary!(options[:path])
-    Keyword.has_key?(options, :method) && ensure_method!(options[:method])
-
     options = put_match_function(options)
+
+    ensure_plug!(options, :to)
 
     GenServer.call(instance, {:register, {:handle, options, stacktrace}})
   end
@@ -47,8 +44,8 @@ defmodule TestServer.HTTP.Instance do
         instance,
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
       ) do
-    ensure_function!(options[:to])
-    Keyword.has_key?(options, :match) && ensure_function!(options[:match])
+    Keyword.has_key?(options, :match) && ensure_function!(options, :match)
+    ensure_function!(options, :to)
 
     GenServer.call(
       instance,
@@ -61,30 +58,56 @@ defmodule TestServer.HTTP.Instance do
           {:websocket, {:send, TestServer.HTTP.websocket_ref(), keyword()}}
         ) :: {:ok, pid()} | {:error, :einval} | {:error, :enotconn} | {:error, :closed}
   def register(instance, {:websocket, {:send, websocket_ref, options}}) do
-    ensure_function!(options[:to])
+    ensure_function!(options, :to)
 
     GenServer.call(instance, {:register, {:websocket, {:send, websocket_ref, options}}})
   end
 
   defp ensure_plug!(plug) do
-    unless is_function(plug) or (is_atom(plug) and function_exported?(plug, :init, 1)) do
-      raise BadFunctionError, term: plug
+    case plug?(plug) do
+      true ->
+        :ok
+
+      false ->
+        raise ArgumentError,
+              "expected a function of arity 1 or a Plug module, got: #{inspect(plug)}"
     end
   end
 
-  defp ensure_binary!(value) when is_binary(value), do: :ok
+  defp ensure_plug!(options, option) do
+    plug = Keyword.get(options, option)
 
-  defp ensure_binary!(value),
-    do: raise(ArgumentError, "expected a binary, got: #{inspect(value)}")
+    case plug?(plug) do
+      true ->
+        :ok
 
-  defp ensure_method!(method) when is_atom(method), do: :ok
-  defp ensure_method!(method) when is_list(method), do: :ok
+      false ->
+        raise ArgumentError,
+              "expected #{inspect(option)} to be a function of arity 1 or a Plug module, got: #{inspect(plug)}"
+    end
+  end
 
-  defp ensure_method!(method),
-    do: raise(ArgumentError, "expected :method to be an atom or list, got: #{inspect(method)}")
+  defp plug?(plug) when is_function(plug, 1), do: true
 
-  defp ensure_function!(fun) when is_function(fun), do: :ok
-  defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
+  defp plug?(plug) do
+    is_atom(plug) and
+      Code.ensure_loaded?(plug) and
+      function_exported?(plug, :init, 1) and
+      function_exported?(plug, :call, 2)
+  end
+
+  defp ensure_function!(options, option) do
+    value = Keyword.get(options, option)
+
+    case is_function(value) do
+      true ->
+        :ok
+
+      false ->
+        raise ArgumentError,
+              "expected #{inspect(option)} to be a function, got: #{inspect(value)}"
+    end
+  end
 
   @spec dispatch(TestServer.instance(), {:plug, Plug.Conn.t()}) ::
           {:ok, Plug.Conn.t()}
@@ -153,15 +176,22 @@ defmodule TestServer.HTTP.Instance do
     |> Enum.map_join("\n\n", fn {handler, index} ->
       methods =
         case handler.methods do
-          nil -> "*"
-          [] -> "[]"
-          methods -> Enum.join(List.wrap(methods), ", ")
+          nil ->
+            "any method"
+
+          [] ->
+            "no methods"
+
+          methods ->
+            methods
+            |> List.wrap()
+            |> Enum.map_join(" | ", &Plug.Router.Utils.normalize_method/1)
         end
 
-      path = handler.path || "*"
+      path = handler.path || "any path"
 
       """
-      ##{index + 1}: #{methods} #{path}
+      ##{index + 1}: #{methods} at #{path}
           #{Enum.map_join(handler.stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
       """
     end)
@@ -316,30 +346,10 @@ defmodule TestServer.HTTP.Instance do
   end
 
   defp put_match_function(options) do
-    match_path_fn =
-      case Keyword.fetch(options, :path) do
-        :error -> nil
-        {:ok, path} -> match_path_function(path)
-      end
-
-    match_method_fn =
-      case Keyword.fetch(options, :method) do
-        :error ->
-          nil
-
-        {:ok, methods} ->
-          methods =
-            methods
-            |> List.wrap()
-            |> Enum.map(&Plug.Router.Utils.normalize_method(&1))
-
-          &(&1.method in methods)
-      end
-
     [
-      match_path_fn,
-      match_method_fn,
-      Keyword.get(options, :match)
+      path_match_function(options),
+      method_match_function(options),
+      custom_match_function(options)
     ]
     |> Enum.reject(&is_nil/1)
     |> case do
@@ -357,7 +367,52 @@ defmodule TestServer.HTTP.Instance do
     end
   end
 
-  defp match_path_function(path) do
+  defp path_match_function(options) do
+    case Keyword.fetch(options, :path) do
+      :error ->
+        nil
+
+      {:ok, path} when is_binary(path) ->
+        compile_path_match_function(path)
+
+      {:ok, path} ->
+        raise ArgumentError, "expected :path to be a binary, got: #{inspect(path)}"
+    end
+  end
+
+  defp method_match_function(options) do
+    case Keyword.fetch(options, :method) do
+      :error ->
+        nil
+
+      {:ok, methods} when is_atom(methods) or is_list(methods) ->
+        methods =
+          methods
+          |> List.wrap()
+          |> Enum.map(&Plug.Router.Utils.normalize_method(&1))
+
+        &(&1.method in methods)
+
+      {:ok, methods} ->
+        raise ArgumentError,
+              "expected :method to be an atom or list, got: #{inspect(methods)}"
+    end
+  end
+
+  defp custom_match_function(options) do
+    case Keyword.fetch(options, :match) do
+      :error ->
+        nil
+
+      {:ok, match_fn} when is_function(match_fn) ->
+        match_fn
+
+      {:ok, match} ->
+        raise ArgumentError, "expected :match to be a function, got: #{inspect(match)}"
+    end
+  end
+
+  defp compile_path_match_function(path) do
     {_params, path_match, guards, _post_match} =
       Plug.Router.Utils.build_path_clause(path, true)
 
@@ -400,7 +455,7 @@ defmodule TestServer.HTTP.Instance do
 
   defp check_halted!(%{halted: true}, plug, stacktrace) do
     raise """
-    Do not halt a connection. All requests have to be processed.
+    cannot halt a connection because all requests must be processed
 
     # #{inspect(plug)}
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
@@ -511,7 +566,7 @@ defmodule TestServer.HTTP.Instance do
 
   defp validate_websocket_frame!(response, stacktrace) do
     raise """
-    Invalid callback response, got: #{inspect(response)}.
+    invalid callback response, got: #{inspect(response)}
 
     Expected one of the following:
 

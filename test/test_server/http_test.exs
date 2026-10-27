@@ -14,15 +14,19 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with invalid `:port` option" do
-      assert_raise ArgumentError, ~r/expected a port, got: :invalid/, fn ->
-        TestServer.HTTP.start(port: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :port to be an integer from 0 to 65535, got: :invalid/,
+                   fn ->
+                     TestServer.HTTP.start(port: :invalid)
+                   end
     end
 
     test "with invalid `:scheme` option" do
-      assert_raise RuntimeError, ~r/Invalid scheme, got: :invalid/, fn ->
-        TestServer.HTTP.start(scheme: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :scheme to be :http or :https, got: :invalid/,
+                   fn ->
+                     TestServer.HTTP.start(scheme: :invalid)
+                   end
     end
 
     test "with multiple instances" do
@@ -100,9 +104,11 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with invalid `:http_server` option" do
-      assert_raise RuntimeError, ~r/Invalid http_server, got: :invalid/, fn ->
-        TestServer.HTTP.start(http_server: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :http_server to be a \{module, options\} tuple, got: :invalid/,
+                   fn ->
+                     TestServer.HTTP.start(http_server: :invalid)
+                   end
     end
 
     test "when test ends" do
@@ -129,14 +135,14 @@ defmodule TestServer.HTTPTest do
       port = instance |> TestServer.HTTP.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/EXIT when starting TestServer.HTTP instance on port #{port}/,
+                   ~r/could not start TestServer.HTTP instance on port #{port}/,
                    fn -> TestServer.HTTP.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.HTTP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.HTTP.Instance is running", fn ->
         TestServer.HTTP.stop()
       end
 
@@ -155,7 +161,7 @@ defmodule TestServer.HTTPTest do
       {:ok, _instance_2} = TestServer.HTTP.start()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.stop\/0`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.stop\/1/,
                    fn -> TestServer.HTTP.stop() end
 
       assert TestServer.HTTP.stop(instance_1) == :ok
@@ -174,7 +180,7 @@ defmodule TestServer.HTTPTest do
 
   describe "url/3" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.HTTP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.HTTP.Instance is running", fn ->
         TestServer.HTTP.url()
       end
 
@@ -193,7 +199,7 @@ defmodule TestServer.HTTPTest do
       instance_2 = TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.url\/2`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.url\/3/,
                    fn -> TestServer.HTTP.url() end
 
       refute TestServer.HTTP.url(instance_1) == TestServer.HTTP.url(instance_2)
@@ -218,9 +224,11 @@ defmodule TestServer.HTTPTest do
     test "with invalid `:host` option" do
       TestServer.HTTP.start!()
 
-      assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
-        TestServer.HTTP.url(host: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   fn ->
+                     TestServer.HTTP.url(host: :invalid)
+                   end
     end
 
     test "with `:host` option" do
@@ -271,7 +279,7 @@ defmodule TestServer.HTTPTest do
       _instance_2 = TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.handle\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.handle\/2/,
                    fn -> TestServer.HTTP.handle() end
 
       TestServer.HTTP.handle(instance_1)
@@ -288,7 +296,7 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with invalid `:path` option" do
-      assert_raise ArgumentError, ~r/expected a binary, got: :invalid/, fn ->
+      assert_raise ArgumentError, ~r/expected :path to be a binary, got: :invalid/, fn ->
         TestServer.HTTP.handle(path: :invalid)
       end
     end
@@ -299,14 +307,24 @@ defmodule TestServer.HTTPTest do
       end
     end
 
-    test "with invalid `:match` and `:to` options" do
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+    test "with invalid `:match` option" do
+      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
         TestServer.HTTP.handle(match: :invalid)
       end
+    end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.HTTP.handle(to: :invalid)
-      end
+    test "with invalid `:to` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :to to be a function of arity 1 or a Plug module, got: :invalid/,
+                   fn ->
+                     TestServer.HTTP.handle(to: :invalid)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/expected :to to be a function of arity 1 or a Plug module/,
+                   fn ->
+                     TestServer.HTTP.handle(to: fn _conn, _options -> :ok end)
+                   end
     end
 
     test "when receiving no requests" do
@@ -357,6 +375,10 @@ defmodule TestServer.HTTPTest do
       refute io =~ "No active handlers."
       refute io =~ "The following handlers have been processed:"
       assert io =~ "Active handlers:"
+
+      assert io =~ "#1: any method at any path"
+      assert io =~ ~r/test\/test_server\/http_test\.exs:\d+/
+      assert io =~ "HandleUnexpectedRequestBeforeProcessedTest.\"test fails\"/1"
     end
 
     test "when receiving unexpected request after all handlers are processed" do
@@ -401,7 +423,7 @@ defmodule TestServer.HTTPTest do
 
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
-          TestServer.HTTP.handle(path: "/path")
+          TestServer.HTTP.handle(path: "/path", method: [:get, :post])
 
           assert {:error, _} =
                    unquote(__MODULE__).http1_request(TestServer.HTTP.url("/other-path"))
@@ -411,6 +433,7 @@ defmodule TestServer.HTTPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /other-path."
       assert io =~ "Active handlers:"
+      assert io =~ "#1: GET | POST at /path"
     end
 
     test "with `:method` option when method doesn't match" do
@@ -427,6 +450,7 @@ defmodule TestServer.HTTPTest do
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /."
+      assert io =~ "#1: POST at any path"
     end
 
     test "with `method: []` option" do
@@ -443,6 +467,7 @@ defmodule TestServer.HTTPTest do
 
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /."
+      assert io =~ "#1: no methods at any path"
     end
 
     test "with no path specified" do
@@ -547,7 +572,7 @@ defmodule TestServer.HTTPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "Do not halt a connection. All requests have to be processed."
+      assert io =~ "cannot halt a connection because all requests must be processed"
     end
 
     test "with `:to` function" do
@@ -632,9 +657,19 @@ defmodule TestServer.HTTPTest do
   end
 
   describe "plug/2" do
+    defmodule InvalidPlug do
+      def init(options), do: options
+    end
+
     test "with invalid plug" do
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.HTTP.plug(:invalid)
+      assert_raise ArgumentError,
+                   ~r/expected a function of arity 1 or a Plug module, got: :invalid/,
+                   fn ->
+                     TestServer.HTTP.plug(:invalid)
+                   end
+
+      assert_raise ArgumentError, ~r/expected a function of arity 1 or a Plug module/, fn ->
+        TestServer.HTTP.plug(InvalidPlug)
       end
     end
 
@@ -695,13 +730,13 @@ defmodule TestServer.HTTPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "Do not halt a connection. All requests have to be processed."
+      assert io =~ "cannot halt a connection because all requests must be processed"
     end
   end
 
   describe "cacerts/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.HTTP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.HTTP.Instance is running", fn ->
         TestServer.HTTP.cacerts()
       end
 
@@ -719,7 +754,7 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running with `\[scheme: :https\]` option/,
+                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running with the \[scheme: :https\] option/,
                    fn -> TestServer.HTTP.cacerts() end
     end
 
@@ -729,7 +764,7 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.start!(scheme: :https, tls: tls_options)
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is running with custom `:tls` certificate options/,
+                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is running with custom :tls certificate options/,
                    fn -> TestServer.HTTP.cacerts() end
     end
   end
@@ -789,7 +824,7 @@ defmodule TestServer.HTTPTest do
         TestServer.HTTP.start!()
 
         assert_raise RuntimeError,
-                     ~r/Multiple instances running, please pass instance to `TestServer\.HTTP\.websocket\/1`/,
+                     ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.websocket\/2/,
                      fn -> TestServer.HTTP.websocket("/ws") end
       end
 
@@ -798,13 +833,15 @@ defmodule TestServer.HTTPTest do
           TestServer.HTTP.websocket(invalid: :option)
         end
 
-        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket(to: :invalid)
-        end
-
-        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+        assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
           TestServer.HTTP.websocket(match: :invalid)
         end
+
+        assert_raise ArgumentError,
+                     ~r/expected :to to be a function of arity 1 or a Plug module, got: :invalid/,
+                     fn ->
+                       TestServer.HTTP.websocket(to: :invalid)
+                     end
       end
 
       test "with path argument" do
@@ -835,7 +872,7 @@ defmodule TestServer.HTTPTest do
 
         # Ensure that the websocket was not accepted
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket, because no client has connected to it/,
+                     ~r/cannot send to the websocket because no client has connected to it/,
                      fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
@@ -870,12 +907,12 @@ defmodule TestServer.HTTPTest do
           TestServer.HTTP.websocket_handle(websocket, invalid: :option)
         end
 
-        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_handle(websocket, to: :invalid)
+        assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
+          TestServer.HTTP.websocket_handle(websocket, match: :invalid)
         end
 
-        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_handle(websocket, match: :invalid)
+        assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
+          TestServer.HTTP.websocket_handle(websocket, to: :invalid)
         end
 
         TestServer.HTTP.stop()
@@ -949,6 +986,8 @@ defmodule TestServer.HTTPTest do
         refute io =~ "No active websocket handlers."
         refute io =~ "The following websocket handlers have been processed:"
         assert io =~ "Active websocket handlers:"
+        assert io =~ ~r/test\/test_server\/http_test\.exs:\d+/
+        assert io =~ "WebSocketHandleUnexpectedBeforeProcessedTest.\"test fails\"/1"
         assert_receive {:message, message}
         assert_io_websocket_message(io, message)
       end
@@ -1042,7 +1081,7 @@ defmodule TestServer.HTTPTest do
         Process.register(self(), WebSocketHandleToFunctionInvalidResponseTest)
 
         assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+        assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
         assert_receive {:message, message}
         assert_io_websocket_message(io, message)
       end
@@ -1125,7 +1164,7 @@ defmodule TestServer.HTTPTest do
           TestServer.HTTP.websocket_send(websocket, invalid: :option)
         end
 
-        assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+        assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
           TestServer.HTTP.websocket_send(websocket, to: :invalid)
         end
       end
@@ -1134,7 +1173,7 @@ defmodule TestServer.HTTPTest do
         websocket = TestServer.HTTP.websocket("/ws")
 
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket, because no client has connected to it/,
+                     ~r/cannot send to the websocket because no client has connected to it/,
                      fn -> TestServer.HTTP.websocket_send(websocket) end
 
         TestServer.HTTP.stop()
@@ -1144,7 +1183,7 @@ defmodule TestServer.HTTPTest do
         instance = TestServer.HTTP.start!()
 
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket, because the websocket does not exist/,
+                     ~r/cannot send to the websocket because the websocket does not exist/,
                      fn -> TestServer.HTTP.websocket_send({instance, make_ref()}) end
       end
 
@@ -1157,7 +1196,7 @@ defmodule TestServer.HTTPTest do
         assert_receive {:DOWN, ^monitor, :process, ^client, _reason}
 
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket, because client has disconnected/,
+                     ~r/cannot send to the websocket because the client has disconnected/,
                      fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
@@ -1219,7 +1258,7 @@ defmodule TestServer.HTTPTest do
         Process.register(self(), WebSocketSendToInvalidResponseTest)
 
         assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+        assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
         assert_receive {:message, message}
         assert_io_websocket_message(io, message)
       end
@@ -1247,7 +1286,7 @@ defmodule TestServer.HTTPTest do
         Process.register(self(), WebSocketSendToInvalidFrameTest)
 
         assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) Invalid callback response, got: {:reply, :invalid, %{}}"
+        assert io =~ "(RuntimeError) invalid callback response, got: {:reply, :invalid, %{}}"
         assert_receive {:message, message}
         assert_io_websocket_message(io, message)
       end

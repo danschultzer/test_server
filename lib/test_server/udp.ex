@@ -205,10 +205,10 @@ defmodule TestServer.UDP do
 
     cond do
       options[:transport] != :dtls ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with `[transport: :dtls]` option"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with the [transport: :dtls] option"
 
       not Keyword.has_key?(options, :cacerts) ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom `:tls` certificate options"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom :tls certificate options"
 
       true ->
         Keyword.fetch!(options, :cacerts)
@@ -274,7 +274,7 @@ defmodule TestServer.UDP do
           peer(instance)
 
         _multiple_peers ->
-          raise "Multiple peers available, please pass peer to `TestServer.UDP.handle/2`"
+          raise "multiple peers are available; pass the peer to TestServer.UDP.handle/2"
       end
 
     handle(peer, options)
@@ -379,13 +379,13 @@ defmodule TestServer.UDP do
         :ok
 
       {:error, :einval} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer, because the peer does not exist"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer because the peer does not exist"
 
       {:error, :enotconn} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer, because no client has sent a datagram or established a DTLS connection"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer because no client has sent a datagram or established a DTLS connection"
 
       {:error, :closed} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer, because client has disconnected"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer because the client has disconnected"
     end
   end
 

@@ -39,7 +39,7 @@ defmodule TestServer.HTTP do
   end
 
   @doc """
-  Start a test server HTTP instance.
+  Starts a test server HTTP instance.
 
   The instance will be terminated when the test case finishes.
 
@@ -298,8 +298,7 @@ defmodule TestServer.HTTP do
   defp register_handler(instance, options) do
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
-    [_register_handler, _first_module_entry | stacktrace] =
-      TestServer.pruned_stacktrace(__MODULE__)
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
     options = Keyword.put_new(options, :to, &default_handler/1)
 
@@ -375,10 +374,10 @@ defmodule TestServer.HTTP do
 
     cond do
       options[:scheme] != :https ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with `[scheme: :https]` option"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with the [scheme: :https] option"
 
       not Keyword.has_key?(options, :cacerts) ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom `:tls` certificate options"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom :tls certificate options"
 
       true ->
         Keyword.fetch!(options, :cacerts)
@@ -497,11 +496,11 @@ defmodule TestServer.HTTP do
 
       TestServer.HTTP.websocket_handle(
         websocket,
-        to: fn _frame, state ->
-          {:reply, {:text, "pong"}, state}
-        end,
         match: fn frame, _state ->
           frame == {:text, "ping"}
+        end,
+        to: fn _frame, state ->
+          {:reply, {:text, "pong"}, state}
         end)
 
       TestServer.HTTP.websocket_handle(websocket)
@@ -512,7 +511,7 @@ defmodule TestServer.HTTP do
   """
   @spec websocket_handle(websocket(), keyword()) :: :ok
   def websocket_handle({instance, websocket_ref}, options) do
-    Keyword.validate!(options, [:to, :match])
+    Keyword.validate!(options, [:match, :to])
     TestServer.ensure_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
@@ -564,13 +563,13 @@ defmodule TestServer.HTTP do
         :ok
 
       {:error, :einval} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket, because the websocket does not exist"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket because the websocket does not exist"
 
       {:error, :enotconn} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket, because no client has connected to it"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket because no client has connected to it"
 
       {:error, :closed} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket, because client has disconnected"
+        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket because the client has disconnected"
     end
   end
 

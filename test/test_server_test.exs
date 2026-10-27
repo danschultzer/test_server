@@ -69,17 +69,27 @@ defmodule TestServerTest do
     end
   end
 
-  describe "open_port/1" do
+  describe "validate_port!/1" do
     test "with invalid `:port` option" do
       assert_raise ArgumentError, "expected a port, got: :invalid", fn ->
-        TestServer.open_port(port: :invalid)
+        TestServer.validate_port!(port: :invalid)
       end
 
       assert_raise ArgumentError, "expected a port, got: 65536", fn ->
-        TestServer.open_port(port: 65_536)
+        TestServer.validate_port!(port: 65_536)
       end
     end
 
+    test "with missing `:port` option" do
+      assert TestServer.validate_port!([]) == 0
+    end
+
+    test "with `:port` option" do
+      assert TestServer.validate_port!(port: 4040) == 4040
+    end
+  end
+
+  describe "open_port/1" do
     test "when port in use" do
       assert {:ok, socket} = :gen_tcp.listen(0, [])
       assert {:ok, port} = :inet.port(socket)

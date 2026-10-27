@@ -28,10 +28,13 @@ defmodule TestServer.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :crypto, :public_key, :ssl, :ssh, :inets],
+      extra_applications: extra_applications(Mix.env()),
       mod: {TestServer.Application, []}
     ]
   end
+
+  defp extra_applications(:test), do: extra_applications(:prod) ++ [:tftp]
+  defp extra_applications(_), do: [:logger, :crypto, :public_key, :ssl, :ssh, :inets]
 
   defp deps do
     [
@@ -89,6 +92,9 @@ defmodule TestServer.MixProject do
         ],
         TCP: [
           TestServer.TCP
+        ],
+        UDP: [
+          TestServer.UDP
         ]
       ]
     ]

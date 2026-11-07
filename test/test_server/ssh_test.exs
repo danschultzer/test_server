@@ -308,6 +308,14 @@ defmodule TestServer.SSHTest do
       assert {:ok, _instance} = TestServer.SSH.start(port: port)
       assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
     end
+
+    test "doesn't serve sftp subsystem" do
+      TestServer.SSH.start!()
+
+      {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+
+      assert {:error, _reason} = :ssh_sftp.start_channel(conn)
+    end
   end
 
   defp write_user_dir_pem!(context, key) do

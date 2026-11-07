@@ -67,7 +67,9 @@ defmodule TestServer.SSH.Server do
         ssh_cli: ssh_cli,
         system_dir: tmp_dir,
         user_dir: tmp_dir,
-        parallel_login: true
+        parallel_login: true,
+        # OTP < 29 serves SFTP by default, bypassing `ssh_cli`
+        subsystems: []
       )
       |> Keyword.merge(Keyword.get(options, :daemon, []))
 

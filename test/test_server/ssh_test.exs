@@ -813,7 +813,9 @@ defmodule TestServer.SSHTest do
           assert SSHClient.send(conn, channel_id, "first") == :ok
           assert SSHClient.send(conn, channel_id, "second") == :ok
           assert SSHClient.receive_data(conn, channel_id) == {:ok, "first"}
-          assert {:ok, data} = SSHClient.receive_data(conn, channel_id)
+
+          assert {:ok, %{data: data, exit_status: 1}} =
+                   SSHClient.receive_until_closed(conn, channel_id)
 
           send(__MODULE__, {:data, data})
         end
@@ -1004,16 +1006,18 @@ defmodule TestServer.SSHTest do
       exec_channel = TestServer.SSH.channel()
 
       TestServer.SSH.handle(exec_channel,
-        to: fn _msg, state -> {:reply, {"pong", exit_status: 127, data_type_code: 1}, state} end
+        to: fn _msg, state ->
+          {:reply, {"pong", exit_status: 0xFFFF_FFFF, data_type_code: 0xFFFF_FFFF}, state}
+        end
       )
 
       assert {:ok, result} = ssh_exec("ping")
       assert result.data == "pong"
-      assert result.exit_status == 127
+      assert result.exit_status == 0xFFFF_FFFF
 
       assert result.messages == [
-               {:data, 0, 1, "pong"},
-               {:exit_status, 0, 127},
+               {:data, 0, 0xFFFF_FFFF, "pong"},
+               {:exit_status, 0, 0xFFFF_FFFF},
                {:eof, 0},
                {:closed, 0}
              ]
@@ -1028,7 +1032,7 @@ defmodule TestServer.SSHTest do
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
-              {:reply, {"pong", invalid: 1}, state}
+              {:reply, {"pong", invalid: :option}, state}
             end
           )
 
@@ -1041,7 +1045,154 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo2ArityFunctionInvalidOptionsTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid options in callback response, got: [invalid: 1]"
+      assert io =~ "(RuntimeError) invalid options in callback response, got: [invalid: :option]"
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
+    end
+
+    test "with `:to` 2-arity function with `{:reply, {data, options}, state}` response with invalid `:close` option" do
+      defmodule HandleTo2ArityFunctionInvalidCloseOptionTest do
+        use ExUnit.Case
+
+        test "fails" do
+          TestServer.SSH.start!(suppress_warning: true)
+
+          TestServer.SSH.handle(
+            to: fn _msg, state ->
+              {:reply, {"pong", close: :invalid}, state}
+            end
+          )
+
+          assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
+
+          send(__MODULE__, {:data, data})
+        end
+      end
+
+      Process.register(self(), HandleTo2ArityFunctionInvalidCloseOptionTest)
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "(RuntimeError) invalid options in callback response, got: [close: :invalid]"
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
+    end
+
+    test "with `:to` 2-arity function with `{:reply, {data, options}, state}` response with invalid `:exit_status` option" do
+      defmodule HandleTo2ArityFunctionInvalidExitStatusOptionTest do
+        use ExUnit.Case
+
+        test "fails" do
+          TestServer.SSH.start!(suppress_warning: true)
+
+          TestServer.SSH.handle(
+            to: fn _msg, state ->
+              {:reply, {"pong", exit_status: :invalid}, state}
+            end
+          )
+
+          assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
+
+          send(__MODULE__, {:data, data})
+        end
+      end
+
+      Process.register(self(), HandleTo2ArityFunctionInvalidExitStatusOptionTest)
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+
+      assert io =~
+               "(RuntimeError) invalid options in callback response, got: [exit_status: :invalid]"
+
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
+    end
+
+    test "with `:to` 2-arity function with `{:reply, {data, options}, state}` response with out of range `:exit_status` option" do
+      defmodule HandleTo2ArityFunctionOutOfRangeExitStatusOptionTest do
+        use ExUnit.Case
+
+        test "fails" do
+          TestServer.SSH.start!(suppress_warning: true)
+
+          TestServer.SSH.handle(
+            to: fn _msg, state ->
+              {:reply, {"pong", exit_status: 0xFFFF_FFFF + 1}, state}
+            end
+          )
+
+          assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
+
+          send(__MODULE__, {:data, data})
+        end
+      end
+
+      Process.register(self(), HandleTo2ArityFunctionOutOfRangeExitStatusOptionTest)
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+
+      assert io =~
+               "(RuntimeError) invalid options in callback response, got: [exit_status: #{0xFFFF_FFFF + 1}]"
+
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
+    end
+
+    test "with `:to` 2-arity function with `{:reply, {data, options}, state}` response with invalid `:data_type_code` option" do
+      defmodule HandleTo2ArityFunctionInvalidDataTypeCodeOptionTest do
+        use ExUnit.Case
+
+        test "fails" do
+          TestServer.SSH.start!(suppress_warning: true)
+
+          TestServer.SSH.handle(
+            to: fn _msg, state ->
+              {:reply, {"pong", data_type_code: :invalid}, state}
+            end
+          )
+
+          assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
+
+          send(__MODULE__, {:data, data})
+        end
+      end
+
+      Process.register(self(), HandleTo2ArityFunctionInvalidDataTypeCodeOptionTest)
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+
+      assert io =~
+               "(RuntimeError) invalid options in callback response, got: [data_type_code: :invalid]"
+
+      assert_receive {:data, data}
+      assert_io_ssh_data(io, data)
+    end
+
+    test "with `:to` 2-arity function with `{:reply, {data, options}, state}` response with out of range `:data_type_code` option" do
+      defmodule HandleTo2ArityFunctionOutOfRangeDataTypeCodeOptionTest do
+        use ExUnit.Case
+
+        test "fails" do
+          TestServer.SSH.start!(suppress_warning: true)
+
+          TestServer.SSH.handle(
+            to: fn _msg, state ->
+              {:reply, {"pong", data_type_code: 0xFFFF_FFFF + 1}, state}
+            end
+          )
+
+          assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
+
+          send(__MODULE__, {:data, data})
+        end
+      end
+
+      Process.register(self(), HandleTo2ArityFunctionOutOfRangeDataTypeCodeOptionTest)
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+
+      assert io =~
+               "(RuntimeError) invalid options in callback response, got: [data_type_code: #{0xFFFF_FFFF + 1}]"
+
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -1055,6 +1206,20 @@ defmodule TestServer.SSHTest do
       assert SSHClient.send(conn, channel_id, "ping") == :ok
       assert SSHClient.send(conn, channel_id, "ping") == :ok
       assert SSHClient.receive_data(conn, channel_id) == {:ok, "value"}
+    end
+
+    test "with `:to` 2-arity function with `{:ok, options, state}` response" do
+      TestServer.SSH.start!()
+
+      TestServer.SSH.handle(
+        to: fn _msg, state -> {:ok, [close: true, exit_status: 0xFFFF_FFFF], state} end
+      )
+
+      assert {:ok, conn, channel_id} = ssh_shell()
+      assert SSHClient.send(conn, channel_id, "ping") == :ok
+
+      assert {:ok, %{data: nil, exit_status: 0xFFFF_FFFF}} =
+               SSHClient.receive_until_closed(conn, channel_id)
     end
 
     test "when `:match` function raises exception" do

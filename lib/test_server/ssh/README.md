@@ -82,6 +82,22 @@ channel_1 = TestServer.SSH.channel(messages: :all)
 channel_2 = TestServer.SSH.channel(messages: [:data, :env, :pty])
 ```
 
+An `:exec` handler can keep the channel open to exchange more messages by setting `close: false` in the response:
+
+```elixir
+TestServer.SSH.handle(
+  to: fn {:exec, _channel_id, _want_reply, _command}, state ->
+    {:reply, {"ready", close: false}, state}
+  end
+)
+
+TestServer.SSH.handle(
+  to: fn {:data, _channel_id, _type, "ping"}, state ->
+    {:reply, {"pong", close: true}, state}
+  end
+)
+```
+
 Subsystems can be added with the `:subsystems` option. The state in the channel is initialized with `%{subsystem: subsystem}`:
 
 ```elixir
@@ -127,6 +143,36 @@ TestServer.SSH.start!(ipfamily: :inet6)
 
 assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
 assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port} = SSHClient.sockname(conn)
+```
+
+### Example: SSHKit
+
+The SSH test server can test an SSH client such as `SSHKit`:
+
+```elixir
+test "SSHKit.run/2" do
+  TestServer.SSH.handle(
+    to: fn {:exec, _channel_id, _want_reply, command}, state ->
+      assert to_string(command) == "/usr/bin/env echo \"Hello World!\""
+
+      {:reply, "Hello World!\n", state}
+    end
+  )
+
+  {host, port} = TestServer.SSH.address()
+
+  [{:ok, output, 0}] =
+    {host, port: port, silently_accept_hosts: true, user_interaction: false}
+    |> SSHKit.context()
+    |> SSHKit.run("echo \"Hello World!\"")
+
+  stdout =
+    output
+    |> Keyword.get_values(:stdout)
+    |> Enum.join()
+
+  assert "Hello World!\n" == stdout
+end
 ```
 
 <!-- MDOC !-->

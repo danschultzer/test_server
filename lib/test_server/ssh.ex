@@ -70,6 +70,10 @@ defmodule TestServer.SSH do
     * `:ipfamily`         - The IP address type to use, either `:inet` or
       `:inet6`. Defaults to `:inet`;
 
+    * `:subsystems`       - list of SSH subsystem names to handle with channel
+      expectations. Channels initialized with subsystems will have a
+      `:subsystem` key set in the state. Defaults to `[]`;
+
     * `:suppress_ssh_strict_kex_ordering_log` - boolean that suppresses OTP
       SSH debug messages for strict KEX ordering. Defaults to `true`.  Note:
       the filter is installed when the server starts and removed when it stops.
@@ -134,6 +138,7 @@ defmodule TestServer.SSH do
       :user_passwords,
       :no_auth_needed,
       :ipfamily,
+      :subsystems,
       :suppress_ssh_strict_kex_ordering_log,
       :daemon,
       :suppress_warning

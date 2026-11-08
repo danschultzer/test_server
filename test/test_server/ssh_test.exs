@@ -22,6 +22,16 @@ defmodule TestServer.SSHTest do
                    end
     end
 
+    test "with invalid `:subsystems` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :subsystems to be a list, got: :invalid/,
+                   fn -> TestServer.SSH.start(subsystems: :invalid) end
+
+      assert_raise ArgumentError,
+                   ~r/expected :subsystems to be a list of non-empty strings, got: \[:invalid\]/,
+                   fn -> TestServer.SSH.start(subsystems: [:invalid]) end
+    end
+
     test "with multiple instances" do
       instance_1 = TestServer.SSH.start!()
       instance_2 = TestServer.SSH.start!()
@@ -268,6 +278,18 @@ defmodule TestServer.SSHTest do
       assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
       assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
       assert {:error, "Connection closed"} = SSHClient.connect(TestServer.SSH.address())
+    end
+
+    test "with `:subsystems` option" do
+      TestServer.SSH.start!(subsystems: ["example"])
+      TestServer.SSH.handle(to: fn _frame, state -> {:reply, state.subsystem, state} end)
+
+      assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+      assert SSHClient.subsystem(conn, "invalid") == {:error, :failure}
+      assert {:ok, channel_id} = SSHClient.subsystem(conn, "example")
+      assert SSHClient.send(conn, channel_id, "ping") == :ok
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "example"}
+      assert SSHClient.close(conn, channel_id) == :ok
     end
 
     test "with `suppress_ssh_strict_kex_ordering_log: true` option" do
@@ -1134,19 +1156,7 @@ defmodule TestServer.SSHTest do
         |> Keyword.merge(options)
         |> normalize_ssh_connect_options()
 
-      :logger.add_primary_filter(
-        :suppress_ssh_log_messages,
-        {fn
-           %{level: :debug, msg: {:string, ~c"client will use strict KEX ordering"}}, _extra ->
-             :stop
-
-           %{level: :notice, msg: {:report, %{report: msg}}}, _extra ->
-             (to_string(msg) =~ "Ssh login attempt to" && :stop) || :ignore
-
-           _event, _extra ->
-             :ignore
-         end, []}
-      )
+      suppress_ssh_log_messages()
 
       host
       |> to_charlist()
@@ -1160,6 +1170,28 @@ defmodule TestServer.SSHTest do
 
         {:error, reason} ->
           {:error, reason}
+      end
+    end
+
+    defp suppress_ssh_log_messages do
+      filter =
+        {fn
+           %{level: :debug, msg: {:string, ~c"client will use strict KEX ordering"}}, _extra ->
+             :stop
+
+           %{level: :notice, msg: {:report, %{report: msg}}}, _extra ->
+             (to_string(msg) =~ "Ssh login attempt to" && :stop) || :ignore
+
+           _event, _extra ->
+             :ignore
+         end, []}
+
+      case :logger.add_primary_filter(__MODULE__, filter) do
+        :ok ->
+          on_exit(fn -> :logger.remove_primary_filter(__MODULE__) end)
+
+        {:error, {:already_exist, __MODULE__}} ->
+          :ok
       end
     end
 
@@ -1188,6 +1220,29 @@ defmodule TestServer.SSHTest do
       conn
       |> :ssh_connection.session_channel(timeout)
       |> handle_resp()
+    end
+
+    def subsystem(conn, subsystem, timeout \\ 500) do
+      subsystem = String.to_charlist(subsystem)
+
+      case session_channel(conn) do
+        {:ok, channel_id} ->
+          case :ssh_connection.subsystem(conn, channel_id, subsystem, timeout) do
+            :success ->
+              {:ok, channel_id}
+
+            :failure ->
+              close(conn, channel_id)
+              {:error, :failure}
+
+            {:error, reason} ->
+              close(conn, channel_id)
+              {:error, reason}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
 
     def send(conn, channel_id, data) do

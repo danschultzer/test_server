@@ -24,7 +24,7 @@ defmodule TestServer.HTTP.Server do
         def stop(server_pid, server_options), do: MyHTTPServer.stop(server_pid)
 
         @impl TestServer.HTTP.Server
-        def socket_pid(%{adapter: {_, data}}), do: data.pid # or however your adapter provides the pid
+        def socket_pid(%{adapter: {_, data}}), do: data.pid # Or however your adapter provides the pid
       end
   """
   @type scheme :: :http | :https
@@ -40,7 +40,7 @@ defmodule TestServer.HTTP.Server do
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
-    scheme = parse_scheme(options)
+    scheme = validate_scheme!(options)
     options = put_tls_options(options, scheme)
     ip_family = Keyword.get(options, :ipfamily, :inet)
     test_server_options = [tls: Keyword.get(options, :tls, []), ipfamily: ip_family]
@@ -60,12 +60,16 @@ defmodule TestServer.HTTP.Server do
     end
   end
 
-  defp parse_scheme(options) do
+  defp validate_scheme!(options) do
     scheme = Keyword.get(options, :scheme, :http)
 
-    unless scheme in [:http, :https], do: raise("Invalid scheme, got: #{inspect(scheme)}")
+    case scheme in [:http, :https] do
+      true ->
+        scheme
 
-    scheme
+      false ->
+        raise ArgumentError, "expected :scheme to be :http or :https, got: #{inspect(scheme)}"
+    end
   end
 
   defp put_tls_options(options, :https), do: TestServer.put_tls_options(options)
@@ -74,8 +78,12 @@ defmodule TestServer.HTTP.Server do
   defp http_server(options) do
     case options[:http_server] || Application.get_env(:test_server, :http_server) ||
            default_http_server() do
-      {mod, server_options} when is_atom(mod) and is_list(server_options) -> {mod, server_options}
-      other -> raise "Invalid http_server, got: #{inspect(other)}"
+      {mod, server_options} when is_atom(mod) and is_list(server_options) ->
+        {mod, server_options}
+
+      other ->
+        raise ArgumentError,
+              "expected :http_server to be a {module, options} tuple, got: #{inspect(other)}"
     end
   end
 

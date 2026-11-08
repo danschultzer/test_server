@@ -6,7 +6,7 @@ defmodule TestServer.UDP.Server do
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
-    transport = validate_transport!(Keyword.get(options, :transport, :udp))
+    transport = validate_transport!(options)
     port = TestServer.validate_port!(options)
 
     options =
@@ -28,10 +28,16 @@ defmodule TestServer.UDP.Server do
     end
   end
 
-  defp validate_transport!(transport) when transport in [:udp, :dtls], do: transport
+  defp validate_transport!(options) do
+    transport = Keyword.get(options, :transport, :udp)
 
-  defp validate_transport!(transport) do
-    raise ArgumentError, "expected :udp or :dtls transport, got: #{inspect(transport)}"
+    case transport in [:udp, :dtls] do
+      true ->
+        transport
+
+      false ->
+        raise ArgumentError, "expected :transport to be :udp or :dtls, got: #{inspect(transport)}"
+    end
   end
 
   defp put_tls_options(options, :dtls) do
@@ -69,9 +75,7 @@ defmodule TestServer.UDP.Server do
 
       {:error, reason} ->
         exception =
-          RuntimeError.exception(
-            "Could not listen to port #{inspect(port)}, because: #{inspect(reason)}"
-          )
+          RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")
 
         {:error, exception}
     end
@@ -121,7 +125,7 @@ defmodule TestServer.UDP.Server do
             receive_loop(instance, listener, Map.put(peers, {address, port}, peer))
 
           false ->
-            message = "Could not handle UDP data, because: Peer process no longer accepts data."
+            message = "could not handle UDP data: peer process no longer accepts data"
 
             send_error(socket, RuntimeError.exception(message), instance)
         end
@@ -130,7 +134,7 @@ defmodule TestServer.UDP.Server do
         :ok
 
       {:error, reason} ->
-        raise "Could not receive UDP data, because: #{inspect(reason)}"
+        raise "could not receive UDP data: #{inspect(reason)}"
     end
   end
 
@@ -144,7 +148,7 @@ defmodule TestServer.UDP.Server do
         :ok
 
       {:error, reason} ->
-        raise "Could not accept UDP peer, because: #{inspect(reason)}"
+        raise "could not accept UDP peer: #{inspect(reason)}"
     end
   end
 
@@ -238,7 +242,7 @@ defmodule TestServer.UDP.Server do
         {:ok, socket, state}
 
       {:ssl_error, ^raw_socket, reason} ->
-        message = "UDP receive failed, because: #{inspect(reason)}"
+        message = "could not receive UDP data: #{inspect(reason)}"
 
         {:error, RuntimeError.exception(message)}
 
@@ -282,7 +286,7 @@ defmodule TestServer.UDP.Server do
         {:ok, socket, state}
 
       {:error, reason} ->
-        exception = RuntimeError.exception("UDP reply failed, because: #{inspect(reason)}")
+        exception = RuntimeError.exception("could not send UDP reply: #{inspect(reason)}")
 
         {:error, exception}
     end

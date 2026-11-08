@@ -27,8 +27,8 @@ defmodule TestServer.SSH.Instance do
         ) ::
           {:ok, map()}
   def register(instance, {:handle, channel_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :to) && ensure_function!(options[:to])
-    Keyword.has_key?(options, :match) && ensure_function!(options[:match])
+    Keyword.has_key?(options, :match) && ensure_function!(options, :match)
+    Keyword.has_key?(options, :to) && ensure_function!(options, :to)
 
     GenServer.call(instance, {:register, {:handle, channel_ref, options, stacktrace}})
   end
@@ -42,19 +42,32 @@ defmodule TestServer.SSH.Instance do
 
       false ->
         raise ArgumentError,
-              "expected list to only include #{inspect(@message_events)}, got: #{inspect(messages)}"
+              "expected :messages to contain only #{inspect(@message_events)}, got: #{inspect(messages)}"
     end
   end
 
   defp ensure_messages!(messages) do
     case messages do
-      :all -> :ok
-      _ -> raise ArgumentError, "expected :all, got: #{inspect(messages)}"
+      :all ->
+        :ok
+
+      _ ->
+        raise ArgumentError, "expected :messages to be :all or a list, got: #{inspect(messages)}"
     end
   end
 
-  defp ensure_function!(fun) when is_function(fun), do: :ok
-  defp ensure_function!(fun), do: raise(BadFunctionError, term: fun)
+  defp ensure_function!(options, option) do
+    value = Keyword.get(options, option)
+
+    case is_function(value) do
+      true ->
+        :ok
+
+      false ->
+        raise ArgumentError,
+              "expected #{inspect(option)} to be a function, got: #{inspect(value)}"
+    end
+  end
 
   @spec dispatch(
           TestServer.instance(),
@@ -263,7 +276,7 @@ defmodule TestServer.SSH.Instance do
 
       _other ->
         raise """
-        Invalid callback response, got: #{inspect(response)}.
+        invalid callback response, got: #{inspect(response)}
 
         Expected one of the following:
 
@@ -278,7 +291,7 @@ defmodule TestServer.SSH.Instance do
   defp validate_response!(response, handler, stacktrace) when is_function(handler, 2) do
     case response do
       {:reply, {data, options}, state} ->
-        validate_options!({:reply, {data, options}, state}, stacktrace)
+        ensure_response_options!(options, stacktrace)
 
         {:reply, {data, options}, state}
 
@@ -290,7 +303,7 @@ defmodule TestServer.SSH.Instance do
 
       _other ->
         raise """
-        Invalid callback response, got: #{inspect(response)}.
+        invalid callback response, got: #{inspect(response)}
 
         Expected one of the following:
 
@@ -303,7 +316,7 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_options!({:reply, {_data, options}, _state}, stacktrace) do
+  defp ensure_response_options!(options, stacktrace) do
     valid_options = ~w(exit_status data_type_code)a
 
     case Keyword.validate(options, valid_options) do
@@ -312,9 +325,9 @@ defmodule TestServer.SSH.Instance do
 
       {:error, _keys} ->
         raise """
-        Invalid options in callback response, got: #{inspect(options)}.
+        invalid options in callback response, got: #{inspect(options)}
 
-        Valid options are: #{inspect(valid_options)}.
+        Valid options are: #{inspect(valid_options)}
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """

@@ -18,7 +18,10 @@ defmodule TestServerTest do
 
   describe "start_instance/3" do
     test "when not called from a test process" do
-      assert %ArgumentError{message: "can only be called in a test process"} =
+      assert %ArgumentError{
+               message:
+                 "cannot start a TestServerTest.FakeProtocol instance outside the test process"
+             } =
                Task.async(fn ->
                  try do
                    TestServer.start_instance(FakeProtocol, [], fn _instance -> :ok end)
@@ -71,13 +74,17 @@ defmodule TestServerTest do
 
   describe "validate_port!/1" do
     test "with invalid `:port` option" do
-      assert_raise ArgumentError, "expected a port, got: :invalid", fn ->
-        TestServer.validate_port!(port: :invalid)
-      end
+      assert_raise ArgumentError,
+                   "expected :port to be an integer from 0 to 65535, got: :invalid",
+                   fn ->
+                     TestServer.validate_port!(port: :invalid)
+                   end
 
-      assert_raise ArgumentError, "expected a port, got: 65536", fn ->
-        TestServer.validate_port!(port: 65_536)
-      end
+      assert_raise ArgumentError,
+                   "expected :port to be an integer from 0 to 65535, got: 65536",
+                   fn ->
+                     TestServer.validate_port!(port: 65_536)
+                   end
     end
 
     test "with missing `:port` option" do
@@ -95,7 +102,7 @@ defmodule TestServerTest do
       assert {:ok, port} = :inet.port(socket)
 
       assert {:error, %RuntimeError{message: message}} = TestServer.open_port(port: port)
-      assert message == "Could not listen to port #{port}, because: :eaddrinuse"
+      assert message == "could not listen on port #{port}: :eaddrinuse"
     end
 
     test "with missing `:port` option" do

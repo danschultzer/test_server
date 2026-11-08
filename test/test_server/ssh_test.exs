@@ -15,9 +15,11 @@ defmodule TestServer.SSHTest do
     end
 
     test "with invalid `:port` option" do
-      assert_raise ArgumentError, ~r/expected a port, got: :invalid/, fn ->
-        TestServer.SSH.start(port: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :port to be an integer from 0 to 65535, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.start(port: :invalid)
+                   end
     end
 
     test "with multiple instances" do
@@ -341,14 +343,14 @@ defmodule TestServer.SSHTest do
       port = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/EXIT when starting TestServer.SSH instance on port #{port}/,
+                   ~r/could not start TestServer.SSH instance on port #{port}/,
                    fn -> TestServer.SSH.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.SSH.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.SSH.Instance is running", fn ->
         TestServer.SSH.stop()
       end
 
@@ -367,7 +369,7 @@ defmodule TestServer.SSHTest do
       {:ok, _instance_2} = TestServer.SSH.start()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.stop\/0`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.stop\/1/,
                    fn -> TestServer.SSH.stop() end
 
       assert TestServer.SSH.stop(instance_1) == :ok
@@ -387,7 +389,7 @@ defmodule TestServer.SSHTest do
 
   describe "address/2" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.SSH.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.SSH.Instance is running", fn ->
         TestServer.SSH.address()
       end
 
@@ -406,7 +408,7 @@ defmodule TestServer.SSHTest do
       instance_2 = TestServer.SSH.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.address\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.address\/2/,
                    fn -> TestServer.SSH.address() end
 
       refute TestServer.SSH.address(instance_1) == TestServer.SSH.address(instance_2)
@@ -430,9 +432,11 @@ defmodule TestServer.SSHTest do
     test "with invalid `:host` option" do
       TestServer.SSH.start!()
 
-      assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
-        TestServer.SSH.address(host: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.address(host: :invalid)
+                   end
     end
 
     test "with `:host` option" do
@@ -465,7 +469,7 @@ defmodule TestServer.SSHTest do
       {:ok, _instance_2} = TestServer.SSH.start()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.channel\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.channel\/2/,
                    fn -> TestServer.SSH.channel() end
 
       assert TestServer.SSH.channel(instance_1, [])
@@ -478,12 +482,14 @@ defmodule TestServer.SSHTest do
         TestServer.SSH.channel(invalid: :option)
       end
 
-      assert_raise ArgumentError, ~r/expected :all, got: :invalid/, fn ->
-        TestServer.SSH.channel(messages: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :messages to be :all or a list, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.channel(messages: :invalid)
+                   end
 
       assert_raise ArgumentError,
-                   ~r/expected list to only include \[:exec, :data, :env, :pty, :shell, :eof\], got: \[:invalid\]/,
+                   ~r/expected :messages to contain only \[:exec, :data, :env, :pty, :shell, :eof\], got: \[:invalid\]/,
                    fn -> TestServer.SSH.channel(messages: [:invalid]) end
     end
 
@@ -652,7 +658,7 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.SSH\.handle\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.handle\/2/,
                    fn -> TestServer.SSH.handle() end
     end
 
@@ -661,7 +667,7 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.channel()
 
       assert_raise RuntimeError,
-                   ~r/Multiple channels available, please pass channel to `TestServer\.SSH\.handle\/2`/,
+                   ~r/multiple channels are available; pass the channel to TestServer\.SSH\.handle\/2/,
                    fn -> TestServer.SSH.handle() end
 
       TestServer.SSH.stop()
@@ -681,12 +687,12 @@ defmodule TestServer.SSHTest do
         TestServer.SSH.handle(invalid: :option)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.SSH.handle(to: :invalid)
+      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
+        TestServer.SSH.handle(match: :invalid)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.SSH.handle(match: :invalid)
+      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
+        TestServer.SSH.handle(to: :invalid)
       end
 
       TestServer.SSH.stop()
@@ -753,6 +759,8 @@ defmodule TestServer.SSHTest do
       assert io =~ "received an unexpected SSH message"
       assert io =~ "Active handlers:"
       refute io =~ "The following handlers have been processed:"
+      assert io =~ ~r/test\/test_server\/ssh_test\.exs:\d+/
+      assert io =~ "HandleUnexpectedMessageBeforeProcessedTest.\"test fails\"/1"
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -824,7 +832,7 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo3ArityFunctionInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -911,7 +919,7 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo2ArityFunctionInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -997,7 +1005,7 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo2ArityFunctionInvalidOptionsTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) Invalid options in callback response, got: [invalid: 1]."
+      assert io =~ "(RuntimeError) invalid options in callback response, got: [invalid: 1]"
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -1059,7 +1067,7 @@ defmodule TestServer.SSHTest do
 
   describe "host_keys/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.SSH.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.SSH.Instance is running", fn ->
         TestServer.SSH.host_keys()
       end
 
@@ -1081,7 +1089,7 @@ defmodule TestServer.SSHTest do
       )
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is running with `\[host_keys: function\]` option/,
+                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is running with the \[host_keys: function\] option/,
                    fn -> TestServer.SSH.host_keys() end
     end
   end

@@ -15,15 +15,19 @@ defmodule TestServer.UDPTest do
     end
 
     test "with invalid `:transport` option" do
-      assert_raise ArgumentError, ~r/expected :udp or :dtls transport, got: :invalid/, fn ->
-        TestServer.UDP.start(transport: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :transport to be :udp or :dtls, got: :invalid/,
+                   fn ->
+                     TestServer.UDP.start(transport: :invalid)
+                   end
     end
 
     test "with invalid `:port` option" do
-      assert_raise ArgumentError, ~r/expected a port, got: :invalid/, fn ->
-        TestServer.UDP.start(port: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :port to be an integer from 0 to 65535, got: :invalid/,
+                   fn ->
+                     TestServer.UDP.start(port: :invalid)
+                   end
     end
 
     test "when port is in use" do
@@ -31,7 +35,7 @@ defmodule TestServer.UDPTest do
       {_, port} = TestServer.UDP.address(instance)
 
       assert {:error, %RuntimeError{message: message}} = TestServer.UDP.start(port: port)
-      assert message == "Could not listen to port #{port}, because: :eaddrinuse"
+      assert message == "could not listen on port #{port}: :eaddrinuse"
     end
 
     test "with multiple instances" do
@@ -161,14 +165,14 @@ defmodule TestServer.UDPTest do
       port = instance |> TestServer.UDP.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/EXIT when starting TestServer.UDP instance on port #{port}/,
+                   ~r/could not start TestServer.UDP instance on port #{port}/,
                    fn -> TestServer.UDP.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.UDP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.UDP.Instance is running", fn ->
         TestServer.UDP.stop()
       end
 
@@ -187,7 +191,7 @@ defmodule TestServer.UDPTest do
       {:ok, _instance_2} = TestServer.UDP.start()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.UDP\.stop\/0`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.stop\/1/,
                    fn -> TestServer.UDP.stop() end
 
       assert TestServer.UDP.stop(instance_1) == :ok
@@ -236,7 +240,7 @@ defmodule TestServer.UDPTest do
 
   describe "address/2" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.UDP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.UDP.Instance is running", fn ->
         TestServer.UDP.address()
       end
 
@@ -255,7 +259,7 @@ defmodule TestServer.UDPTest do
       instance_2 = TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.UDP\.address\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.address\/2/,
                    fn -> TestServer.UDP.address() end
 
       refute TestServer.UDP.address(instance_1) == TestServer.UDP.address(instance_2)
@@ -279,9 +283,11 @@ defmodule TestServer.UDPTest do
     test "with invalid `:host` option" do
       TestServer.UDP.start!()
 
-      assert_raise RuntimeError, ~r/Invalid host, got: :invalid/, fn ->
-        TestServer.UDP.address(host: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   fn ->
+                     TestServer.UDP.address(host: :invalid)
+                   end
     end
 
     test "with `:host` option" do
@@ -305,7 +311,7 @@ defmodule TestServer.UDPTest do
 
   describe "cacerts/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "No current TestServer.UDP.Instance running", fn ->
+      assert_raise RuntimeError, "no current TestServer.UDP.Instance is running", fn ->
         TestServer.UDP.cacerts()
       end
 
@@ -323,7 +329,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/is not running with `\[transport: :dtls\]` option/,
+                   ~r/is not running with the \[transport: :dtls\] option/,
                    fn -> TestServer.UDP.cacerts() end
     end
 
@@ -336,7 +342,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!(transport: :dtls, tls: tls_options)
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is running with custom `:tls` certificate options/,
+                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is running with custom :tls certificate options/,
                    fn -> TestServer.UDP.cacerts() end
     end
   end
@@ -356,7 +362,7 @@ defmodule TestServer.UDPTest do
       {:ok, _instance_2} = TestServer.UDP.start()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.UDP\.peer\/0`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.peer\/1/,
                    fn -> TestServer.UDP.peer() end
 
       assert TestServer.UDP.peer(instance_1)
@@ -477,7 +483,7 @@ defmodule TestServer.UDPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
 
       assert io =~
-               "(RuntimeError) Could not handle UDP data, because: Peer process no longer accepts data."
+               "(RuntimeError) could not handle UDP data: peer process no longer accepts data"
 
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
@@ -490,7 +496,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/Multiple instances running, please pass instance to `TestServer\.UDP\.handle\/1`/,
+                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.handle\/2/,
                    fn -> TestServer.UDP.handle() end
     end
 
@@ -499,7 +505,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.peer()
 
       assert_raise RuntimeError,
-                   "Multiple peers available, please pass peer to `TestServer.UDP.handle/2`",
+                   "multiple peers are available; pass the peer to TestServer.UDP.handle/2",
                    fn -> TestServer.UDP.handle() end
 
       TestServer.UDP.stop()
@@ -522,12 +528,12 @@ defmodule TestServer.UDPTest do
         TestServer.UDP.handle(peer, invalid: :option)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.UDP.handle(peer, to: :invalid)
+      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
+        TestServer.UDP.handle(peer, match: :invalid)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
-        TestServer.UDP.handle(peer, match: :invalid)
+      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
+        TestServer.UDP.handle(peer, to: :invalid)
       end
 
       TestServer.UDP.stop()
@@ -595,6 +601,8 @@ defmodule TestServer.UDPTest do
       assert io =~ "received unexpected UDP data"
       assert io =~ "Active handlers:"
       refute io =~ "The following handlers have been processed:"
+      assert io =~ ~r/test\/test_server\/udp_test\.exs:\d+/
+      assert io =~ "HandleUnexpectedDataBeforeProcessedTest.\"test fails\"/1"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
     end
@@ -669,9 +677,9 @@ defmodule TestServer.UDPTest do
       Process.register(self(), HandleSSLErrorTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "UDP receive failed, because: :test"
+      assert io =~ "could not receive UDP data: :test"
       assert_receive {:data, data}
-      assert data =~ "UDP receive failed, because: :test"
+      assert data =~ "could not receive UDP data: :test"
     end
 
     test "when `:to` function raises exception" do
@@ -719,7 +727,7 @@ defmodule TestServer.UDPTest do
       Process.register(self(), HandleToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
     end
@@ -753,7 +761,7 @@ defmodule TestServer.UDPTest do
                  send(self(), {:log, log})
                end)
 
-      assert io =~ "UDP reply failed, because:"
+      assert io =~ "could not send UDP reply: :einval"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
       assert_received {:log, log}
@@ -837,19 +845,21 @@ defmodule TestServer.UDPTest do
         TestServer.UDP.send(peer, invalid: :option)
       end
 
-      assert_raise BadFunctionError, ~r/expected a function, got: :invalid/, fn ->
+      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
         TestServer.UDP.send(peer, to: :invalid)
       end
 
-      assert_raise ArgumentError, ~r/expected positive integer, got: :invalid/, fn ->
-        TestServer.UDP.send(peer, timeout: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :timeout to be a positive integer, got: :invalid/,
+                   fn ->
+                     TestServer.UDP.send(peer, timeout: :invalid)
+                   end
 
-      assert_raise ArgumentError, ~r/expected positive integer, got: 0/, fn ->
+      assert_raise ArgumentError, ~r/expected :timeout to be a positive integer, got: 0/, fn ->
         TestServer.UDP.send(peer, timeout: 0)
       end
 
-      assert_raise ArgumentError, ~r/expected positive integer, got: -1/, fn ->
+      assert_raise ArgumentError, ~r/expected :timeout to be a positive integer, got: -1/, fn ->
         TestServer.UDP.send(peer, timeout: -1)
       end
 
@@ -860,7 +870,7 @@ defmodule TestServer.UDPTest do
       instance = TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the peer, because the peer does not exist/,
+                   ~r/cannot send to the peer because the peer does not exist/,
                    fn -> TestServer.UDP.send({instance, make_ref()}) end
     end
 
@@ -868,7 +878,7 @@ defmodule TestServer.UDPTest do
       peer = TestServer.UDP.peer()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the peer, because no client has sent a datagram or established a DTLS connection/,
+                   ~r/cannot send to the peer because no client has sent a datagram or established a DTLS connection/,
                    fn -> TestServer.UDP.send(peer, timeout: 1) end
 
       TestServer.UDP.stop()
@@ -885,7 +895,7 @@ defmodule TestServer.UDPTest do
       assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the peer, because client has disconnected/,
+                   ~r/cannot send to the peer because the client has disconnected/,
                    fn -> TestServer.UDP.send(peer) end
     end
 
@@ -992,7 +1002,7 @@ defmodule TestServer.UDPTest do
       Process.register(self(), SendToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) Invalid callback response, got: :invalid."
+      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
     end
@@ -1027,7 +1037,7 @@ defmodule TestServer.UDPTest do
                  send(self(), {:log, log})
                end)
 
-      assert io =~ "UDP reply failed, because:"
+      assert io =~ "could not send UDP reply: :einval"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
       assert_received {:log, log}

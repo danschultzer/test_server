@@ -39,8 +39,12 @@ defmodule TestServer do
   @doc false
   def start_instance(protocol_module, options, verify_fn) do
     case ExUnit.fetch_test_supervisor() do
-      {:ok, _sup} -> start_with_ex_unit(protocol_module, options, verify_fn)
-      :error -> raise ArgumentError, "can only be called in a test process"
+      {:ok, _sup} ->
+        start_with_ex_unit(protocol_module, options, verify_fn)
+
+      :error ->
+        raise ArgumentError,
+              "cannot start a #{inspect(protocol_module)} instance outside the test process"
     end
   end
 
@@ -96,7 +100,7 @@ defmodule TestServer do
 
   @doc false
   def raise_start_failure!(protocol_module, options, reason) do
-    raise "EXIT when starting #{inspect(protocol_module)} instance#{format_port(options)}:\n\n#{Exception.format_exit(reason)}"
+    raise "could not start #{inspect(protocol_module)} instance#{format_port(options)}:\n\n#{Exception.format_exit(reason)}"
   end
 
   defp format_port(options) do
@@ -119,7 +123,11 @@ defmodule TestServer do
     port = Keyword.get(options, :port, 0)
 
     unless is_integer(port) and port >= 0 and port <= 65_535,
-      do: raise(ArgumentError, "expected a port, got: #{inspect(port)}")
+      do:
+        raise(
+          ArgumentError,
+          "expected :port to be an integer from 0 to 65535, got: #{inspect(port)}"
+        )
 
     port
   end
@@ -141,9 +149,7 @@ defmodule TestServer do
     else
       {:error, reason} ->
         {:error,
-         RuntimeError.exception(
-           "Could not listen to port #{inspect(port)}, because: #{inspect(reason)}"
-         )}
+         RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")}
     end
   end
 
@@ -152,7 +158,7 @@ defmodule TestServer do
     instance_module = Module.concat(protocol_module, Instance)
 
     case InstanceManager.fetch_instance(self(), protocol_module) do
-      :error -> raise "No current #{inspect(instance_module)} running"
+      :error -> raise "no current #{inspect(instance_module)} is running"
       {:ok, instance} -> instance
     end
   end
@@ -162,7 +168,7 @@ defmodule TestServer do
     host = Keyword.get(options, :host)
 
     unless is_nil(host) or is_binary(host),
-      do: raise("Invalid host, got: #{inspect(host)}")
+      do: raise(ArgumentError, "expected :host to be a binary or nil, got: #{inspect(host)}")
 
     case host do
       nil ->

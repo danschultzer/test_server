@@ -9,7 +9,9 @@ defmodule TestServer.SSH.Channel do
 
   @impl true
   def init(options) do
-    {:ok, %__MODULE__{instance: Keyword.fetch!(options, :instance), channel_state: %{}}}
+    channel_state = options |> Keyword.take([:subsystem]) |> Enum.into(%{})
+
+    {:ok, %__MODULE__{instance: Keyword.fetch!(options, :instance), channel_state: channel_state}}
   end
 
   @impl true

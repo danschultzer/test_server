@@ -1,6 +1,8 @@
 defmodule TestServer.SSH.Server do
   @moduledoc false
 
+  alias TestServer.SSH.Channel
+
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
@@ -47,7 +49,7 @@ defmodule TestServer.SSH.Server do
 
     ssh_cli =
       {
-        TestServer.SSH.Channel,
+        Channel,
         options
         |> Keyword.take([:messages])
         |> Keyword.put(:instance, instance)
@@ -70,6 +72,7 @@ defmodule TestServer.SSH.Server do
         parallel_login: true
       )
       |> Keyword.merge(Keyword.get(options, :daemon, []))
+      |> put_subsystems(instance, options)
 
     daemon_options =
       case Keyword.get(options, :ipfamily, :inet) do
@@ -78,6 +81,39 @@ defmodule TestServer.SSH.Server do
       end
 
     {host_keys, daemon_options}
+  end
+
+  defp put_subsystems(daemon_options, instance, options) do
+    subsystems = Keyword.get(options, :subsystems, [])
+
+    ensure_subsystems!(subsystems)
+
+    subsystems
+    |> Enum.map(fn name ->
+      {String.to_charlist(name), {Channel, [instance: instance, subsystem: name]}}
+    end)
+    |> case do
+      [] ->
+        daemon_options
+
+      subsystems ->
+        Keyword.update(daemon_options, :subsystems, subsystems, &(subsystems ++ &1))
+    end
+  end
+
+  defp ensure_subsystems!(subsystems) when is_list(subsystems) do
+    case Enum.all?(subsystems, &(is_binary(&1) and &1 != "")) do
+      true ->
+        :ok
+
+      false ->
+        raise ArgumentError,
+              "expected :subsystems to be a list of non-empty strings, got: #{inspect(subsystems)}"
+    end
+  end
+
+  defp ensure_subsystems!(subsystems) do
+    raise ArgumentError, "expected :subsystems to be a list, got: #{inspect(subsystems)}"
   end
 
   defp host_keys(options) do

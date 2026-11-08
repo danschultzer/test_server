@@ -82,6 +82,18 @@ channel_1 = TestServer.SSH.channel(messages: :all)
 channel_2 = TestServer.SSH.channel(messages: [:data, :env, :pty])
 ```
 
+Subsystems can be added with the `:subsystems` option. The state in the channel is initialized with `%{subsystem: subsystem}`:
+
+```elixir
+TestServer.SSH.start!(subsystems: ["example"])
+TestServer.SSH.handle(to: fn _frame, state -> {:reply, state.subsystem, state} end)
+
+assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+assert {:ok, channel_id} = SSHClient.subsystem(conn, "example")
+assert :ok = SSHClient.send(conn, channel_id, "ping")
+assert SSHClient.receive_data(conn, channel_id) == {:ok, "example"}
+```
+
 ### Host keys
 
 Host keys can be configured in `TestServer.SSH.start/1`. By default host keys are auto generated to cover most algorithms and can be fetched with `TestServer.SSH.host_keys/1`

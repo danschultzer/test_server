@@ -12,14 +12,14 @@ Add request expectations with `TestServer.HTTP.handle/2`:
 
 ```elixir
 test "fetch_url/1" do
-  # The test server will autostart the current test server, if not already running
+  # The test server will autostart the current test server if not already running
   TestServer.HTTP.handle("/path", method: :get)
 
-  assert HTTPClient.fetch_url(TestServer.HTTP.url("/path")) == {:ok, "HTTP"}
+  assert HTTPClient.fetch_url(TestServer.HTTP.url("/path")) == {:ok, "HTTP/1.1"}
 end
 ```
 
-`TestServer.HTTP.handle/2` can route a request to an anonymous function or plug with the `:to` option.
+`TestServer.HTTP.handle/2` can route a request to an anonymous function or plug using the `:to` option.
 
 ```elixir
 TestServer.HTTP.handle(to: fn conn ->
@@ -37,13 +37,13 @@ TestServer.HTTP.handle("/path")
 TestServer.HTTP.handle(path: "/path")
 ```
 
-The method listened to can be defined with `:method` option. By default any method is matched.
+The HTTP method can be matched with the `:method` option. By default any method is matched.
 
 ```elixir
 TestServer.HTTP.handle(method: :post)
 ```
 
-A custom match function can be set with the `:match` option. The `:path` and `:method` options, if set, are matched on first:
+A custom match function can be set with the `:match` option. The `:path` and `:method` options, if set, are matched first:
 
 ```elixir
 TestServer.HTTP.handle(match: fn
@@ -52,7 +52,7 @@ TestServer.HTTP.handle(match: fn
 end)
 ```
 
-When a handler is matched it is removed from the active handlers list. Handlers are triggered in the order they were added:
+When a handler is matched it is removed from the list of active handlers. Handlers are triggered in the order they were added:
 
 ```elixir
 TestServer.HTTP.handle(to: &Plug.Conn.send_resp(&1, 200, "first"))
@@ -80,10 +80,11 @@ TestServer.HTTP.plug(MyPlug)
 
 ### HTTPS
 
-By default the test server is set up to serve plain HTTP. HTTPS can be enabled with the `:scheme` option when calling `TestServer.HTTP.start/1`. A self-signed certificate suite is automatically generated:
+By default the test server serves plain HTTP. HTTPS can be enabled with the `:scheme` option when calling `TestServer.HTTP.start/1`. A self-signed certificate suite is automatically generated:
 
 ```elixir
 TestServer.HTTP.start!(scheme: :https)
+TestServer.HTTP.handle()
 
 req_options = [
   connect_options: [
@@ -104,30 +105,26 @@ TestServer.HTTP.start!(scheme: :https, tls: [keyfile: key, certfile: cert])
 
 ### WebSocket
 
-WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/1`. By default any path is matched, and `TestServer.HTTP.websocket_handle/2` will echo the message received. Messages can be sent from the test server with `TestServer.HTTP.websocket_send/2`.
+A WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/1`. By default any path is matched, and `TestServer.HTTP.websocket_handle/2` echoes the received message. Messages can be sent from the test server with `TestServer.HTTP.websocket_send/2`.
 
 ```elixir
 test "WebSocketClient" do
   websocket = TestServer.HTTP.websocket("/ws")
 
-  TestServer.HTTP.websocket_handle(websocket)
-  TestServer.HTTP.websocket_handle(websocket, match: fn {:text, message}, _state -> message == "hi" end)
-  TestServer.HTTP.websocket_handle(websocket, to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end)
+  TestServer.HTTP.websocket_handle(websocket,
+    to: fn {:text, "ping"}, state -> {:reply, {:text, "pong"}, state} end
+  )
 
   assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-
-  assert WebSocketClient.send(client, "hello") == :ok
-  assert WebSocketClient.receive(client) == {:ok, "hello"}
 
   assert WebSocketClient.send(client, "ping") == :ok
   assert WebSocketClient.receive(client) == {:ok, "pong"}
 
-  assert WebSocketClient.send(client, "hi") == :ok
-  assert WebSocketClient.receive(client) == {:ok, "hi"}
+  TestServer.HTTP.websocket_send(websocket,
+    to: fn state -> {:reply, {:text, "hello"}, state} end
+  )
 
-  TestServer.HTTP.websocket_send(websocket, to: fn state -> {:reply, {:text, "ping"}, state} end)
-  
-  assert WebSocketClient.receive(client) == {:ok, "ping"}
+  assert WebSocketClient.receive(client) == {:ok, "hello"}
 end
 ```
 
@@ -135,13 +132,13 @@ end
 
 ### HTTP Server Adapter
 
-TestServer supports `Bandit`, `Plug.Cowboy`, and `:httpd` out of the box. The HTTP adapter will be selected in this order depending which is available in the dependencies. You can also explicitly set the http server in the configuration when calling `TestServer.HTTP.start/1`:
+TestServer supports `Bandit`, `Plug.Cowboy`, and `:httpd` out of the box. The HTTP adapter is selected in this order based on which dependencies are available. You can also explicitly set the HTTP server when calling `TestServer.HTTP.start/1`:
 
 ```elixir
 TestServer.HTTP.start!(http_server: {TestServer.HTTP.Server.Bandit, []})
 ```
 
-You can create your own plug based HTTP Server Adapter by using the `TestServer.HTTP.Server` behaviour.
+You can create your own Plug-based HTTP server adapter using the `TestServer.HTTP.Server` behaviour.
 
 ### IPv6
 
@@ -157,6 +154,8 @@ TestServer.HTTP.handle(
     Plug.Conn.resp(conn, 200, "OK")
   end
 )
+
+assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "OK"}
 ```
 
 <!-- MDOC !-->

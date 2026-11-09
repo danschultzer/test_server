@@ -21,7 +21,9 @@ defmodule TestServer.InstanceManager do
       |> Keyword.put_new(:caller, caller)
       |> Keyword.put_new(:stacktrace, stacktrace)
 
-    case DynamicSupervisor.start_child(InstanceSupervisor, instance_module.child_spec(options)) do
+    child_spec = Supervisor.child_spec({instance_module, options}, restart: :temporary)
+
+    case DynamicSupervisor.start_child(InstanceSupervisor, child_spec) do
       {:ok, instance} ->
         GenServer.call(__MODULE__, {:register, {caller, protocol_module, instance}})
 
@@ -30,17 +32,19 @@ defmodule TestServer.InstanceManager do
     end
   end
 
-  @spec stop_instance(TestServer.instance()) :: :ok | {:error, :not_found}
-  def stop_instance(instance) do
+  @spec stop_instance(TestServer.instance(), module()) :: :ok | {:error, :not_found}
+  def stop_instance(instance, protocol_module) do
     res = DynamicSupervisor.terminate_child(InstanceSupervisor, instance)
-    GenServer.call(__MODULE__, {:remove, instance})
+    [_first | stacktrace] = TestServer.pruned_stacktrace(protocol_module)
+
+    GenServer.call(__MODULE__, {:stop_instance, instance, stacktrace})
 
     res
   end
 
   @spec fetch_instance(pid(), module()) :: {:ok, TestServer.instance()} | :error
   def fetch_instance(caller, protocol_module) do
-    case GenServer.call(__MODULE__, {:get_by_caller, caller, protocol_module}) do
+    case GenServer.call(__MODULE__, {:list_instances_by_caller, caller, protocol_module}) do
       [] -> :error
       [instance] -> {:ok, instance}
       instances -> raise_multiple_instances_error(instances, protocol_module)
@@ -69,31 +73,118 @@ defmodule TestServer.InstanceManager do
     """
   end
 
+  @spec fetch_instance_entry(pid()) ::
+          {:ok,
+           %{
+             caller: pid(),
+             instance: pid(),
+             monitor: reference(),
+             protocol_module: module(),
+             exit: nil | %{reason: nil | term(), stacktrace: nil | TestServer.stacktrace()}
+           }}
+          | {:error, :not_found}
+  def fetch_instance_entry(instance) do
+    GenServer.call(__MODULE__, {:fetch_entry, instance})
+  end
+
+  @spec delete_instance_entry(TestServer.instance()) :: :ok
+  def delete_instance_entry(instance) do
+    GenServer.call(__MODULE__, {:delete_entry, instance})
+  end
+
   @impl true
   def init(_options) do
-    {:ok, %{instances: []}}
+    {:ok, %{entries: []}}
   end
 
   @impl true
   def handle_call({:register, {caller, protocol_module, instance}}, _from, state) do
-    entry = %{caller: caller, instance: instance, protocol_module: protocol_module}
-    state = %{state | instances: state.instances ++ [entry]}
+    monitor = Process.monitor(instance)
+
+    entry = %{
+      caller: caller,
+      instance: instance,
+      monitor: monitor,
+      protocol_module: protocol_module,
+      exit: nil
+    }
+
+    state = %{state | entries: state.entries ++ [entry]}
 
     {:reply, {:ok, instance}, state}
   end
 
-  def handle_call({:get_by_caller, caller, protocol_module}, _from, state) do
+  def handle_call({:list_instances_by_caller, caller, protocol_module}, _from, state) do
     instances =
-      state.instances
-      |> Enum.filter(&(&1.caller == caller and &1.protocol_module == protocol_module))
+      state.entries
+      |> Enum.filter(fn entry ->
+        entry.caller == caller and
+          entry.protocol_module == protocol_module and
+          is_nil(entry.exit)
+      end)
       |> Enum.map(& &1.instance)
 
     {:reply, instances, state}
   end
 
-  def handle_call({:remove, instance}, _from, state) do
-    state = %{state | instances: Enum.reject(state.instances, &(&1.instance == instance))}
+  def handle_call({:stop_instance, instance, stacktrace}, _from, state) do
+    entries =
+      Enum.map(state.entries, fn entry ->
+        case entry.instance == instance do
+          true ->
+            Process.demonitor(entry.monitor)
 
-    {:reply, :ok, state}
+            %{entry | exit: %{reason: nil, stacktrace: stacktrace}}
+
+          false ->
+            entry
+        end
+      end)
+
+    {:reply, :ok, %{state | entries: entries}}
+  end
+
+  def handle_call({:fetch_entry, instance}, _from, state) do
+    case Enum.find(state.entries, &(&1.instance == instance)) do
+      nil -> {:reply, {:error, :not_found}, state}
+      entry -> {:reply, {:ok, entry}, state}
+    end
+  end
+
+  def handle_call({:delete_entry, instance}, _from, state) do
+    entries = Enum.reject(state.entries, &(&1.instance == instance))
+
+    {:reply, :ok, %{state | entries: entries}}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, instance, reason}, state) do
+    entries =
+      Enum.map(state.entries, fn entry ->
+        case entry.instance == instance do
+          true -> %{entry | exit: %{reason: reason, stacktrace: nil}}
+          false -> entry
+        end
+      end)
+
+    state = %{state | entries: entries}
+
+    case reason do
+      :normal ->
+        {:noreply, state}
+
+      :shutdown ->
+        {:noreply, state}
+
+      {:shutdown, _} ->
+        {:noreply, state}
+
+      reason ->
+        entry = Enum.find(state.entries, &(&1.instance == instance))
+
+        Process.exit(entry.caller, reason)
+
+        {:noreply, state}
+    end
   end
 end

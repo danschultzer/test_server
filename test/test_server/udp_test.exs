@@ -189,7 +189,7 @@ defmodule TestServer.UDPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.UDP.start!()
                      :ok = TestServer.UDP.stop()
@@ -257,7 +257,7 @@ defmodule TestServer.UDPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.UDP.start!()
                      :ok = TestServer.UDP.stop()
@@ -328,7 +328,7 @@ defmodule TestServer.UDPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.UDP.start!(transport: :dtls)
                      :ok = TestServer.UDP.stop()
@@ -365,7 +365,7 @@ defmodule TestServer.UDPTest do
       :ok = TestServer.UDP.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.UDP.peer(instance) end
     end
 
@@ -529,7 +529,7 @@ defmodule TestServer.UDPTest do
       :ok = TestServer.UDP.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.UDP.handle(peer) end
     end
 
@@ -846,7 +846,7 @@ defmodule TestServer.UDPTest do
       :ok = TestServer.UDP.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.UDP.send(peer) end
     end
 

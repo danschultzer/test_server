@@ -190,7 +190,7 @@ defmodule TestServer.TCPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.TCP.start!()
                      :ok = TestServer.TCP.stop()
@@ -256,7 +256,7 @@ defmodule TestServer.TCPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.TCP.start!()
                      :ok = TestServer.TCP.stop()
@@ -327,7 +327,7 @@ defmodule TestServer.TCPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.TCP.start!()
                      :ok = TestServer.TCP.stop()
@@ -361,7 +361,7 @@ defmodule TestServer.TCPTest do
       :ok = TestServer.TCP.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.TCP.connection(instance) end
     end
 
@@ -488,7 +488,7 @@ defmodule TestServer.TCPTest do
       :ok = TestServer.TCP.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.TCP.handle(connection) end
     end
 
@@ -1021,7 +1021,7 @@ defmodule TestServer.TCPTest do
       :ok = TestServer.TCP.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.TCP.send(connection) end
     end
 

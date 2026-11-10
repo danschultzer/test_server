@@ -17,6 +17,7 @@ TestServer now has SSH support with `TestServer.SSH`, TCP support with `TestServ
 - `TestServer.HTTP.handle/2` now accepts `:method` instead of `:via` option
 - Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.handle/2` and `TestServer.HTTP.websocket_handle/2`
 - Fixed UTF-8 response body handling for `TestServer.HTTP.Server.Httpd`
+- Fixed UTF-8 header and request body handling for `TestServer.HTTP.Server.Httpd`
 - Fixed invalid host header port parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed bracketed IPv6 host header parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed query string parsing with extra `?` segments in `TestServer.HTTP.Server.Httpd`

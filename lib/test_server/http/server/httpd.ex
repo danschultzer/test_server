@@ -94,13 +94,18 @@ if Code.ensure_loaded?(:httpd) do
       {_port, remote_ip} = peer(data)
       {:ok, remote_ip} = :inet.parse_address(remote_ip)
 
-      headers = Enum.map(parsed_header(data), &{to_string(elem(&1, 0)), to_string(elem(&1, 1))})
+      headers =
+        data
+        |> parsed_header()
+        |> Enum.map(fn {name, value} ->
+          {IO.iodata_to_binary(name), IO.iodata_to_binary(value)}
+        end)
 
       %Conn{
         adapter: {__MODULE__, data},
-        host: to_string(host),
-        method: to_string(method(data)),
-        path_info: split_path(to_string(path)),
+        host: host,
+        method: method(data),
+        path_info: split_path(path),
         port: port,
         remote_ip: remote_ip,
         query_string: qs,
@@ -110,12 +115,12 @@ if Code.ensure_loaded?(:httpd) do
       }
     end
 
-    defp method(data), do: httpd(data, :method)
+    defp method(data), do: data |> httpd(:method) |> IO.iodata_to_binary()
 
     defp request_path(data) do
       data
       |> httpd(:request_uri)
-      |> to_string()
+      |> IO.iodata_to_binary()
       |> String.split("?")
       |> case do
         [request_path] -> {request_path, ""}
@@ -129,7 +134,7 @@ if Code.ensure_loaded?(:httpd) do
       |> Enum.find(&(elem(&1, 0) == ~c"host"))
       |> Kernel.||({~c"host", ~c""})
       |> elem(1)
-      |> to_string()
+      |> IO.iodata_to_binary()
       |> case do
         "[" <> _host = host -> :binary.split(host, "]:")
         host -> :binary.split(host, ":")
@@ -173,7 +178,9 @@ if Code.ensure_loaded?(:httpd) do
       headers =
         headers
         |> Kernel.++([{"content-length", to_string(byte_size(body))}])
-        |> Enum.map(&{String.to_charlist(elem(&1, 0)), String.to_charlist(elem(&1, 1))})
+        |> Enum.map(fn {name, value} ->
+          {:binary.bin_to_list(name), :binary.bin_to_list(value)}
+        end)
         |> Kernel.++([{:code, status}])
 
       {:ok, nil, {:response, headers, body}}
@@ -190,7 +197,11 @@ if Code.ensure_loaded?(:httpd) do
     def get_http_protocol(data), do: httpd(data, :http_version)
 
     @impl Plug.Conn.Adapter
-    def read_req_body(data, _options), do: {:ok, to_string(httpd(data, :entity_body)), data}
+    def read_req_body(data, _options) do
+      body = IO.iodata_to_binary(httpd(data, :entity_body))
+
+      {:ok, body, data}
+    end
 
     # Callbacks yet to be implemented
 

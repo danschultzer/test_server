@@ -492,11 +492,11 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with `:path` option" do
-      TestServer.HTTP.handle(path: "/1", to: &Plug.Conn.resp(&1, 200, "1"))
-      TestServer.HTTP.handle(path: "/2", to: &Plug.Conn.resp(&1, 200, "2"))
+      TestServer.HTTP.handle(path: "/hi", to: &Plug.Conn.resp(&1, 200, "1"))
+      TestServer.HTTP.handle(path: "/héllo-👋", to: &Plug.Conn.resp(&1, 200, "2"))
 
-      assert http1_request(TestServer.HTTP.url("/2")) == {:ok, "2"}
-      assert http1_request(TestServer.HTTP.url("/1")) == {:ok, "1"}
+      assert http1_request(URI.encode(TestServer.HTTP.url("/héllo-👋"))) == {:ok, "2"}
+      assert http1_request(TestServer.HTTP.url("/hi")) == {:ok, "1"}
     end
 
     test "with no `:method` option" do

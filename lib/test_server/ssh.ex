@@ -144,10 +144,10 @@ defmodule TestServer.SSH do
       :suppress_warning
     ])
 
-    TestServer.start_instance(__MODULE__, options, &verify!/1)
+    TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
   end
 
-  defp verify!(instance) do
+  defp verify_instance!(instance) do
     verify_handlers!(instance)
     verify_channels!(instance)
   end
@@ -206,7 +206,7 @@ defmodule TestServer.SSH do
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     :ok = Server.stop(Instance.options(instance))
 
@@ -245,7 +245,7 @@ defmodule TestServer.SSH do
   @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
     Keyword.validate!(options, [:host])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     host = TestServer.host(options)
     port = instance |> Instance.options() |> Keyword.fetch!(:port)
@@ -297,7 +297,7 @@ defmodule TestServer.SSH do
   @spec channel(TestServer.instance(), keyword()) :: channel()
   def channel(instance, options) do
     Keyword.validate!(options, [:messages])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -388,7 +388,7 @@ defmodule TestServer.SSH do
   @spec handle(channel(), keyword()) :: :ok
   def handle({instance, channel_ref} = _channel, options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] =
       TestServer.pruned_stacktrace(__MODULE__)
@@ -434,7 +434,7 @@ defmodule TestServer.SSH do
   """
   @spec host_keys(TestServer.instance()) :: [host_key()]
   def host_keys(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     options = Instance.options(instance)
 

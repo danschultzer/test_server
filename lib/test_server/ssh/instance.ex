@@ -16,7 +16,7 @@ defmodule TestServer.SSH.Instance do
   @spec register(TestServer.instance(), {:channel, keyword(), TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.SSH.channel_ref()}}
   def register(instance, {:channel, options, stacktrace}) do
-    Keyword.has_key?(options, :messages) && ensure_messages!(options[:messages])
+    Keyword.has_key?(options, :messages) && validate_messages!(options[:messages])
 
     GenServer.call(instance, {:register, {:channel, options, stacktrace}})
   end
@@ -27,15 +27,15 @@ defmodule TestServer.SSH.Instance do
         ) ::
           {:ok, map()}
   def register(instance, {:handle, channel_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && ensure_function!(options, :match)
-    Keyword.has_key?(options, :to) && ensure_function!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
 
     GenServer.call(instance, {:register, {:handle, channel_ref, options, stacktrace}})
   end
 
   @message_events ~w(exec data env pty shell eof)a
 
-  defp ensure_messages!(messages) when is_list(messages) do
+  defp validate_messages!(messages) when is_list(messages) do
     case Enum.all?(messages, &(&1 in @message_events)) do
       true ->
         :ok
@@ -46,7 +46,7 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp ensure_messages!(messages) do
+  defp validate_messages!(messages) do
     case messages do
       :all ->
         :ok
@@ -56,7 +56,7 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp ensure_function!(options, option) do
+  defp validate_function_option!(options, option) do
     value = Keyword.get(options, option)
 
     case is_function(value) do
@@ -291,7 +291,7 @@ defmodule TestServer.SSH.Instance do
   defp validate_response!(response, handler, stacktrace) when is_function(handler, 2) do
     case response do
       {:reply, {data, options}, state} ->
-        ensure_response_options!(options, stacktrace)
+        validate_response_options!(options, stacktrace)
 
         {:reply, {data, options}, state}
 
@@ -316,7 +316,7 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp ensure_response_options!(options, stacktrace) do
+  defp validate_response_options!(options, stacktrace) do
     valid_options = ~w(exit_status data_type_code)a
 
     case Keyword.validate(options, valid_options) do

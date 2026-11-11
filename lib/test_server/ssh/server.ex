@@ -86,7 +86,7 @@ defmodule TestServer.SSH.Server do
   defp put_subsystems(daemon_options, instance, options) do
     subsystems = Keyword.get(options, :subsystems, [])
 
-    ensure_subsystems!(subsystems)
+    validate_subsystems!(subsystems)
 
     subsystems
     |> Enum.map(fn name ->
@@ -101,7 +101,7 @@ defmodule TestServer.SSH.Server do
     end
   end
 
-  defp ensure_subsystems!(subsystems) when is_list(subsystems) do
+  defp validate_subsystems!(subsystems) when is_list(subsystems) do
     case Enum.all?(subsystems, &(is_binary(&1) and &1 != "")) do
       true ->
         :ok
@@ -112,7 +112,7 @@ defmodule TestServer.SSH.Server do
     end
   end
 
-  defp ensure_subsystems!(subsystems) do
+  defp validate_subsystems!(subsystems) do
     raise ArgumentError, "expected :subsystems to be a list, got: #{inspect(subsystems)}"
   end
 

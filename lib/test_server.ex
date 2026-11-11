@@ -37,10 +37,10 @@ defmodule TestServer do
   defp prune_stacktrace([], _mod), do: []
 
   @doc false
-  def start_instance(protocol_module, options, verify_fn) do
+  def start_instance(protocol_module, options, verify_instance_fn) do
     case ExUnit.fetch_test_supervisor() do
       {:ok, _sup} ->
-        start_with_ex_unit(protocol_module, options, verify_fn)
+        start_with_ex_unit(protocol_module, options, verify_instance_fn)
 
       :error ->
         raise ArgumentError,
@@ -48,12 +48,12 @@ defmodule TestServer do
     end
   end
 
-  defp start_with_ex_unit(protocol_module, options, verify_fn) do
+  defp start_with_ex_unit(protocol_module, options, verify_instance_fn) do
     caller = self()
 
     case InstanceManager.start_instance(caller, protocol_module, options) do
       {:ok, instance} ->
-        put_ex_unit_on_exit_callback(protocol_module, instance, verify_fn)
+        put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn)
         {:ok, instance}
 
       {:error, {exception, stacktrace}} when is_exception(exception) ->
@@ -64,11 +64,11 @@ defmodule TestServer do
     end
   end
 
-  defp put_ex_unit_on_exit_callback(protocol_module, instance, verify_fn) do
+  defp put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn) do
     ExUnit.Callbacks.on_exit(fn ->
       if Process.alive?(instance) do
         try do
-          verify_fn.(instance)
+          verify_instance_fn.(instance)
         after
           protocol_module.stop(instance)
         end
@@ -78,13 +78,13 @@ defmodule TestServer do
 
   @doc false
   def stop_instance(protocol_module, instance) do
-    ensure_instance_alive!(protocol_module, instance)
+    assert_instance_alive!(protocol_module, instance)
 
     InstanceManager.stop_instance(instance)
   end
 
   @doc false
-  def ensure_instance_alive!(protocol_module, instance) do
+  def assert_instance_alive!(protocol_module, instance) do
     case Process.alive?(instance) do
       true -> :ok
       false -> raise "#{format_instance(protocol_module, instance)} is not running"

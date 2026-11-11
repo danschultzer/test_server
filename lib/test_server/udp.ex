@@ -68,10 +68,10 @@ defmodule TestServer.UDP do
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     Keyword.validate!(options, [:port, :transport, :tls, :ipfamily, :listen, :suppress_warning])
-    TestServer.start_instance(__MODULE__, options, &verify!/1)
+    TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
   end
 
-  defp verify!(instance) do
+  defp verify_instance!(instance) do
     verify_handlers!(instance)
     verify_peers!(instance)
   end
@@ -131,7 +131,7 @@ defmodule TestServer.UDP do
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
     TestServer.stop_instance(__MODULE__, instance)
   end
 
@@ -167,7 +167,7 @@ defmodule TestServer.UDP do
   @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
     Keyword.validate!(options, [:host])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     host = TestServer.host(options)
     port = instance |> Instance.options() |> Keyword.fetch!(:port)
@@ -199,7 +199,7 @@ defmodule TestServer.UDP do
   """
   @spec cacerts(TestServer.instance()) :: TestServer.cacerts()
   def cacerts(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     options = Instance.options(instance)
 
@@ -250,7 +250,7 @@ defmodule TestServer.UDP do
   """
   @spec peer(TestServer.instance()) :: peer()
   def peer(instance) when is_pid(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -318,7 +318,7 @@ defmodule TestServer.UDP do
   def handle({instance, peer_ref}, options)
       when is_pid(instance) and is_reference(peer_ref) and is_list(options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -366,7 +366,7 @@ defmodule TestServer.UDP do
   def send({instance, peer_ref}, options)
       when is_pid(instance) and is_reference(peer_ref) and is_list(options) do
     Keyword.validate!(options, [:to, :timeout])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 

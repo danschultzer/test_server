@@ -157,7 +157,7 @@ defmodule TestServer.HTTP do
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     :ok = Server.stop(Instance.options(instance))
 
@@ -203,7 +203,7 @@ defmodule TestServer.HTTP do
   @spec url(TestServer.instance(), binary(), keyword()) :: binary()
   def url(instance, uri, options) do
     Keyword.validate!(options, [:host])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     domain = TestServer.host(options)
     options = Instance.options(instance)
@@ -296,7 +296,7 @@ defmodule TestServer.HTTP do
   end
 
   defp register_handler(instance, options) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -368,7 +368,7 @@ defmodule TestServer.HTTP do
   """
   @spec cacerts(TestServer.instance()) :: TestServer.cacerts()
   def cacerts(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     options = Instance.options(instance)
 
@@ -512,7 +512,7 @@ defmodule TestServer.HTTP do
   @spec websocket_handle(websocket(), keyword()) :: :ok
   def websocket_handle({instance, websocket_ref}, options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -550,7 +550,7 @@ defmodule TestServer.HTTP do
   @spec websocket_send(websocket(), keyword()) :: :ok
   def websocket_send({instance, websocket_ref}, options) do
     Keyword.validate!(options, [:to])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 

@@ -21,7 +21,7 @@ defmodule TestServer.HTTP.Instance do
   def register(instance, {:handle, options, stacktrace}) do
     options = put_match_function(options)
 
-    ensure_plug!(options, :to)
+    validate_plug!(options, :to)
 
     GenServer.call(instance, {:register, {:handle, options, stacktrace}})
   end
@@ -29,7 +29,7 @@ defmodule TestServer.HTTP.Instance do
   @spec register(TestServer.instance(), {:plug, atom() | function(), TestServer.stacktrace()}) ::
           {:ok, map()}
   def register(instance, {:plug, plug, stacktrace}) do
-    ensure_plug!(plug)
+    validate_plug!(plug)
 
     GenServer.call(instance, {:register, {:plug, plug, stacktrace}})
   end
@@ -44,8 +44,8 @@ defmodule TestServer.HTTP.Instance do
         instance,
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
       ) do
-    Keyword.has_key?(options, :match) && ensure_function!(options, :match)
-    ensure_function!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
+    validate_function_option!(options, :to)
 
     GenServer.call(
       instance,
@@ -58,12 +58,12 @@ defmodule TestServer.HTTP.Instance do
           {:websocket, {:send, TestServer.HTTP.websocket_ref(), keyword()}}
         ) :: {:ok, pid()} | {:error, :einval} | {:error, :enotconn} | {:error, :closed}
   def register(instance, {:websocket, {:send, websocket_ref, options}}) do
-    ensure_function!(options, :to)
+    validate_function_option!(options, :to)
 
     GenServer.call(instance, {:register, {:websocket, {:send, websocket_ref, options}}})
   end
 
-  defp ensure_plug!(plug) do
+  defp validate_plug!(plug) do
     case plug?(plug) do
       true ->
         :ok
@@ -74,7 +74,7 @@ defmodule TestServer.HTTP.Instance do
     end
   end
 
-  defp ensure_plug!(options, option) do
+  defp validate_plug!(options, option) do
     plug = Keyword.get(options, option)
 
     case plug?(plug) do
@@ -96,7 +96,7 @@ defmodule TestServer.HTTP.Instance do
       function_exported?(plug, :call, 2)
   end
 
-  defp ensure_function!(options, option) do
+  defp validate_function_option!(options, option) do
     value = Keyword.get(options, option)
 
     case is_function(value) do
@@ -448,12 +448,12 @@ defmodule TestServer.HTTP.Instance do
   defp try_run_plug(conn, plug, stacktrace) do
     conn
     |> run_plug(plug)
-    |> check_halted!(plug, stacktrace)
+    |> validate_not_halted!(plug, stacktrace)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  defp check_halted!(%{halted: true}, plug, stacktrace) do
+  defp validate_not_halted!(%{halted: true}, plug, stacktrace) do
     raise """
     cannot halt a connection because all requests must be processed
 
@@ -462,7 +462,7 @@ defmodule TestServer.HTTP.Instance do
     """
   end
 
-  defp check_halted!(conn, _plug, _stacktrace), do: {:ok, conn}
+  defp validate_not_halted!(conn, _plug, _stacktrace), do: {:ok, conn}
 
   defp run_plug(conn, plug) when is_function(plug) do
     plug.(conn)

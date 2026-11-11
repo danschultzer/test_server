@@ -22,8 +22,8 @@ defmodule TestServer.UDP.Instance do
           {:handle, TestServer.UDP.peer_ref(), keyword(), TestServer.stacktrace()}
         ) :: {:ok, map()}
   def register(instance, {:handle, peer_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && ensure_function!(options, :match)
-    Keyword.has_key?(options, :to) && ensure_function!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
 
     GenServer.call(instance, {:register, {:handle, peer_ref, options, stacktrace}})
   end
@@ -39,7 +39,7 @@ defmodule TestServer.UDP.Instance do
   def register(instance, {:send, peer_ref, options}) do
     timeout = validate_timeout!(options)
 
-    Keyword.has_key?(options, :to) && ensure_function!(options, :to)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
 
     GenServer.call(
       instance,
@@ -48,7 +48,7 @@ defmodule TestServer.UDP.Instance do
     )
   end
 
-  defp ensure_function!(options, option) do
+  defp validate_function_option!(options, option) do
     value = Keyword.get(options, option)
 
     case is_function(value) do
@@ -105,7 +105,7 @@ defmodule TestServer.UDP.Instance do
           | {:ok, TestServer.UDP.state()}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(instance, {:send, options, peer_state, stacktrace}) do
-    Keyword.has_key?(options, :to) && ensure_function!(options, :to)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
 
     GenServer.call(instance, {:dispatch, {:send, options, peer_state, stacktrace}})
   end

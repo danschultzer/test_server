@@ -74,10 +74,10 @@ defmodule TestServer.TCP do
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
     Keyword.validate!(options, [:port, :transport, :tls, :ipfamily, :listen, :suppress_warning])
-    TestServer.start_instance(__MODULE__, options, &verify!/1)
+    TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
   end
 
-  defp verify!(instance) do
+  defp verify_instance!(instance) do
     verify_handlers!(instance)
     verify_connections!(instance)
   end
@@ -135,7 +135,7 @@ defmodule TestServer.TCP do
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
     TestServer.stop_instance(__MODULE__, instance)
   end
 
@@ -171,7 +171,7 @@ defmodule TestServer.TCP do
   @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
   def address(instance, options) when is_pid(instance) and is_list(options) do
     Keyword.validate!(options, [:host])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     host = TestServer.host(options)
     port = instance |> Instance.options() |> Keyword.fetch!(:port)
@@ -203,7 +203,7 @@ defmodule TestServer.TCP do
   """
   @spec cacerts(TestServer.instance()) :: TestServer.cacerts()
   def cacerts(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     options = Instance.options(instance)
 
@@ -253,7 +253,7 @@ defmodule TestServer.TCP do
   """
   @spec connection(TestServer.instance()) :: connection()
   def connection(instance) when is_pid(instance) do
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -330,7 +330,7 @@ defmodule TestServer.TCP do
   def handle({instance, connection_ref}, options)
       when is_pid(instance) and is_reference(connection_ref) and is_list(options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -375,7 +375,7 @@ defmodule TestServer.TCP do
   def send({instance, connection_ref}, options)
       when is_pid(instance) and is_reference(connection_ref) and is_list(options) do
     Keyword.validate!(options, [:to, :timeout])
-    TestServer.ensure_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(__MODULE__, instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 

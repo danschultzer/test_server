@@ -112,15 +112,29 @@ defmodule TestServer.HTTPTest do
     end
 
     test "when test ends" do
-      {:ok, port} = TestServer.open_port([])
+      defmodule StartEndTest do
+        use ExUnit.Case
 
-      on_exit(fn ->
-        refute :gen_tcp.listen(port, []) == {:error, :eaddrinuse},
-               "Port #{port} must be released after test ends"
-      end)
+        test "succeeds" do
+          instance = TestServer.HTTP.start!()
+          options = TestServer.HTTP.Instance.options(instance)
+          port = Keyword.fetch!(options, :port)
+          server_ref = Keyword.fetch!(options, :http_server_reference)
 
-      assert {:ok, _instance} = TestServer.HTTP.start(port: port)
-      assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+          send(__MODULE__, {:server, server_ref, port})
+
+          assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+        end
+      end
+
+      Process.register(self(), StartEndTest)
+
+      assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
+      assert_receive {:server, server_ref, port}
+      assert monitor = Process.monitor(server_ref)
+      assert_receive {:DOWN, ^monitor, :process, ^server_ref, _reason}
+      assert {:ok, socket} = :gen_tcp.listen(port, [])
+      assert :ok = :gen_tcp.close(socket)
     end
   end
 

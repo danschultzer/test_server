@@ -322,15 +322,29 @@ defmodule TestServer.SSHTest do
     end
 
     test "when test ends" do
-      {:ok, port} = TestServer.open_port([])
+      defmodule StartEndTest do
+        use ExUnit.Case
 
-      on_exit(fn ->
-        refute :gen_tcp.listen(port, []) == {:error, :eaddrinuse},
-               "Port #{port} must be released after test ends"
-      end)
+        test "succeeds" do
+          instance = TestServer.SSH.start!()
+          options = TestServer.SSH.Instance.options(instance)
+          daemon_ref = Keyword.fetch!(options, :daemon_ref)
+          {_host, port} = TestServer.SSH.address(instance)
 
-      assert {:ok, _instance} = TestServer.SSH.start(port: port)
-      assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+          send(__MODULE__, {:server, daemon_ref, port})
+
+          assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+        end
+      end
+
+      Process.register(self(), StartEndTest)
+
+      assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
+      assert_receive {:server, daemon_ref, port}
+      assert monitor = Process.monitor(daemon_ref)
+      assert_receive {:DOWN, ^monitor, :process, ^daemon_ref, _reason}
+      assert {:ok, socket} = :gen_tcp.listen(port, [])
+      assert :ok = :gen_tcp.close(socket)
     end
   end
 

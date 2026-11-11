@@ -140,17 +140,29 @@ defmodule TestServer.UDPTest do
     end
 
     test "when test ends" do
-      {:ok, socket} = :gen_udp.open(0, [])
-      {:ok, port} = :inet.port(socket)
-      :gen_udp.close(socket)
+      defmodule StartEndTest do
+        use ExUnit.Case
 
-      on_exit(fn ->
-        refute :gen_udp.open(port, []) == {:error, :eaddrinuse},
-               "Port #{port} must be released after test ends"
-      end)
+        test "succeeds" do
+          instance = TestServer.UDP.start!()
+          options = TestServer.UDP.Instance.options(instance)
+          receiver = Keyword.fetch!(options, :receiver)
+          {_host, port} = TestServer.UDP.address(instance)
 
-      assert {:ok, _instance} = TestServer.UDP.start(port: port)
-      assert {:error, :eaddrinuse} = :gen_udp.open(port, [])
+          send(__MODULE__, {:server, receiver, port})
+
+          assert {:error, :eaddrinuse} = :gen_udp.open(port, [])
+        end
+      end
+
+      Process.register(self(), StartEndTest)
+
+      assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
+      assert_receive {:server, receiver, port}
+      assert monitor = Process.monitor(receiver)
+      assert_receive {:DOWN, ^monitor, :process, ^receiver, _reason}
+      assert {:ok, socket} = :gen_udp.open(port, [])
+      assert :ok = :gen_udp.close(socket)
     end
   end
 

@@ -24,7 +24,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       )
 
       assert {:ok, {200, _headers, "OK"}} =
-               http_request(:get, TestServer.HTTP.url(), [], version: ~c"HTTP/1.0")
+               http_request(:get, TestServer.HTTP.url(), [], nil, version: ~c"HTTP/1.0")
     end
 
     test "with host header without port" do
@@ -112,6 +112,23 @@ defmodule TestServer.HTTP.Server.HttpdTest do
                http_request(:get, TestServer.HTTP.url("/?foo=bar?foo=baz"))
     end
 
+    test "with UTF-8 header and body" do
+      header = "héllo 👋"
+      body = "héllo 👋"
+
+      TestServer.HTTP.handle(
+        to: fn conn ->
+          assert Plug.Conn.get_req_header(conn, "x-name") == [header]
+          assert {:ok, ^body, conn} = Plug.Conn.read_body(conn)
+
+          Plug.Conn.resp(conn, 200, "OK")
+        end
+      )
+
+      assert {:ok, {200, _headers, "OK"}} =
+               http_request(:post, TestServer.HTTP.url(), [{"x-name", header}], body)
+    end
+
     test "builds conn" do
       url = TestServer.HTTP.url("/a//1?foo=bar")
       %{port: port} = URI.parse(url)
@@ -140,30 +157,44 @@ defmodule TestServer.HTTP.Server.HttpdTest do
   end
 
   describe "send_resp/4" do
-    test "with UTF-8 content" do
+    test "with UTF-8 header and body" do
+      header = "héllo 👋"
       body = "héllo 👋"
 
       TestServer.HTTP.handle(
         to: fn conn ->
-          Plug.Conn.resp(conn, 200, body)
+          conn
+          |> Plug.Conn.put_resp_header("x-name", header)
+          |> Plug.Conn.resp(200, body)
         end
       )
 
       assert {:ok, {200, headers, ^body}} = http_request(:get, TestServer.HTTP.url())
+
       assert List.keyfind(headers, "content-length", 0) == {"content-length", "11"}
+      assert List.keyfind(headers, "x-name", 0) == {"x-name", header}
     end
   end
 
-  defp http_request(method, url, headers \\ [], options \\ []) do
-    url = String.to_charlist(url)
-
+  defp http_request(method, url, headers \\ [], body \\ nil, options \\ []) do
     headers =
-      Enum.map(headers, &{String.to_charlist(elem(&1, 0)), String.to_charlist(elem(&1, 1))})
+      Enum.map(headers, fn {name, value} ->
+        {:binary.bin_to_list(name), :binary.bin_to_list(value)}
+      end)
 
-    case :httpc.request(method, {url, headers}, options, []) do
+    request =
+      case body do
+        nil -> {url, headers}
+        body -> {url, headers, ~c"text/plain", body}
+      end
+
+    case :httpc.request(method, request, options, []) do
       {:ok, {{_, status_code, _}, response_headers, body}} ->
         response_headers =
-          Enum.map(response_headers, &{to_string(elem(&1, 0)), to_string(elem(&1, 1))})
+          Enum.map(
+            response_headers,
+            &{IO.iodata_to_binary(elem(&1, 0)), IO.iodata_to_binary(elem(&1, 1))}
+          )
 
         {:ok, {status_code, response_headers, IO.iodata_to_binary(body)}}
 

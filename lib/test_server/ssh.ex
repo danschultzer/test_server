@@ -11,10 +11,22 @@ defmodule TestServer.SSH do
   @type channel_ref :: reference()
   @type state :: term()
 
+  @type response_options :: [
+          close: boolean(),
+          exit_status: 0..0xFFFF_FFFF
+        ]
+
+  @type reply_options :: [
+          data_type_code: 0..0xFFFF_FFFF,
+          close: boolean(),
+          exit_status: 0..0xFFFF_FFFF
+        ]
+
   @type handler_fun :: (:ssh_connection.channel_msg(), state() ->
                           {:reply, iodata(), state()}
-                          | {:reply, {iodata(), keyword()}, state()}
-                          | {:ok, state()})
+                          | {:reply, {iodata(), reply_options()}, state()}
+                          | {:ok, state()}
+                          | {:ok, response_options(), state()})
 
   @type raw_handler_fun :: (:ssh_connection.channel_msg(), :ssh.connection_ref(), state() ->
                               {:ok, state()}
@@ -356,14 +368,19 @@ defmodule TestServer.SSH do
 
   ## `:to` return options
 
-  The `{:reply, {data, options}, state}` return from a `t:handler_fun/0` allows
-  you to specify options in the options keyword list:
+  The `{:reply, {data, options}, state}` and `{:ok, options, state}` returns
+  from a `t:handler_fun/0` allow you to specify options in a keyword list:
 
-    * `:data_type_code` - an integer SSH data type code to send with the reply,
-      defaults to `0` (SSH_MSG_CHANNEL_DATA);
+    * `:data_type_code` - an unsigned 32-bit SSH data type code to send with
+      the reply, defaults to `0` (SSH_MSG_CHANNEL_DATA). Only valid for
+      `:reply` responses;
 
-    * `:exit_status`    - an integer exit status to send when finishing an
-      `:exec` channel, defaults to `0`. Ignored for other channel types;
+    * `:close`          - whether to send an exit status and EOF and close the
+      channel. Defaults to `true` for `:exec` messages and `false` for other
+      messages;
+
+    * `:exit_status`    - an unsigned 32-bit exit status to send when closing
+      the channel, defaults to `0`;
 
   ## Examples
 

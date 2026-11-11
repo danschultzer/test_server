@@ -89,7 +89,7 @@ defmodule TestServer.SSH.Channel do
         )
 
       false ->
-        {:ok, state.channel_state}
+        {:ok, [], state.channel_state}
     end
   end
 
@@ -138,31 +138,17 @@ defmodule TestServer.SSH.Channel do
     reply
   end
 
-  defp acknowledge(
-         %{
-           type: type,
-           channel_id: _channel_id,
-           connection: _connection,
-           frame: _frame
-         } = reply
-       )
-       when type in ~w(eof closed signal window_change)a, do: reply
+  defp acknowledge(%{type: type} = reply) when type in ~w(eof closed signal window_change)a,
+    do: reply
 
-  defp send_response(
-         %{
-           connection: _connection,
-           channel_id: _channel_id,
-           state: state
-         } = reply,
-         {:ok, channel_state}
-       ) do
+  defp send_response(%{state: state} = reply, {:ok, _options, channel_state}) do
     %{reply | state: %{state | channel_state: channel_state}}
   end
 
   defp send_response(
          %{
-           connection: connection,
            channel_id: channel_id,
+           connection: connection,
            state: state
          } = reply,
          {:reply, {data, options}, channel_state}
@@ -176,8 +162,8 @@ defmodule TestServer.SSH.Channel do
 
   defp send_response(
          %{
-           connection: connection,
            channel_id: channel_id,
+           connection: connection,
            frame: frame,
            state: state
          } = reply,
@@ -195,9 +181,8 @@ defmodule TestServer.SSH.Channel do
 
   defp send_response(
          %{
-           connection: connection,
            channel_id: channel_id,
-           frame: _frame,
+           connection: connection,
            state: state
          } = reply,
          {:error, {exception, stacktrace}}
@@ -249,47 +234,39 @@ defmodule TestServer.SSH.Channel do
     """
   end
 
+  defp finish(%{frame: {:closed, channel_id}, state: state}, _response),
+    do: {:stop, channel_id, state}
+
   defp finish(
          %{
+           type: type,
+           channel_id: channel_id,
            connection: connection,
-           frame: {:exec, channel_id, _want_reply, _command},
            state: state
          },
          response
        ) do
-    exit_status =
+    options =
       case response do
-        {:reply, {_data, options}, _channel_state} -> Keyword.get(options, :exit_status, 0)
-        {:error, _reason} -> 1
-        _other -> 0
+        {:reply, {_data, options}, _channel_state} -> options
+        {:ok, options, _channel_state} -> options
+        {:error, _reason} -> [close: true, exit_status: 1]
       end
 
-    :ssh_connection.exit_status(connection, channel_id, exit_status)
-    :ssh_connection.send_eof(connection, channel_id)
-    :ssh_connection.close(connection, channel_id)
+    case Keyword.get(options, :close, type == :exec) do
+      true ->
+        exit_status = Keyword.get(options, :exit_status, 0)
 
-    {:stop, channel_id, state}
+        :ssh_connection.exit_status(connection, channel_id, exit_status)
+        :ssh_connection.send_eof(connection, channel_id)
+        :ssh_connection.close(connection, channel_id)
+
+        {:stop, channel_id, state}
+
+      false ->
+        {:ok, state}
+    end
   end
-
-  defp finish(
-         %{
-           connection: _,
-           frame: {:closed, channel_id},
-           state: state
-         },
-         _response
-       ),
-       do: {:stop, channel_id, state}
-
-  defp finish(
-         %{
-           connection: _,
-           frame: _,
-           state: state
-         },
-         _response
-       ),
-       do: {:ok, state}
 
   @impl true
   def terminate(_reason, _state), do: :ok

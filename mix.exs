@@ -51,6 +51,7 @@ defmodule TestServer.MixProject do
       {:websockex, "~> 0.5.1", only: [:test]},
       {:finch, ">= 0.0.0", only: [:test]},
       {:gen_smtp, "~> 1.3", only: :test},
+      {:sshkit, "~> 0.3", only: :test},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end

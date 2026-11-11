@@ -86,8 +86,8 @@ defmodule TestServer.SSH.Instance do
         ) ::
           {:raw, {:ok, TestServer.SSH.state()}}
           | {:raw, {:stop, :ssh.channel_id(), TestServer.SSH.state()}}
-          | {:reply, {iodata(), keyword()}, TestServer.SSH.state()}
-          | {:ok, TestServer.SSH.state()}
+          | {:reply, {iodata(), TestServer.SSH.reply_options()}, TestServer.SSH.state()}
+          | {:ok, TestServer.SSH.response_options(), TestServer.SSH.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(instance, {:handle, channel_ref, connection, message, channel_state}) do
@@ -291,7 +291,7 @@ defmodule TestServer.SSH.Instance do
   defp validate_response!(response, handler, stacktrace) when is_function(handler, 2) do
     case response do
       {:reply, {data, options}, state} ->
-        validate_response_options!(options, stacktrace)
+        validate_response_options!(options, ~w(exit_status data_type_code close)a, stacktrace)
 
         {:reply, {data, options}, state}
 
@@ -299,7 +299,12 @@ defmodule TestServer.SSH.Instance do
         {:reply, {data, []}, state}
 
       {:ok, state} ->
-        {:ok, state}
+        {:ok, [], state}
+
+      {:ok, options, state} ->
+        validate_response_options!(options, ~w(exit_status close)a, stacktrace)
+
+        {:ok, options, state}
 
       _other ->
         raise """
@@ -310,20 +315,21 @@ defmodule TestServer.SSH.Instance do
           - {:reply, data, state}
           - {:reply, {data, options}, state}
           - {:ok, state}
+          - {:ok, options, state}
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
     end
   end
 
-  defp validate_response_options!(options, stacktrace) do
-    valid_options = ~w(exit_status data_type_code)a
-
-    case Keyword.validate(options, valid_options) do
-      {:ok, _options} ->
-        :ok
-
-      {:error, _keys} ->
+  defp validate_response_options!(options, valid_options, stacktrace) do
+    with true <- validate_options(options, valid_options),
+         true <- validate_close_option(options),
+         true <- validate_exit_status_option(options),
+         true <- validate_data_type_code_option(options) do
+      :ok
+    else
+      false ->
         raise """
         invalid options in callback response, got: #{inspect(options)}
 
@@ -331,6 +337,36 @@ defmodule TestServer.SSH.Instance do
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
+    end
+  end
+
+  defp validate_options(options, valid_options) do
+    case Keyword.validate(options, valid_options) do
+      {:ok, _} -> true
+      {:error, _} -> false
+    end
+  end
+
+  defp validate_close_option(options) do
+    case Keyword.has_key?(options, :close) do
+      true -> is_boolean(Keyword.get(options, :close))
+      false -> true
+    end
+  end
+
+  @max_uint32 0xFFFF_FFFF
+
+  defp validate_exit_status_option(options) do
+    case Keyword.has_key?(options, :exit_status) do
+      true -> Keyword.get(options, :exit_status) in 0..@max_uint32
+      false -> true
+    end
+  end
+
+  defp validate_data_type_code_option(options) do
+    case Keyword.has_key?(options, :data_type_code) do
+      true -> Keyword.get(options, :data_type_code) in 0..@max_uint32
+      false -> true
     end
   end
 end

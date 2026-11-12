@@ -6,19 +6,28 @@ on:
   pull_request:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
+  actions:
+    uses: $/.github/workflows/actions.yml
+
   lint:
+    needs: actions
     runs-on: ubuntu-latest
     name: Linter
     env:
       MIX_ENV: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+      - uses: actions/checkout@v4.4.0
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "29"
           elixir-version: "1.20"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v4.3.0
         env:
           cache-name: ${{ github.event.repository.name }}-plt
         with:
@@ -33,6 +42,7 @@ jobs:
       - run: mix dialyzer --format github
 
   test:
+    needs: actions
     strategy:
       matrix:
         http_server: [Httpd, Plug.Cowboy, Bandit]
@@ -47,8 +57,10 @@ jobs:
       MIX_ENV: test
       HTTP_SERVER: ${{matrix.http_server}}
     steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+      - uses: actions/checkout@v4.4.0
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: ${{matrix.version.otp}}
           elixir-version: ${{matrix.version.elixir}}

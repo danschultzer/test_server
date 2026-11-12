@@ -5,9 +5,12 @@ on:
     types:
       - published
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    uses: ./.github/workflows/ci.yml
+    uses: $/.github/workflows/ci.yml
 
   publish:
     needs: test
@@ -16,8 +19,10 @@ jobs:
     env:
       HEX_API_KEY: ${{secrets.HEX_API_KEY}}
     steps:
-      - uses: actions/checkout@v2
-      - uses: erlef/setup-beam@v1
+      - uses: actions/checkout@v4.4.0
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "29"
           elixir-version: "1.20"

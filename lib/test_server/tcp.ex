@@ -209,10 +209,10 @@ defmodule TestServer.TCP do
 
     cond do
       :tls not in options[:transport] ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is not running with the [transport: :tls] or [transport: [:tcp, :tls]] options"
+        raise "expected #{TestServer.format_instance(__MODULE__, instance)} to be running with [transport: :tls] or [transport: [:tcp, :tls]] options"
 
       not Keyword.has_key?(options, :cacerts) ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with custom :tls certificate options"
+        raise "expected #{TestServer.format_instance(__MODULE__, instance)} not to be running with [tls: [cacerts: ...]] option"
 
       true ->
         Keyword.fetch!(options, :cacerts)

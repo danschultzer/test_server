@@ -1290,7 +1290,7 @@ defmodule TestServer.SSHTest do
       )
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is running with the \[host_keys: function\] option/,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> not to be running with \[host_keys: ...\] option/,
                    fn -> TestServer.SSH.host_keys() end
     end
   end

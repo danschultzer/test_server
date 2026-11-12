@@ -340,7 +340,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is not running with the \[transport: :tls\] or \[transport: \[:tcp, :tls\]\] options/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running with \[transport: :tls\] or \[transport: \[:tcp, :tls\]\] option/,
                    fn -> TestServer.TCP.cacerts() end
     end
 
@@ -350,7 +350,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!(transport: :tls, tls: tls_options)
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.TCP\.Instance \#PID\<[0-9.]+\> is running with custom :tls certificate options/,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> not to be running with \[tls: \[cacerts: \.\.\.\]\] option/,
                    fn -> TestServer.TCP.cacerts() end
     end
   end

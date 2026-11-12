@@ -341,7 +341,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/is not running with the \[transport: :dtls\] option/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running with \[transport: :dtls\] option/,
                    fn -> TestServer.UDP.cacerts() end
     end
 
@@ -354,7 +354,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!(transport: :dtls, tls: tls_options)
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.UDP\.Instance \#PID\<[0-9.]+\> is running with custom :tls certificate options/,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> not to be running with \[tls: \[cacerts: \.\.\.\]\] option/,
                    fn -> TestServer.UDP.cacerts() end
     end
   end

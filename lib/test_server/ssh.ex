@@ -460,7 +460,7 @@ defmodule TestServer.SSH do
         options[:host_keys]
 
       false ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} is running with the [host_keys: function] option"
+        raise "expected #{TestServer.format_instance(__MODULE__, instance)} not to be running with [host_keys: ...] option"
     end
   end
 end

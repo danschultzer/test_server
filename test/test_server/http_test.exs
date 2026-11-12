@@ -768,7 +768,7 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running with the \[scheme: :https\] option/,
+                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running with \[scheme: :https\] option/,
                    fn -> TestServer.HTTP.cacerts() end
     end
 
@@ -778,7 +778,7 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.start!(scheme: :https, tls: tls_options)
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is running with custom :tls certificate options/,
+                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> not to be running with \[tls: \[cacerts: \.\.\.\]\] option/,
                    fn -> TestServer.HTTP.cacerts() end
     end
   end

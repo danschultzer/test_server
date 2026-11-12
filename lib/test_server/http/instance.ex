@@ -202,6 +202,11 @@ defmodule TestServer.HTTP.Instance do
     GenServer.call(instance, :websocket_handlers)
   end
 
+  @spec websockets(TestServer.instance()) :: [map()]
+  def websockets(instance) do
+    GenServer.call(instance, :websockets)
+  end
+
   @spec format_websocket_handlers([map()]) :: binary()
   def format_websocket_handlers(websocket_handlers) do
     websocket_handlers
@@ -295,7 +300,7 @@ defmodule TestServer.HTTP.Instance do
   end
 
   def handle_call(option, _from, state)
-      when option in [:options, :handlers, :websocket_handlers] do
+      when option in [:options, :handlers, :websockets, :websocket_handlers] do
     {:reply, Map.fetch!(state, option), state}
   end
 

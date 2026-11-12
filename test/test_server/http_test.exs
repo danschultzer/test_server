@@ -1202,12 +1202,14 @@ defmodule TestServer.HTTPTest do
       end
 
       test "when client has disconnected" do
+        {:ok, instance} = TestServer.HTTP.start()
         websocket = TestServer.HTTP.websocket("/ws")
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-        assert monitor = Process.monitor(client)
+        assert [%{owner: pid}] = TestServer.HTTP.Instance.websockets(instance)
+        assert monitor = Process.monitor(pid)
         assert WebSocketClient.close(client) == :ok
-        assert_receive {:DOWN, ^monitor, :process, ^client, _reason}
+        assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
 
         assert_raise RuntimeError,
                      ~r/cannot send to the websocket because the client has disconnected/,

@@ -6,7 +6,7 @@ Mock TCP stream endpoints with TLS support.
 
 ## Usage
 
-Add data expectations with `TestServer.TCP.handle/2`:
+Add data expectations with `TestServer.TCP.handle/1`:
 
 ```elixir
 test "send/2" do
@@ -26,7 +26,7 @@ TCP does not preserve message boundaries. Start with `listen: [packet: :line]` t
 TestServer.TCP.start!(listen: [packet: :line])
 ```
 
-`TestServer.TCP.handle/2` can route data to an anonymous function:
+`TestServer.TCP.handle/1` can route data to an anonymous function:
 
 ```elixir
 TestServer.TCP.handle(to: fn _data, state -> {:reply, "pong", state} end)
@@ -63,7 +63,7 @@ TestServer.TCP.send(connection, to: fn state -> {:reply, "ping", state} end)
 assert TCPClient.receive_data(socket) == {:ok, "ping"}
 ```
 
-Use `TestServer.TCP.connection/1` to expect multiple client connections or use with `TestServer.TCP.send/2`. They are assigned to accepted sockets in the order they are added:
+Use `TestServer.TCP.connection/0` to expect multiple client connections or use with `TestServer.TCP.send/2`. They are assigned to accepted sockets in the order they are added:
 
 ```elixir
 connection_1 = TestServer.TCP.connection()

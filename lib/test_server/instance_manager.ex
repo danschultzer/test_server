@@ -78,7 +78,7 @@ defmodule TestServer.InstanceManager do
            %{
              caller: pid(),
              instance: pid(),
-             monitor: reference(),
+             ref: reference(),
              protocol_module: module(),
              exit: nil | %{reason: nil | term(), stacktrace: nil | TestServer.stacktrace()}
            }}
@@ -99,12 +99,12 @@ defmodule TestServer.InstanceManager do
 
   @impl true
   def handle_call({:register, {caller, protocol_module, instance}}, _from, state) do
-    monitor = Process.monitor(instance)
+    monitor_ref = Process.monitor(instance)
 
     entry = %{
       caller: caller,
       instance: instance,
-      monitor: monitor,
+      ref: monitor_ref,
       protocol_module: protocol_module,
       exit: nil
     }
@@ -132,7 +132,7 @@ defmodule TestServer.InstanceManager do
       Enum.map(state.entries, fn entry ->
         case entry.instance == instance do
           true ->
-            Process.demonitor(entry.monitor)
+            Process.demonitor(entry.ref)
 
             %{entry | exit: %{reason: nil, stacktrace: stacktrace}}
 

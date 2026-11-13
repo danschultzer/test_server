@@ -4,6 +4,7 @@ defmodule TestServer.HTTP do
              |> File.read!()
              |> String.split("<!-- MDOC !-->")
              |> Enum.fetch!(1)
+             |> String.trim()
 
   alias Plug.Conn
   alias TestServer.HTTP.{Instance, Server}
@@ -167,11 +168,6 @@ defmodule TestServer.HTTP do
   @spec url() :: binary()
   def url, do: url("")
 
-  @spec url(binary() | keyword() | TestServer.instance()) :: binary()
-  def url(uri) when is_binary(uri), do: url(uri, [])
-  def url(options) when is_list(options), do: url("", options)
-  def url(instance) when is_pid(instance), do: url(instance, "", [])
-
   @doc """
   Produces a URL for current test server.
 
@@ -188,27 +184,32 @@ defmodule TestServer.HTTP do
       assert TestServer.HTTP.url("/test") == "http://localhost:4444/test"
       assert TestServer.HTTP.url(host: "example.com") == "http://example.com:4444"
   """
-  @spec url(binary(), keyword()) :: binary()
-  def url(uri, options) when is_binary(uri),
-    do: url(TestServer.fetch_instance!(__MODULE__), uri, options)
+  @spec url(uri_path :: binary() | keyword() | TestServer.instance()) :: binary()
+  def url(path) when is_binary(path), do: url(path, [])
+  def url(options) when is_list(options), do: url("", options)
+  def url(instance) when is_pid(instance), do: url(instance, "", [])
 
-  @spec url(TestServer.instance(), binary()) :: binary()
-  def url(instance, uri) when is_pid(instance), do: url(instance, uri, [])
+  @spec url(uri_path :: binary(), keyword()) :: binary()
+  def url(path, options) when is_binary(path),
+    do: url(TestServer.fetch_instance!(__MODULE__), path, options)
+
+  @spec url(TestServer.instance(), uri_path :: binary()) :: binary()
+  def url(instance, path) when is_pid(instance), do: url(instance, path, [])
 
   @doc """
   Produces a URL for a test server instance.
 
-  See `url/2` for options.
+  See `url/1` for options.
   """
-  @spec url(TestServer.instance(), binary(), keyword()) :: binary()
-  def url(instance, uri, options) do
+  @spec url(TestServer.instance(), uri_path :: binary(), keyword()) :: binary()
+  def url(instance, path, options) do
     Keyword.validate!(options, [:host])
     TestServer.assert_instance_alive!(__MODULE__, instance)
 
     domain = TestServer.host(options)
     options = Instance.options(instance)
 
-    "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{uri}"
+    "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{path}"
   end
 
   def handle, do: handle([])
@@ -260,13 +261,13 @@ defmodule TestServer.HTTP do
     handle(instance, options)
   end
 
-  @spec handle(binary()) :: :ok
+  @spec handle(uri_path :: binary()) :: :ok
   def handle(path) when is_binary(path), do: handle(path, [])
 
   @spec handle(TestServer.instance()) :: :ok
   def handle(instance) when is_pid(instance), do: handle(instance, [])
 
-  @spec handle(TestServer.instance(), binary()) :: :ok
+  @spec handle(TestServer.instance(), uri_path :: binary()) :: :ok
   def handle(instance, path) when is_pid(instance) and is_binary(path),
     do: handle(instance, path, [])
 
@@ -284,12 +285,12 @@ defmodule TestServer.HTTP do
     :ok
   end
 
-  @spec handle(binary(), keyword()) :: :ok
+  @spec handle(uri_path :: binary(), keyword()) :: :ok
   def handle(path, options) when is_binary(path) and is_list(options) do
     handle(Keyword.put(options, :path, path))
   end
 
-  @spec handle(TestServer.instance(), binary(), keyword()) :: :ok
+  @spec handle(TestServer.instance(), uri_path :: binary(), keyword()) :: :ok
   def handle(instance, path, options)
       when is_pid(instance) and is_binary(path) and is_list(options) do
     handle(instance, Keyword.put(options, :path, path))
@@ -387,7 +388,7 @@ defmodule TestServer.HTTP do
   def websocket, do: websocket([])
 
   @doc """
-  Adds a websocket endpoint to current test server.
+  Adds a websocket endpoint to the current test server.
 
   The `:to` option can be overridden the same way as for `handle/1`, and will
   be called during the HTTP handshake. If the `conn.state` is `:unset` the
@@ -432,13 +433,13 @@ defmodule TestServer.HTTP do
     websocket(instance, options)
   end
 
-  @spec websocket(binary()) :: websocket()
+  @spec websocket(uri_path :: binary()) :: websocket()
   def websocket(path) when is_binary(path), do: websocket(path, [])
 
   @spec websocket(TestServer.instance()) :: websocket()
   def websocket(instance) when is_pid(instance), do: websocket(instance, [])
 
-  @spec websocket(TestServer.instance(), binary()) :: websocket()
+  @spec websocket(TestServer.instance(), uri_path :: binary()) :: websocket()
   def websocket(instance, path) when is_pid(instance) and is_binary(path),
     do: websocket(instance, path, [])
 
@@ -461,12 +462,12 @@ defmodule TestServer.HTTP do
     {instance, ref}
   end
 
-  @spec websocket(binary(), keyword()) :: websocket()
+  @spec websocket(uri_path :: binary(), keyword()) :: websocket()
   def websocket(path, options) when is_binary(path) and is_list(options) do
     websocket(Keyword.put(options, :path, path))
   end
 
-  @spec websocket(TestServer.instance(), binary(), keyword()) :: websocket()
+  @spec websocket(TestServer.instance(), uri_path :: binary(), keyword()) :: websocket()
   def websocket(instance, path, options)
       when is_pid(instance) and is_binary(path) and is_list(options) do
     websocket(instance, Keyword.put(options, :path, path))

@@ -6,7 +6,7 @@ Mock SSH endpoint with channel and message expectations, and password/public key
 
 ## Usage
 
-Add message expectations with `TestServer.SSH.handle/2`:
+Add message expectations with `TestServer.SSH.handle/1`:
 
 ```elixir
 test "send/3" do
@@ -21,7 +21,7 @@ test "send/3" do
 end
 ```
 
-`TestServer.SSH.handle/2` can route a message to an anonymous function with `:to` option.
+`TestServer.SSH.handle/1` can route a message to an anonymous function with `:to` option.
 
 ```elixir
 TestServer.SSH.handle(
@@ -45,8 +45,8 @@ TestServer.SSH.handle(
 When a message is matched the handle will be removed from active list. The handler will be triggered in the order they were added:
 
 ```elixir
-TestServer.SSH.handle(fn _, state -> {:reply, "first", state} end)
-TestServer.SSH.handle(fn _, state -> {:reply, "second", state} end)
+TestServer.SSH.handle(to: fn _, state -> {:reply, "first", state} end)
+TestServer.SSH.handle(to: fn _, state -> {:reply, "second", state} end)
 
 assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
 assert {:ok, channel_id} = SSHClient.session_channel(conn)
@@ -56,7 +56,7 @@ assert SSHClient.send(conn, channel_id, "hello") == :ok
 assert SSHClient.receive_data(conn, channel_id) == {:ok, "second"}
 ```
 
-Use `TestServer.SSH.channel/2` to expect multiple session channels:
+Use `TestServer.SSH.channel/1` to expect multiple session channels:
 
 ```elixir
 channel_1 = TestServer.SSH.channel()
@@ -112,7 +112,7 @@ assert SSHClient.receive_data(conn, channel_id) == {:ok, "example"}
 
 ## Host keys
 
-Host keys can be configured in `TestServer.SSH.start/1`. By default host keys are auto generated to cover most algorithms and can be fetched with `TestServer.SSH.host_keys/1`
+Host keys can be configured in `TestServer.SSH.start/1`. By default host keys are auto generated to cover most algorithms and can be fetched with `TestServer.SSH.host_keys/0`
 
 ```elixir
 host_key = :public_key.generate_key({:rsa, 2048, 65_537})
@@ -161,8 +161,14 @@ test "SSHKit.run/2" do
 
   {host, port} = TestServer.SSH.address()
 
+  options = [
+    port: port,
+    silently_accept_hosts: true,
+    user_interaction: false
+  ]
+
   [{:ok, output, 0}] =
-    {host, port: port, silently_accept_hosts: true, user_interaction: false}
+    {host, options}
     |> SSHKit.context()
     |> SSHKit.run("echo \"Hello World!\"")
 

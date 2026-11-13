@@ -1,4 +1,4 @@
-defmodule TestServer.SSH.SSHKitTest do
+defmodule TestServer.Integration.SSH.SSHKitTest do
   use ExUnit.Case
 
   import ExUnit.CaptureIO

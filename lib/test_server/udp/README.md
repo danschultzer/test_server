@@ -6,7 +6,7 @@ Mock UDP datagram endpoints with DTLS support.
 
 ## Usage
 
-Add data expectations with `TestServer.UDP.handle/2`:
+Add data expectations with `TestServer.UDP.handle/1`:
 
 ```elixir
 test "send/2" do
@@ -20,7 +20,7 @@ test "send/2" do
 end
 ```
 
-`TestServer.UDP.handle/2` can route data to an anonymous function:
+`TestServer.UDP.handle/1` can route data to an anonymous function:
 
 ```elixir
 TestServer.UDP.handle(to: fn _data, state -> {:reply, "pong", state} end)
@@ -60,7 +60,7 @@ TestServer.UDP.send(peer, to: fn state -> {:reply, "ping", state} end)
 assert UDPClient.receive_data(socket) == {:ok, "ping"}
 ```
 
-Use `TestServer.UDP.peer/1` to expect multiple clients or use with `TestServer.UDP.send/2`. They are assigned in the order they are added:
+Use `TestServer.UDP.peer/0` to expect multiple clients or use with `TestServer.UDP.send/2`. They are assigned in the order they are added:
 
 ```elixir
 peer_1 = TestServer.UDP.peer()

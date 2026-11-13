@@ -5,6 +5,7 @@ defmodule TestServer do
              |> String.split("<!-- MDOC !-->")
              |> Enum.fetch!(1)
              |> then(&Regex.replace(~r/\[(`[^`]+`)\]\([^)]+\)/, &1, "\\1"))
+             |> String.trim()
 
   @type instance :: pid()
   @type stacktrace :: list()

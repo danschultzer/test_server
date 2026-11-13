@@ -1,4 +1,4 @@
-defmodule TestServer.UDP.DNSTest do
+defmodule TestServer.Integration.UDP.DNSTest do
   use ExUnit.Case, async: true
 
   test ":inet_res.lookup/5" do

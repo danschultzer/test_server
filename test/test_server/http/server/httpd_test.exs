@@ -1,5 +1,6 @@
 defmodule TestServer.HTTP.Server.HttpdTest do
   use ExUnit.Case
+  doctest TestServer.HTTP.Server.Httpd
 
   setup context do
     TestServer.HTTP.start!(

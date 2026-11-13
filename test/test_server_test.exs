@@ -1,5 +1,6 @@
 defmodule TestServerTest do
   use ExUnit.Case
+  doctest TestServer
 
   import ExUnit.CaptureIO
   import ExUnit.CaptureLog

@@ -4,6 +4,7 @@ defmodule TestServer.TCP do
              |> File.read!()
              |> String.split("<!-- MDOC !-->")
              |> Enum.fetch!(1)
+             |> String.trim()
 
   import Kernel, except: [send: 2]
 
@@ -264,29 +265,8 @@ defmodule TestServer.TCP do
 
   def handle, do: handle([])
 
-  @spec handle(connection() | keyword()) :: :ok
-  def handle(options) when is_list(options) do
-    instance = TestServer.autostart_instance(__MODULE__)
-
-    connection =
-      case Instance.connections(instance) do
-        [%{ref: connection_ref}] ->
-          {instance, connection_ref}
-
-        [] ->
-          connection(instance)
-
-        _multiple_connections ->
-          raise "multiple connections are available; pass the connection to TestServer.TCP.handle/2"
-      end
-
-    handle(connection, options)
-  end
-
-  def handle(connection), do: handle(connection, [])
-
   @doc """
-  Adds a data handler to the current test server TCP instance.
+  Adds a data handler to the current test server TCP connection.
 
   Handlers are matched FIFO (first in, first out). Any data not matched by a
   handler, or any handlers not consumed by data, will raise an error in the
@@ -326,6 +306,33 @@ defmodule TestServer.TCP do
       assert TCPClient.send(socket, "echo") == :ok
       assert TCPClient.receive_data(socket) == {:ok, "echo"}
   """
+  @spec handle(keyword()) :: :ok
+  def handle(options) when is_list(options) do
+    instance = TestServer.autostart_instance(__MODULE__)
+
+    connection =
+      case Instance.connections(instance) do
+        [%{ref: connection_ref}] ->
+          {instance, connection_ref}
+
+        [] ->
+          connection(instance)
+
+        _multiple_connections ->
+          raise "multiple connections are available; pass the connection to TestServer.TCP.handle/2"
+      end
+
+    handle(connection, options)
+  end
+
+  @spec handle(connection()) :: :ok
+  def handle(connection), do: handle(connection, [])
+
+  @doc """
+  Adds a data handler to a test server TCP connection.
+
+  See `handle/1` for options.
+  """
   @spec handle(connection(), keyword()) :: :ok
   def handle({instance, connection_ref} = _connection, options)
       when is_pid(instance) and is_reference(connection_ref) and is_list(options) do
@@ -347,8 +354,7 @@ defmodule TestServer.TCP do
   def send(connection), do: send(connection, [])
 
   @doc """
-  Sends data from the current test server TCP instance to a specific
-  connection.
+  Sends data to a test server TCP connection.
 
   The `:to` callback receives the connection state and returns
   `{:reply, data, state}` or `{:ok, state}`.

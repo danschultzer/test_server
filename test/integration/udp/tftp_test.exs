@@ -1,4 +1,4 @@
-defmodule TestServer.UDP.TFTPTest do
+defmodule TestServer.Integration.UDP.TFTPTest do
   use ExUnit.Case, async: true
 
   test ":tftp.read_file/3" do

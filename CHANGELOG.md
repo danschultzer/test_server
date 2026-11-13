@@ -6,124 +6,38 @@
 
 Requires Elixir 1.15 or higher.
 
-All public functions in `TestServer` have been moved to `TestServer.HTTP`. The
-HTTP server adapters in `TestServer.HTTPServer.*` have been moved to
-`TestServer.HTTP.Server.*`. `add/2` has been renamed to `handle/2`, `websocket_init/3` has been renamed to `websocket/3` and now returns the websocket directly instead of `{:ok, websocket}`, and `websocket_info/2` has been renamed to `websocket_send/2` and now takes options as second argument. `x509_suite/0` has been replaced by `TestServer.HTTP.cacerts/0` that provides the CA certificates directly.
+### Breaking changes
 
-TestServer now has SSH support with `TestServer.SSH`, TCP support with `TestServer.TCP`, and UDP support with `TestServer.UDP`.
+- Moved all public functions from `TestServer` to `TestServer.HTTP`
+- Moved HTTP server adapters from `TestServer.HTTPServer.*` to `TestServer.HTTP.Server.*`
+- Renamed `add/3` to `TestServer.HTTP.handle/3`; it now accepts the `:method` option instead of `:via` and no longer accepts binary method value such as `"POST"`
+- Renamed `websocket_init/3` to `TestServer.HTTP.websocket/3`; it now returns the WebSocket directly instead of `{:ok, websocket}`
+- Renamed `websocket_info/2` to `TestServer.HTTP.websocket_send/2`; it now accepts options as its second argument instead of a function
+- Replaced `x509_suite/1` with `TestServer.HTTP.cacerts/1`, which returns the CA certificates directly
+- Changed `TestServer.HTTP.start/1` to return `{:error, reason}` instead of raising
 
-- `TestServer.HTTP.start/1` now returns `{:error, reason}` instead of raising
-- HTTP and WebSocket handlers no longer requires a path in the arguments
-- `TestServer.HTTP.handle/2` now accepts `:method` instead of `:via` option
-- Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.handle/2` and `TestServer.HTTP.websocket_handle/2`
+### Added
+
+- Added SSH support with `TestServer.SSH`
+- Added TCP support with `TestServer.TCP`
+- Added UDP support with `TestServer.UDP`
+
+### Changed
+
+- Made path argument optional for `TestServer.HTTP.handle/3` and `TestServer.HTTP.websocket/3`
+- Instance crashes now propagate to the test process instead of being silently ignored
+
+### Fixed
+
+- Fixed bug where `:match` functions that raised errors always matched in `TestServer.HTTP.handle/3` and `TestServer.HTTP.websocket_handle/2`
 - Fixed UTF-8 response body handling for `TestServer.HTTP.Server.Httpd`
 - Fixed UTF-8 header and request body handling for `TestServer.HTTP.Server.Httpd`
 - Fixed invalid host header port parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed bracketed IPv6 host header parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed query string parsing with extra `?` segments in `TestServer.HTTP.Server.Httpd`
 - Fixed `Bandit` server adapter timeout when discarding an updated conn
-- Fixed instance crashes being silently ignored; crashes now propagate to the test process
 
-## v0.1.22 (2026-03-05)
+## v0.1
 
-Requires Elixir 1.14 or higher.
-
-- Fixed incorrect formatting of websocket handlers
-- Fixed breaking change with plug 1.19
-- Limit number of Cowboy acceptors to 1 to improve performance
-
-## v0.1.21 (2025-06-20)
-
-- Fixed bug with message emitted in Bandit 1.7.0
-
-## v0.1.20 (2025-02-28)
-
-- Include `:inets` in `:extra_applications` to prevent compilation issue with `TestServer.HTTPServer.Httpd`
-
-## v0.1.19 (2025-02-27)
-
-- Allow `:to` plug to be set for `TestServer.websocket_init/3` for handshake
-
-## v0.1.18 (2024-12-29)
-
-- Limit number of Bandit acceptors to 1 to improve performance
-
-## v0.1.17 (2024-09-30)
-
-- Fixed invalid spec for `TestServer.url/1`
-
-## v0.1.16 (2024-04-02)
-
-- Fixed breaking changes with Bandit 1.4
-
-## v0.1.15 (2024-02-26)
-
-- Validates `:http_server` option
-
-## v0.1.14 (2023-11-18)
-
-- Fixed compiler warning in `TestServer.Instance`
-
-
-## v0.1.13 (2023-08-26)
-
-- Fixed controlling process issues related to using the Bandit HTTP/2 adapter calling `Plug.Conn` functions in plug callbacks
-
-## v0.1.12 (2023-04-29)
-
-- Fixed breaking change to options in Bandit 0.7.6
-
-## v0.1.11 (2023-03-27)
-
-- Now uses `Plug.Conn.resp/3` instead of `Plug.Conn.send_resp/3` to prevent controlling process issue in Bandit
-- Silenced Bandit logs
-- Silence TLS notice logs
-
-## v0.1.10 (2023-02-22)
-
-- `:httpd` server adapter now can read request body
-
-## v0.1.9 (2023-02-18)
-
-- `:httpd` server adapter now parses remote ip to tuple format
-- `:httpd` server adapter now parses host from host header
-- Specifying `:host` now also binds the hostname to IPv6 loopback
-- Added `:ipfamily` option to set IP address type to use
-
-## v0.1.8 (2023-02-10)
-
-- Support Bandit and httpd web server
-- BREAKING CHANGE: SSL certificate settings have been moved to the `:tls` option
-
-## v0.1.7 (2022-10-06)
-
-- The specified port is checked to ensure is in valid range
-
-## v0.1.6 (2022-09-22)
-
-- Added suspended routes and web socket handlers to error messages
-
-## v0.1.5 (2022-09-13)
-
-- `TestServer.websocket_info/2` now takes the callback function as second argument
-
-## v0.1.4 (2022-09-13)
-
-- WebSocket support
-
-## v0.1.3 (2022-09-12)
-
-- Improved multi-instance handling
-- Support for pre-match plugs
-
-## v0.1.2 (2022-09-12)
-
-- Better formatting of errors
-
-## v0.1.1 (2022-09-11)
-
-- `TestServer.url/2` no longer autostarts the test server
-
-## v0.1.0 (2022-09-11)
-
-- Initial release
+The changelog for v0.1 releases can be found in
+[the v0.1.22 release](https://github.com/danschultzer/test_server/blob/v0.1.22/CHANGELOG.md).

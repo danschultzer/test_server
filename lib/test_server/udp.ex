@@ -4,6 +4,7 @@ defmodule TestServer.UDP do
              |> File.read!()
              |> String.split("<!-- MDOC !-->")
              |> Enum.fetch!(1)
+             |> String.trim()
 
   import Kernel, except: [send: 2]
 
@@ -261,29 +262,8 @@ defmodule TestServer.UDP do
 
   def handle, do: handle([])
 
-  @spec handle(peer() | keyword()) :: :ok
-  def handle(options) when is_list(options) do
-    instance = TestServer.autostart_instance(__MODULE__)
-
-    peer =
-      case Instance.peers(instance) do
-        [%{ref: peer_ref}] ->
-          {instance, peer_ref}
-
-        [] ->
-          peer(instance)
-
-        _multiple_peers ->
-          raise "multiple peers are available; pass the peer to TestServer.UDP.handle/2"
-      end
-
-    handle(peer, options)
-  end
-
-  def handle(peer), do: handle(peer, [])
-
   @doc """
-  Adds a data handler to the current test server UDP instance.
+  Adds a data handler to the current test server UDP peer.
 
   Handlers are matched FIFO (first in, first out). Any data not matched by a
   handler, or any handlers not consumed by data, will raise an error in the
@@ -314,6 +294,33 @@ defmodule TestServer.UDP do
       assert UDPClient.receive_data(socket) == {:ok, "pong"}
       assert UDPClient.receive_data(socket) == {:ok, "echo"}
   """
+  @spec handle(keyword()) :: :ok
+  def handle(options) when is_list(options) do
+    instance = TestServer.autostart_instance(__MODULE__)
+
+    peer =
+      case Instance.peers(instance) do
+        [%{ref: peer_ref}] ->
+          {instance, peer_ref}
+
+        [] ->
+          peer(instance)
+
+        _multiple_peers ->
+          raise "multiple peers are available; pass the peer to TestServer.UDP.handle/2"
+      end
+
+    handle(peer, options)
+  end
+
+  @spec handle(peer()) :: :ok
+  def handle(peer), do: handle(peer, [])
+
+  @doc """
+  Adds a data handler to a test server UDP peer.
+
+  See `handle/1` for options.
+  """
   @spec handle(peer(), keyword()) :: :ok
   def handle({instance, peer_ref} = _peer, options)
       when is_pid(instance) and is_reference(peer_ref) and is_list(options) do
@@ -335,7 +342,7 @@ defmodule TestServer.UDP do
   def send(peer), do: send(peer, [])
 
   @doc """
-  Sends data from the current test server UDP instance to a specific peer.
+  Sends data to a test server UDP peer.
 
   The `:to` callback receives the peer state and returns `{:reply, data,
   state}` or `{:ok, state}`.

@@ -4,6 +4,7 @@ defmodule TestServer.SSH do
              |> File.read!()
              |> String.split("<!-- MDOC !-->")
              |> Enum.fetch!(1)
+             |> String.trim()
 
   alias TestServer.SSH.{Instance, Server}
 
@@ -301,6 +302,9 @@ defmodule TestServer.SSH do
     channel(instance, options)
   end
 
+  @spec channel(TestServer.instance()) :: channel()
+  def channel(instance) when is_pid(instance), do: channel(instance, [])
+
   @doc """
   Adds an expected channel to a test server instance.
 
@@ -322,29 +326,8 @@ defmodule TestServer.SSH do
 
   def handle, do: handle([])
 
-  @spec handle(channel() | keyword()) :: :ok
-  def handle(options) when is_list(options) do
-    instance = TestServer.autostart_instance(__MODULE__)
-
-    channel =
-      case Instance.channels(instance) do
-        [channel] ->
-          {instance, channel.ref}
-
-        [] ->
-          channel(instance, [])
-
-        _multiple_channels ->
-          raise "multiple channels are available; pass the channel to TestServer.SSH.handle/2"
-      end
-
-    handle(channel, options)
-  end
-
-  def handle(channel), do: handle(channel, [])
-
   @doc """
-  Adds a handler to a test server SSH channel.
+  Adds a handler to the current test server SSH channel.
 
   Handlers are matched FIFO (first in, first out). Any messages not matched by
   a handler, or any handlers not consumed by a message, will raise an error in
@@ -401,6 +384,33 @@ defmodule TestServer.SSH do
       assert SSHClient.receive_data(conn, channel_id) == {:ok, "echo"}
       assert SSHClient.send(conn, channel_id, "ping") == :ok
       assert SSHClient.receive_data(conn, channel_id) == {:ok, "pong"}
+  """
+  @spec handle(keyword()) :: :ok
+  def handle(options) when is_list(options) do
+    instance = TestServer.autostart_instance(__MODULE__)
+
+    channel =
+      case Instance.channels(instance) do
+        [channel] ->
+          {instance, channel.ref}
+
+        [] ->
+          channel(instance, [])
+
+        _multiple_channels ->
+          raise "multiple channels are available; pass the channel to TestServer.SSH.handle/2"
+      end
+
+    handle(channel, options)
+  end
+
+  @spec handle(channel()) :: :ok
+  def handle(channel), do: handle(channel, [])
+
+  @doc """
+  Adds a handler to a test server SSH channel.
+
+  See `handle/1` for options.
   """
   @spec handle(channel(), keyword()) :: :ok
   def handle({instance, channel_ref} = _channel, options) do

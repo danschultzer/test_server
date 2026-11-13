@@ -1,4 +1,4 @@
-defmodule TestServer.SSH.SFTPTest do
+defmodule TestServer.Integration.SSH.SFTPTest do
   use ExUnit.Case
 
   @ssh_fxp_init 1

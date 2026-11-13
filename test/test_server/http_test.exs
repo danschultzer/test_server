@@ -4,7 +4,7 @@ defmodule TestServer.HTTPTest do
 
   import ExUnit.CaptureIO
 
-  alias __MODULE__.WebSocketClient
+  alias __MODULE__.{HTTPClient, WebSocketClient}
 
   describe "start/1" do
     test "with invalid options" do
@@ -51,14 +51,14 @@ defmodule TestServer.HTTPTest do
       %{cacerts: invalid_cacerts} = X509.Test.Suite.new()
 
       assert {:error, {:failed_connect, _}} =
-               http1_request(TestServer.HTTP.url(),
+               HTTPClient.fetch(TestServer.HTTP.url(),
                  http_options: [ssl: tls_options(invalid_cacerts)]
                )
 
       TestServer.HTTP.handle()
 
       assert {:ok, _} =
-               http1_request(TestServer.HTTP.url(),
+               HTTPClient.fetch(TestServer.HTTP.url(),
                  http_options: [ssl: tls_options(valid_cacerts)]
                )
     end
@@ -75,10 +75,7 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.handle()
 
       assert {:ok, _response} =
-               http1_request(
-                 TestServer.HTTP.url(),
-                 http_options: [ssl: tls_options(cacerts)]
-               )
+               HTTPClient.fetch(TestServer.HTTP.url(), http_options: [ssl: tls_options(cacerts)])
     end
 
     test "with `ipfamily: :inet6` option" do
@@ -100,7 +97,7 @@ defmodule TestServer.HTTPTest do
       assert :inet.getaddr(String.to_charlist(hostname), :inet6) ==
                {:ok, {0, 0, 0, 0, 0, 0, 0, 1}}
 
-      assert {:ok, _} = http1_request(TestServer.HTTP.url())
+      assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url())
     end
 
     test "with invalid `:http_server` option" do
@@ -188,7 +185,7 @@ defmodule TestServer.HTTPTest do
 
       assert TestServer.HTTP.stop() == :ok
       refute Process.alive?(instance)
-      assert {:error, {:failed_connect, _}} = http1_request(url)
+      assert {:error, {:failed_connect, _}} = HTTPClient.fetch(url)
     end
   end
 
@@ -257,7 +254,7 @@ defmodule TestServer.HTTPTest do
         end
       )
 
-      assert {:ok, _} = http1_request(TestServer.HTTP.url(host: "custom-host"))
+      assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url(host: "custom-host"))
     end
 
     test "with `:host` option when started with `ipfamily: :inet6` option" do
@@ -272,7 +269,7 @@ defmodule TestServer.HTTPTest do
         end
       )
 
-      assert {:ok, _} = http1_request(TestServer.HTTP.url(host: "custom-host"))
+      assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url(host: "custom-host"))
     end
   end
 
@@ -298,7 +295,7 @@ defmodule TestServer.HTTPTest do
 
       TestServer.HTTP.handle(instance_1)
 
-      assert {:ok, _} = http1_request(TestServer.HTTP.url(instance_1))
+      assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url(instance_1))
 
       TestServer.HTTP.stop(instance_1)
     end
@@ -358,10 +355,12 @@ defmodule TestServer.HTTPTest do
       defmodule HandleUnexpectedRequestTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url("/?a=1"))
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url("/?a=1"))
         end
       end
 
@@ -376,11 +375,13 @@ defmodule TestServer.HTTPTest do
       defmodule HandleUnexpectedRequestBeforeProcessedTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle(match: fn _conn -> false end)
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -399,12 +400,14 @@ defmodule TestServer.HTTPTest do
       defmodule HandleUnexpectedRequestAfterProcessedTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle()
 
-          assert {:ok, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -418,12 +421,13 @@ defmodule TestServer.HTTPTest do
       defmodule HandlePathArgumentMismatchTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle("/path")
 
-          assert {:error, _} =
-                   unquote(__MODULE__).http1_request(TestServer.HTTP.url("/other-path"))
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url("/other-path"))
         end
       end
 
@@ -435,12 +439,13 @@ defmodule TestServer.HTTPTest do
       defmodule HandlePathOptionMismatchTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle(path: "/path", method: [:get, :post])
 
-          assert {:error, _} =
-                   unquote(__MODULE__).http1_request(TestServer.HTTP.url("/other-path"))
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url("/other-path"))
         end
       end
 
@@ -454,11 +459,13 @@ defmodule TestServer.HTTPTest do
       defmodule HandleMethodMismatchTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle(method: :post)
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -471,11 +478,13 @@ defmodule TestServer.HTTPTest do
       defmodule HandleMethodEmptyTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle(method: [])
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -487,36 +496,36 @@ defmodule TestServer.HTTPTest do
     test "with no path specified" do
       TestServer.HTTP.handle()
 
-      assert {:ok, _} = http1_request(TestServer.HTTP.url("/path"))
+      assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url("/path"))
     end
 
     test "with path argument" do
       TestServer.HTTP.handle("/1", to: &Plug.Conn.resp(&1, 200, "1"))
       TestServer.HTTP.handle("/2", to: &Plug.Conn.resp(&1, 200, "2"))
 
-      assert http1_request(TestServer.HTTP.url("/2")) == {:ok, "2"}
-      assert http1_request(TestServer.HTTP.url("/1")) == {:ok, "1"}
+      assert HTTPClient.fetch(TestServer.HTTP.url("/2")) == {:ok, "2"}
+      assert HTTPClient.fetch(TestServer.HTTP.url("/1")) == {:ok, "1"}
     end
 
     test "with instance and path argument" do
       instance = TestServer.HTTP.start!()
       TestServer.HTTP.handle(instance, "/path")
 
-      assert {:ok, _} = http1_request(TestServer.HTTP.url(instance, "/path"))
+      assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url(instance, "/path"))
     end
 
     test "with `:path` option" do
       TestServer.HTTP.handle(path: "/hi", to: &Plug.Conn.resp(&1, 200, "1"))
       TestServer.HTTP.handle(path: "/héllo-👋", to: &Plug.Conn.resp(&1, 200, "2"))
 
-      assert http1_request(URI.encode(TestServer.HTTP.url("/héllo-👋"))) == {:ok, "2"}
-      assert http1_request(TestServer.HTTP.url("/hi")) == {:ok, "1"}
+      assert HTTPClient.fetch(URI.encode(TestServer.HTTP.url("/héllo-👋"))) == {:ok, "2"}
+      assert HTTPClient.fetch(TestServer.HTTP.url("/hi")) == {:ok, "1"}
     end
 
     test "with no `:method` option" do
       TestServer.HTTP.handle()
 
-      assert {:ok, _} = http1_request(TestServer.HTTP.url(), method: :post)
+      assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url(), method: :post)
     end
 
     test "with an empty `:method` option" do
@@ -529,7 +538,7 @@ defmodule TestServer.HTTPTest do
 
       TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, "second"))
 
-      assert http1_request(TestServer.HTTP.url()) == {:ok, "second"}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, "second"}
 
       TestServer.HTTP.stop()
     end
@@ -539,9 +548,9 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.handle(method: [:post, :get], to: &Plug.Conn.resp(&1, 200, "[:post, :get]"))
       TestServer.HTTP.handle(method: :post, to: &Plug.Conn.resp(&1, 200, ":post"))
 
-      assert http1_request(TestServer.HTTP.url(), method: :post) == {:ok, "[:post, :get]"}
-      assert http1_request(TestServer.HTTP.url()) == {:ok, ":get"}
-      assert http1_request(TestServer.HTTP.url(), method: :post) == {:ok, ":post"}
+      assert HTTPClient.fetch(TestServer.HTTP.url(), method: :post) == {:ok, "[:post, :get]"}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, ":get"}
+      assert HTTPClient.fetch(TestServer.HTTP.url(), method: :post) == {:ok, ":post"}
     end
 
     test "with `:to` plug" do
@@ -553,18 +562,20 @@ defmodule TestServer.HTTPTest do
 
       TestServer.HTTP.handle(to: HandleToPlug)
 
-      assert http1_request(TestServer.HTTP.url()) == {:ok, to_string(HandleToPlug)}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, to_string(HandleToPlug)}
     end
 
     test "when `:to` function raises exception" do
       defmodule HandleToFunctionRaiseTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle(to: fn _conn -> raise "boom" end)
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -577,11 +588,13 @@ defmodule TestServer.HTTPTest do
       defmodule HandleToFunctionHaltsTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle(to: fn conn -> Plug.Conn.halt(conn) end)
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -592,18 +605,20 @@ defmodule TestServer.HTTPTest do
     test "with `:to` function" do
       TestServer.HTTP.handle(to: fn conn -> Plug.Conn.resp(conn, 200, "function called") end)
 
-      assert http1_request(TestServer.HTTP.url()) == {:ok, "function called"}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, "function called"}
     end
 
     test "when `:match` function raises exception" do
       defmodule HandleMatchFunctionRaiseTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.handle(match: fn _conn -> raise "boom" end)
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -623,8 +638,8 @@ defmodule TestServer.HTTPTest do
 
       TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, "2"))
 
-      assert http1_request(TestServer.HTTP.url() <> "?a=2") == {:ok, "2"}
-      assert http1_request(TestServer.HTTP.url() <> "?a=1") == {:ok, "1"}
+      assert HTTPClient.fetch(TestServer.HTTP.url() <> "?a=2") == {:ok, "2"}
+      assert HTTPClient.fetch(TestServer.HTTP.url() <> "?a=1") == {:ok, "1"}
     end
 
     test "with `:match` function with `:path` and `:method` options" do
@@ -640,8 +655,8 @@ defmodule TestServer.HTTPTest do
 
       TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, "2"))
 
-      assert http1_request(TestServer.HTTP.url("/path") <> "?a=1") == {:ok, "2"}
-      assert http1_request(TestServer.HTTP.url("/path") <> "?a=1", method: :post) == {:ok, "1"}
+      assert HTTPClient.fetch(TestServer.HTTP.url("/path") <> "?a=1") == {:ok, "2"}
+      assert HTTPClient.fetch(TestServer.HTTP.url("/path") <> "?a=1", method: :post) == {:ok, "1"}
     end
 
     # `:httpd` has no HTTP/2 support
@@ -650,7 +665,7 @@ defmodule TestServer.HTTPTest do
         TestServer.HTTP.start!(scheme: :https)
         TestServer.HTTP.handle()
 
-        assert http2_request(TestServer.HTTP.url()) == {:ok, "HTTP/2"}
+        assert HTTPClient.fetch(TestServer.HTTP.url(), protocol: :http2) == {:ok, "HTTP/2"}
       end
 
       test "with HTTP/2 with `:to` function" do
@@ -665,7 +680,11 @@ defmodule TestServer.HTTPTest do
           end
         )
 
-        assert http2_request(TestServer.HTTP.url(), method: :post, body: "test") == {:ok, "test"}
+        assert HTTPClient.fetch(TestServer.HTTP.url(),
+                 protocol: :http2,
+                 method: :post,
+                 body: "test"
+               ) == {:ok, "test"}
       end
     end
   end
@@ -696,7 +715,7 @@ defmodule TestServer.HTTPTest do
 
       TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, URI.encode_query(&1.params)))
 
-      assert {:ok, query} = http1_request(TestServer.HTTP.url(), method: :post)
+      assert {:ok, query} = HTTPClient.fetch(TestServer.HTTP.url(), method: :post)
       assert URI.decode_query(query) == %{"plug" => "anonymous function", "body" => "OK"}
     end
 
@@ -710,18 +729,20 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.plug(ModulePlug)
       TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
 
-      assert http1_request(TestServer.HTTP.url()) == {:ok, to_string(ModulePlug)}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, to_string(ModulePlug)}
     end
 
     test "when plug function raises exception" do
       defmodule PlugFunctionRaiseTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.plug(fn _conn -> raise "boom" end)
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -734,12 +755,14 @@ defmodule TestServer.HTTPTest do
       defmodule PlugFunctionHaltsTest do
         use ExUnit.Case
 
+        alias unquote(__MODULE__).HTTPClient
+
         test "fails" do
           TestServer.HTTP.start!(suppress_warning: true)
           TestServer.HTTP.plug(fn conn -> Plug.Conn.halt(conn) end)
           TestServer.HTTP.handle()
 
-          assert {:error, _} = unquote(__MODULE__).http1_request(TestServer.HTTP.url())
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
         end
       end
 
@@ -958,9 +981,10 @@ defmodule TestServer.HTTPTest do
             TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert {:ok, message} = WebSocketClient.send_message(client, "ping")
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -970,8 +994,8 @@ defmodule TestServer.HTTPTest do
         assert io =~ "received an unexpected WebSocket frame"
         assert io =~ "No active websocket handlers."
         refute io =~ "The following websocket handlers have been processed:"
-        assert_receive {:message, message}
-        assert_io_websocket_message(io, message)
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
       end
 
       test "when receiving unexpected frame before all handlers are processed" do
@@ -987,9 +1011,10 @@ defmodule TestServer.HTTPTest do
             )
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert {:ok, message} = WebSocketClient.send_message(client, "ping")
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1002,8 +1027,8 @@ defmodule TestServer.HTTPTest do
         assert io =~ "Active websocket handlers:"
         assert io =~ ~r/test\/test_server\/http_test\.exs:\d+/
         assert io =~ "WebSocketHandleUnexpectedBeforeProcessedTest.\"test fails\"/1"
-        assert_receive {:message, message}
-        assert_io_websocket_message(io, message)
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
       end
 
       test "when receiving unexpected frame after all handlers are processed" do
@@ -1017,10 +1042,12 @@ defmodule TestServer.HTTPTest do
             TestServer.HTTP.websocket_handle(websocket)
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert WebSocketClient.send_message(client, "ping") == {:ok, "ping"}
-            assert {:ok, message} = WebSocketClient.send_message(client, "ping")
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert WebSocketClient.receive_frame(client) == {:ok, {:text, "ping"}}
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1030,8 +1057,8 @@ defmodule TestServer.HTTPTest do
         assert io =~ "received an unexpected WebSocket frame"
         assert io =~ "No active websocket handlers."
         assert io =~ "The following websocket handlers have been processed:"
-        assert_receive {:message, message}
-        assert_io_websocket_message(io, message)
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
       end
 
       test "when receiving control frame" do
@@ -1041,8 +1068,10 @@ defmodule TestServer.HTTPTest do
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
         assert WebSocketClient.send_frame(client, {:pong, "client-pong"}) == :ok
-        assert WebSocketClient.ping(client, "probe") == {:ok, {:pong, "probe"}}
-        assert WebSocketClient.send_message(client, "ping") == {:ok, "ping"}
+        assert WebSocketClient.send_frame(client, {:ping, "probe"}) == :ok
+        assert WebSocketClient.receive_frame(client) == {:ok, {:pong, "probe"}}
+        assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+        assert WebSocketClient.receive_frame(client) == {:ok, {:text, "ping"}}
       end
 
       test "when `:to` function raises exception" do
@@ -1058,9 +1087,10 @@ defmodule TestServer.HTTPTest do
             )
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert {:ok, message} = WebSocketClient.send_message(client, "ping")
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1069,8 +1099,8 @@ defmodule TestServer.HTTPTest do
         assert io = capture_io(fn -> ExUnit.run() end)
         assert io =~ "(RuntimeError) boom"
         assert io =~ "anonymous fn/2 in TestServer.HTTPTest.WebSocketHandleToFunctionRaiseTest"
-        assert_receive {:message, message}
-        assert_io_websocket_message(io, message)
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
       end
 
       test "when `:to` function returns invalid response" do
@@ -1086,9 +1116,10 @@ defmodule TestServer.HTTPTest do
             )
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert {:ok, message} = WebSocketClient.send_message(client, "ping")
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1096,8 +1127,8 @@ defmodule TestServer.HTTPTest do
 
         assert io = capture_io(fn -> ExUnit.run() end)
         assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
-        assert_receive {:message, message}
-        assert_io_websocket_message(io, message)
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
       end
 
       test "with `:to` function" do
@@ -1108,7 +1139,9 @@ defmodule TestServer.HTTPTest do
         )
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-        assert WebSocketClient.send_message(client, "ping") == {:ok, "function called"}
+        assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+        assert {:ok, frame} = WebSocketClient.receive_frame(client)
+        assert frame == {:text, "function called"}
       end
 
       test "when `:match` function raises exception" do
@@ -1125,9 +1158,10 @@ defmodule TestServer.HTTPTest do
             )
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert {:ok, message} = WebSocketClient.send_message(client, "ping")
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1136,8 +1170,8 @@ defmodule TestServer.HTTPTest do
         assert io = capture_io(fn -> ExUnit.run() end)
         assert io =~ "(RuntimeError) boom"
         assert io =~ "anonymous fn/2 in TestServer.HTTPTest.WebSocketHandleMatchFunctionRaiseTest"
-        assert_receive {:message, message}
-        assert_io_websocket_message(io, message)
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
       end
 
       test "with `:match` function" do
@@ -1153,8 +1187,10 @@ defmodule TestServer.HTTPTest do
         )
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-        assert WebSocketClient.send_message(client, "second") == {:ok, "second"}
-        assert WebSocketClient.send_message(client, "first") == {:ok, "pong"}
+        assert WebSocketClient.send_frame(client, {:text, "second"}) == :ok
+        assert WebSocketClient.receive_frame(client) == {:ok, {:text, "second"}}
+        assert WebSocketClient.send_frame(client, {:text, "first"}) == :ok
+        assert WebSocketClient.receive_frame(client) == {:ok, {:text, "pong"}}
       end
     end
 
@@ -1222,7 +1258,7 @@ defmodule TestServer.HTTPTest do
 
         TestServer.HTTP.websocket_send(websocket)
 
-        assert WebSocketClient.receive_message(client) == {:ok, "ping"}
+        assert WebSocketClient.receive_frame(client) == {:ok, {:text, "ping"}}
       end
 
       test "when `:to` function raises exception" do
@@ -1238,9 +1274,9 @@ defmodule TestServer.HTTPTest do
 
             TestServer.HTTP.websocket_send(websocket, to: fn _state -> raise "boom" end)
 
-            assert {:ok, message} = WebSocketClient.receive_message(client)
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1249,7 +1285,7 @@ defmodule TestServer.HTTPTest do
         assert io = capture_io(fn -> ExUnit.run() end)
         assert io =~ "(RuntimeError) boom"
         assert io =~ "anonymous fn/1 in TestServer.HTTPTest.WebSocketSendToFunctionRaiseTest"
-        assert_receive {:message, message}
+        assert_receive {:frame, {:text, message}}
         assert_io_websocket_message(io, message)
       end
 
@@ -1265,9 +1301,9 @@ defmodule TestServer.HTTPTest do
 
             TestServer.HTTP.websocket_send(websocket, to: fn _state -> :invalid end)
 
-            assert {:ok, message} = WebSocketClient.receive_message(client)
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1275,7 +1311,7 @@ defmodule TestServer.HTTPTest do
 
         assert io = capture_io(fn -> ExUnit.run() end)
         assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
-        assert_receive {:message, message}
+        assert_receive {:frame, {:text, message}}
         assert_io_websocket_message(io, message)
       end
 
@@ -1293,9 +1329,9 @@ defmodule TestServer.HTTPTest do
               to: fn state -> {:reply, :invalid, state} end
             )
 
-            assert {:ok, message} = WebSocketClient.receive_message(client)
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
 
-            send(__MODULE__, {:message, message})
+            send(__MODULE__, {:frame, frame})
           end
         end
 
@@ -1303,7 +1339,7 @@ defmodule TestServer.HTTPTest do
 
         assert io = capture_io(fn -> ExUnit.run() end)
         assert io =~ "(RuntimeError) invalid callback response, got: {:reply, :invalid, %{}}"
-        assert_receive {:message, message}
+        assert_receive {:frame, {:text, message}}
         assert_io_websocket_message(io, message)
       end
 
@@ -1317,7 +1353,7 @@ defmodule TestServer.HTTPTest do
           end
         )
 
-        assert WebSocketClient.receive_message(client) == {:ok, "pong"}
+        assert WebSocketClient.receive_frame(client) == {:ok, {:text, "pong"}}
       end
 
       test "when `:to` function returns `{:reply, {:binary, binary}, state}`" do
@@ -1330,7 +1366,7 @@ defmodule TestServer.HTTPTest do
           end
         )
 
-        assert WebSocketClient.receive_message(client) == {:ok, {:binary, "pong"}}
+        assert WebSocketClient.receive_frame(client) == {:ok, {:binary, "pong"}}
       end
 
       test "when `:to` function returns `{:ok, state}`" do
@@ -1345,7 +1381,7 @@ defmodule TestServer.HTTPTest do
           to: fn state -> {:reply, {:text, inspect(state)}, state} end
         )
 
-        assert WebSocketClient.receive_message(client) == {:ok, inspect(%{a: 1})}
+        assert WebSocketClient.receive_frame(client) == {:ok, {:text, inspect(%{a: 1})}}
       end
     end
 
@@ -1362,66 +1398,6 @@ defmodule TestServer.HTTPTest do
     end
   end
 
-  def http1_request(url, options \\ []) do
-    url = String.to_charlist(url)
-
-    options
-    |> Keyword.get(:method, :get)
-    |> case do
-      :post -> {:post, {url, [], ~c"plain/text", ~c"OK"}}
-      :get -> {:get, {url, []}}
-    end
-    |> then(fn {method, request} ->
-      httpc_http_options = Keyword.get(options, :http_options, [])
-
-      :httpc.request(method, request, httpc_http_options, [])
-    end)
-    |> case do
-      {:ok, {{_, 200, _}, _headers, body}} -> {:ok, IO.iodata_to_binary(body)}
-      {:ok, {{_, _, _}, _headers, body}} -> {:error, IO.iodata_to_binary(body)}
-      {:error, error} -> {:error, error}
-    end
-  end
-
-  # `:httpd` has no HTTP/2 support
-  unless System.get_env("HTTP_SERVER") == "Httpd" do
-    defp http2_request(url, options \\ []) do
-      pools = %{
-        default: [
-          protocols: [:http2],
-          conn_opts: [transport_opts: [cacerts: TestServer.HTTP.cacerts()]]
-        ]
-      }
-
-      unless Process.whereis(__MODULE__.Finch) do
-        {:ok, _pid} = Finch.start_link(name: __MODULE__.Finch, pools: pools)
-      end
-
-      headers = Keyword.get(options, :headers, [])
-      body = Keyword.get(options, :body, nil)
-
-      options
-      |> Keyword.get(:method, :get)
-      |> Finch.build(url, headers, body)
-      |> Finch.request(__MODULE__.Finch)
-      |> case do
-        {:ok, %{status: 200, body: body}} ->
-          {:ok, body}
-
-        {:ok, %{status: _, body: body}} ->
-          {:error, body}
-
-        {:error, %Finch.Error{reason: :pool_not_available}} ->
-          :timer.sleep(10)
-
-          http2_request(url, options)
-
-        {:error, error} ->
-          {:error, error}
-      end
-    end
-  end
-
   defp tls_options(cacerts) do
     [
       verify: :verify_peer,
@@ -1431,6 +1407,81 @@ defmodule TestServer.HTTPTest do
       ],
       log_level: :warning
     ]
+  end
+
+  defmodule HTTPClient do
+    def fetch(url, options \\ []) do
+      protocol = Keyword.get(options, :protocol, :http1)
+      options = Keyword.delete(options, :protocol)
+
+      case protocol do
+        :http2 -> do_http2_request(url, options)
+        :http1 -> do_http1_request(url, options)
+      end
+    end
+
+    defp do_http1_request(url, options) do
+      url = String.to_charlist(url)
+
+      options
+      |> Keyword.get(:method, :get)
+      |> case do
+        :post -> {:post, {url, [], ~c"plain/text", ~c"OK"}}
+        :get -> {:get, {url, []}}
+      end
+      |> then(fn {method, request} ->
+        httpc_http_options = Keyword.get(options, :http_options, [])
+
+        :httpc.request(method, request, httpc_http_options, [])
+      end)
+      |> case do
+        {:ok, {{_, 200, _}, _headers, body}} -> {:ok, IO.iodata_to_binary(body)}
+        {:ok, {{_, _, _}, _headers, body}} -> {:error, IO.iodata_to_binary(body)}
+        {:error, error} -> {:error, error}
+      end
+    end
+
+    if System.get_env("HTTP_SERVER") == "Httpd" do
+      defp do_http2_request(_url, _options) do
+        {:error, :http2_not_supported}
+      end
+    else
+      defp do_http2_request(url, options) do
+        pools = %{
+          default: [
+            protocols: [:http2],
+            conn_opts: [transport_opts: [cacerts: TestServer.HTTP.cacerts()]]
+          ]
+        }
+
+        unless Process.whereis(__MODULE__.Finch) do
+          {:ok, _pid} = Finch.start_link(name: __MODULE__.Finch, pools: pools)
+        end
+
+        headers = Keyword.get(options, :headers, [])
+        body = Keyword.get(options, :body, nil)
+
+        options
+        |> Keyword.get(:method, :get)
+        |> Finch.build(url, headers, body)
+        |> Finch.request(__MODULE__.Finch)
+        |> case do
+          {:ok, %{status: 200, body: body}} ->
+            {:ok, body}
+
+          {:ok, %{status: _, body: body}} ->
+            {:error, body}
+
+          {:error, %Finch.Error{reason: :pool_not_available}} ->
+            :timer.sleep(10)
+
+            do_http2_request(url, options)
+
+          {:error, error} ->
+            {:error, error}
+        end
+      end
+    end
   end
 
   defmodule WebSocketClient do
@@ -1444,14 +1495,8 @@ defmodule TestServer.HTTPTest do
       {:ok, caller}
     end
 
-    def handle_frame({:text, message}, caller) do
-      send(caller, {:websocket, self(), message})
-
-      {:ok, caller}
-    end
-
-    def handle_frame({:binary, message}, caller) do
-      send(caller, {:websocket, self(), {:binary, message}})
+    def handle_frame(frame, caller) do
+      send(caller, {__MODULE__, self(), frame})
 
       {:ok, caller}
     end
@@ -1461,7 +1506,7 @@ defmodule TestServer.HTTPTest do
     end
 
     def handle_pong(frame, caller) do
-      send(caller, {:frame, self(), frame})
+      send(caller, {__MODULE__, self(), frame})
 
       {:ok, caller}
     end
@@ -1470,25 +1515,9 @@ defmodule TestServer.HTTPTest do
       WebSockex.send_frame(client, frame)
     end
 
-    def ping(client, payload) do
-      :ok = send_frame(client, {:ping, payload})
-
+    def receive_frame(client) do
       receive do
-        {:frame, ^client, frame} -> {:ok, frame}
-      after
-        100 -> {:error, :timeout}
-      end
-    end
-
-    def send_message(client, message) do
-      send_frame(client, {:text, message})
-
-      receive_message(client)
-    end
-
-    def receive_message(client) do
-      receive do
-        {:websocket, ^client, message} -> {:ok, message}
+        {__MODULE__, ^client, frame} -> {:ok, frame}
       after
         100 -> {:error, :timeout}
       end

@@ -6,25 +6,15 @@ Mock HTTP/1, HTTP/2, and WebSocket endpoints with plug pipelines and TLS support
 
 ## Usage
 
-Add request expectations with `TestServer.HTTP.handle/2`:
+Add request expectations with `TestServer.HTTP.handle/1`:
 
 ```elixir
-test "fetch_url/1" do
+test "fetch/1" do
   # The test server will autostart the current test server if not already running
   TestServer.HTTP.handle("/path", method: :get)
 
-  assert HTTPClient.fetch_url(TestServer.HTTP.url("/path")) == {:ok, "HTTP/1.1"}
+  assert HTTPClient.fetch(TestServer.HTTP.url("/path")) == {:ok, "HTTP/1.1"}
 end
-```
-
-`TestServer.HTTP.handle/2` can route a request to an anonymous function or plug using the `:to` option.
-
-```elixir
-TestServer.HTTP.handle(to: fn conn ->
-  Plug.Conn.send_resp(conn, 200, "OK")
-end)
-
-TestServer.HTTP.handle(to: MyPlug)
 ```
 
 The path can be passed as the first argument or defined with the `:path` option. By default any path is matched.
@@ -33,6 +23,16 @@ The path can be passed as the first argument or defined with the `:path` option.
 TestServer.HTTP.handle()
 TestServer.HTTP.handle("/path")
 TestServer.HTTP.handle(path: "/path")
+```
+
+`TestServer.HTTP.handle/1` can route a request to an anonymous function or plug using the `:to` option.
+
+```elixir
+TestServer.HTTP.handle(to: fn conn ->
+  Plug.Conn.send_resp(conn, 200, "OK")
+end)
+
+TestServer.HTTP.handle(to: MyPlug)
 ```
 
 The HTTP method can be matched with the `:method` option. By default any method is matched.
@@ -115,14 +115,14 @@ test "WebSocketClient" do
 
   assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
-  assert WebSocketClient.send(client, "ping") == :ok
-  assert WebSocketClient.receive(client) == {:ok, "pong"}
+  assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+  assert WebSocket.receive_frame(client) == {:text, "ping"}
 
   TestServer.HTTP.websocket_send(websocket,
     to: fn state -> {:reply, {:text, "hello"}, state} end
   )
 
-  assert WebSocketClient.receive(client) == {:ok, "hello"}
+  assert WebSocketClient.receive_frame(client) == {:ok, {:text, "hello"}}
 end
 ```
 
@@ -155,5 +155,39 @@ TestServer.HTTP.handle(
 
 assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "OK"}
 ```
+
+## Default CA store
+
+At times you may want to ensure that the system works without explicitly passing in CA certificates. This can be done by writing the generated cacerts to disk and loading it into the CA store:
+
+```elixir
+@moduletag :tmp_dir
+
+setup :setup_test_server_cacerts
+
+test "fetch/1" do
+  TestServer.HTTP.handle()
+
+  assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, "HTTP/1.1"}
+end
+
+defp setup_test_server_cacerts(%{tmp_dir: tmp_dir}) do
+  _instance = TestServer.HTTP.start!(scheme: :https)
+  path = Path.join(tmp_dir, "cacerts.pem")
+
+  pem =
+    TestServer.HTTP.cacerts()
+    |> Enum.map(&{:Certificate, &1, :not_encrypted})
+    |> :public_key.pem_encode()
+
+  :ok = File.write!(path, pem)
+  :ok = :public_key.cacerts_load(path)
+  :ok = on_exit(fn -> :public_key.cacerts_clear() end)
+
+  :ok
+end
+```
+
+This should only be used in non-async tests because it replaces the CA certificates for the whole VM. Alternatively, you could generate CA certs in the test helper to use across the system.
 
 <!-- MDOC !-->

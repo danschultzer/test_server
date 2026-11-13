@@ -1,5 +1,6 @@
 defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
   use ExUnit.Case
+  doctest TestServer.HTTP.Server.Bandit.Adapter
 
   setup do
     {:ok, _} = Application.ensure_all_started(:bandit)

@@ -1,5 +1,6 @@
 defmodule TestServer.HTTP.Server.Bandit.PlugTest do
   use ExUnit.Case
+  doctest TestServer.HTTP.Server.Bandit.Plug
 
   setup do
     {:ok, _} = Application.ensure_all_started(:bandit)

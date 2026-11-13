@@ -1,4 +1,4 @@
-defmodule TestServer.TCP.GenSMTPTest do
+defmodule TestServer.Integration.TCP.GenSMTPTest do
   use ExUnit.Case
 
   # Remove when Elixir 1.18 is required

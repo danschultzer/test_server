@@ -22,6 +22,7 @@ TestServer now has SSH support with `TestServer.SSH`, TCP support with `TestServ
 - Fixed bracketed IPv6 host header parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed query string parsing with extra `?` segments in `TestServer.HTTP.Server.Httpd`
 - Fixed `Bandit` server adapter timeout when discarding an updated conn
+- Fixed instance crashes being silently ignored; crashes now propagate to the test process
 
 ## v0.1.22 (2026-03-05)
 

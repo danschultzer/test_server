@@ -161,7 +161,7 @@ defmodule TestServer.HTTPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.HTTP.start!()
                      :ok = TestServer.HTTP.stop()
@@ -199,7 +199,7 @@ defmodule TestServer.HTTPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.HTTP.start!()
                      :ok = TestServer.HTTP.stop()
@@ -279,7 +279,7 @@ defmodule TestServer.HTTPTest do
   describe "handle/3" do
     test "when instance not running" do
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.HTTP.start!()
                      :ok = TestServer.HTTP.stop(instance)
@@ -755,7 +755,7 @@ defmodule TestServer.HTTPTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.HTTP.start!()
                      :ok = TestServer.HTTP.stop()
@@ -829,7 +829,7 @@ defmodule TestServer.HTTPTest do
         :ok = TestServer.HTTP.stop()
 
         assert_raise RuntimeError,
-                     ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
+                     ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                      fn -> TestServer.HTTP.websocket(instance, path: "/ws") end
       end
 
@@ -910,7 +910,7 @@ defmodule TestServer.HTTPTest do
         :ok = TestServer.HTTP.stop(instance)
 
         assert_raise RuntimeError,
-                     ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
+                     ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                      fn -> TestServer.HTTP.websocket_handle(websocket) end
       end
 
@@ -1165,7 +1165,7 @@ defmodule TestServer.HTTPTest do
         :ok = TestServer.HTTP.stop(instance)
 
         assert_raise RuntimeError,
-                     ~r/TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> is not running/,
+                     ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                      fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 

@@ -391,7 +391,7 @@ defmodule TestServer.SSHTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.SSH.start!()
                      :ok = TestServer.SSH.stop()
@@ -430,7 +430,7 @@ defmodule TestServer.SSHTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.SSH.start!()
                      :ok = TestServer.SSH.stop()
@@ -496,7 +496,7 @@ defmodule TestServer.SSHTest do
       :ok = TestServer.SSH.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.SSH.channel(instance, []) end
     end
 
@@ -714,7 +714,7 @@ defmodule TestServer.SSHTest do
       :ok = TestServer.SSH.stop()
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn -> TestServer.SSH.handle(channel) end
     end
 
@@ -1273,7 +1273,7 @@ defmodule TestServer.SSHTest do
       end
 
       assert_raise RuntimeError,
-                   ~r/TestServer\.SSH\.Instance \#PID\<[0-9.]+\> is not running/,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
                    fn ->
                      instance = TestServer.SSH.start!()
                      :ok = TestServer.SSH.stop()

@@ -54,6 +54,7 @@ defmodule TestServer do
     case InstanceManager.start_instance(caller, protocol_module, options) do
       {:ok, instance} ->
         put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn)
+
         {:ok, instance}
 
       {:error, {exception, stacktrace}} when is_exception(exception) ->
@@ -65,13 +66,19 @@ defmodule TestServer do
   end
 
   defp put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn) do
-    ExUnit.Callbacks.on_exit(fn ->
-      if Process.alive?(instance) do
+    Process.put({:test_process, __MODULE__}, true)
+
+    ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
+      try do
+        assert_instance_alive!(protocol_module, instance)
+
         try do
           verify_instance_fn.(instance)
         after
           protocol_module.stop(instance)
         end
+      after
+        InstanceManager.delete_instance_entry(instance)
       end
     end)
   end
@@ -80,14 +87,42 @@ defmodule TestServer do
   def stop_instance(protocol_module, instance) do
     assert_instance_alive!(protocol_module, instance)
 
-    InstanceManager.stop_instance(instance)
+    case InstanceManager.stop_instance(instance, protocol_module) do
+      :ok ->
+        Process.get({:test_process, __MODULE__}) &&
+          ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
+            InstanceManager.delete_instance_entry(instance)
+          end)
+
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc false
   def assert_instance_alive!(protocol_module, instance) do
-    case Process.alive?(instance) do
-      true -> :ok
-      false -> raise "#{format_instance(protocol_module, instance)} is not running"
+    case InstanceManager.fetch_instance_entry(instance) do
+      {:error, :not_found} ->
+        raise "expected #{format_instance(protocol_module, instance)} to be an TestServer managed instance"
+
+      {:ok, %{exit: nil}} ->
+        :ok
+
+      {:ok, %{exit: %{reason: nil, stacktrace: stacktrace}}} when is_list(stacktrace) ->
+        raise """
+        expected #{format_instance(protocol_module, instance)} to be running, but it was stopped at:
+
+        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+        """
+
+      {:ok, %{exit: %{reason: reason, stacktrace: nil}}} ->
+        raise """
+        expected #{format_instance(protocol_module, instance)} to be running, but it exited with reason:
+
+        #{Exception.format_exit(reason)}
+        """
     end
   end
 

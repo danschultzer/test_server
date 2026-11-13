@@ -2,6 +2,7 @@ defmodule TestServerTest do
   use ExUnit.Case
 
   import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
 
   defmodule FakeProtocol do
     defmodule Instance do
@@ -11,6 +12,11 @@ defmodule TestServerTest do
 
       @impl true
       def init(options), do: Keyword.get(options, :init, fn -> {:ok, %{}} end).()
+
+      @impl true
+      def handle_info(:crash, _state), do: raise("boom")
+
+      def handle_info({:stop, reason}, state), do: {:stop, reason, state}
     end
 
     def stop(instance), do: TestServer.stop_instance(__MODULE__, instance)
@@ -47,10 +53,10 @@ defmodule TestServerTest do
       end
     end
 
-    test "when verify_fn raises exception" do
+    test "when verify_instance_fn raises exception" do
       Process.register(self(), __MODULE__)
 
-      defmodule VerificationFailsTest do
+      defmodule StartInstanceVerifyInstanceFnFailsTest do
         use ExUnit.Case
 
         test "fails" do
@@ -65,9 +71,231 @@ defmodule TestServerTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "boom"
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+      assert io =~ "(RuntimeError) boom"
       assert_received {:instance, instance}
+      assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
+      refute Process.alive?(instance)
+    end
+
+    test "when instance crashes" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceInstanceCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          options = [
+            init: fn ->
+              Process.send_after(self(), :crash, 10)
+
+              {:ok, %{}}
+            end
+          ]
+
+          {:ok, instance} =
+            TestServer.start_instance(
+              unquote(__MODULE__).FakeProtocol,
+              options,
+              fn _instance -> :ok end
+            )
+
+          send(unquote(__MODULE__), {:instance, instance})
+
+          Process.sleep(10_000)
+          flunk("Instance did not crash as expected")
+        end
+      end
+
+      assert io =
+               capture_io(fn ->
+                 log =
+                   capture_log(fn ->
+                     assert %{failures: 1} = ExUnit.run()
+                   end)
+
+                 assert log =~ "terminating"
+                 assert log =~ "(RuntimeError) boom"
+               end)
+
+      assert io =~ "an exception was raised:"
+      assert io =~ "(RuntimeError) boom"
+      assert_received {:instance, instance}
+      assert %{active: 0} = DynamicSupervisor.count_children(TestServer.InstanceSupervisor)
+      assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
+      refute Process.alive?(instance)
+    end
+
+    test "when instance crashes after test ended" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceInstanceCrashAfterTestEndTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {:ok, instance} =
+            TestServer.start_instance(
+              unquote(__MODULE__).FakeProtocol,
+              [],
+              fn _instance -> :ok end
+            )
+
+          send(unquote(__MODULE__), {:instance, instance})
+
+          on_exit(fn ->
+            ref = Process.monitor(instance)
+            send(instance, :crash)
+
+            assert_receive {:DOWN, ^ref, :process, ^instance, {%RuntimeError{}, _stacktrace}}
+          end)
+        end
+      end
+
+      assert io =
+               capture_io(fn ->
+                 log =
+                   capture_log(fn ->
+                     assert %{failures: 1} = ExUnit.run()
+                   end)
+
+                 assert log =~ "terminating"
+                 assert log =~ "(RuntimeError) boom"
+               end)
+
+      assert io =~
+               ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert_received {:instance, instance}
+      assert %{active: 0} = DynamicSupervisor.count_children(TestServer.InstanceSupervisor)
+      assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
+      assert io =~ "(RuntimeError) boom"
+      refute Process.alive?(instance)
+    end
+
+    test "when instance is stopped with `:normal`" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceInstanceNormalShutDownTest do
+        use ExUnit.Case
+
+        test "fails during on_exit" do
+          {:ok, instance} =
+            TestServer.start_instance(
+              unquote(__MODULE__).FakeProtocol,
+              [],
+              fn _instance -> :ok end
+            )
+
+          ref = Process.monitor(instance)
+          send(unquote(__MODULE__), {:instance, instance})
+          send(instance, {:stop, :normal})
+
+          assert_receive {:DOWN, ^ref, :process, ^instance, :normal}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "normal"
+      assert_received {:instance, instance}
+      assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
+      refute Process.alive?(instance)
+    end
+
+    test "when instance is stopped with `{:shutdown, reason}`" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceInstanceShutdownShutDownTest do
+        use ExUnit.Case
+
+        test "fails during on_exit" do
+          {:ok, instance} =
+            TestServer.start_instance(
+              unquote(__MODULE__).FakeProtocol,
+              [],
+              fn _instance -> :ok end
+            )
+
+          ref = Process.monitor(instance)
+          send(unquote(__MODULE__), {:instance, instance})
+          send(instance, {:stop, {:shutdown, :normal}})
+
+          assert_receive {:DOWN, ^ref, :process, ^instance, {:shutdown, :normal}}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "shutdown"
+      assert_received {:instance, instance}
+      assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
+      refute Process.alive?(instance)
+    end
+  end
+
+  describe "stop_instance/2" do
+    test "when instance doesn't exist" do
+      assert_raise RuntimeError,
+                   ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be an TestServer managed instance/,
+                   fn ->
+                     assert TestServer.stop_instance(unquote(__MODULE__).FakeProtocol, self()) ==
+                              :ok
+                   end
+    end
+
+    test "with stopped instance" do
+      {:ok, instance} = TestServer.start_instance(FakeProtocol, [], fn _instance -> :ok end)
+      :ok = TestServer.stop_instance(FakeProtocol, instance)
+
+      exception =
+        assert_raise RuntimeError, fn ->
+          TestServer.stop_instance(FakeProtocol, instance)
+        end
+
+      assert exception.message =~
+               ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/
+
+      assert exception.message =~ ~r/test\/test_server_test\.exs:\d+/
+
+      assert exception.message =~
+               "TestServerTest.\"test stop_instance/2 with stopped instance\"/1"
+    end
+
+    test "when test ends" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StopInstanceTestEndsTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {:ok, instance} =
+            TestServer.start_instance(
+              unquote(__MODULE__).FakeProtocol,
+              [],
+              fn instance ->
+                assert TestServer.InstanceManager.fetch_instance_entry(instance) ==
+                         {:error, :not_found}
+              end
+            )
+
+          assert TestServer.stop_instance(unquote(__MODULE__).FakeProtocol, instance) == :ok
+
+          send(unquote(__MODULE__), {:instance, instance})
+        end
+      end
+
+      capture_io(fn ->
+        assert %{failures: 0} = ExUnit.run()
+      end)
+
+      assert_received {:instance, instance}
+      assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
       refute Process.alive?(instance)
     end
   end

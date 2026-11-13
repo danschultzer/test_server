@@ -16,6 +16,14 @@ No fuzz ExUnit test server to mock third party services.
 
 TLS and DTLS are supported with automatically generated certificates.
 
+## Request assertions
+
+Test servers are scoped to the current ExUnit test and stop automatically when the test finishes.
+
+Request handlers are processed FIFO and consumed after a single match. Any unexpected request or unconsumed handler causes the test to fail.
+
+TestServer intentionally does not provide open-ended expectations because they can hide retries, duplicate requests, and race conditions. When exact network requests are not relevant, consider stubbing the response at the client boundary.
+
 <!-- MDOC !-->
 
 ## Installation

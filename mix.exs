@@ -81,21 +81,17 @@ defmodule TestServer.MixProject do
         "CHANGELOG.md"
       ],
       groups_for_modules: [
-        HTTP: [
+        Protocols: [
           TestServer.HTTP,
+          TestServer.TCP,
+          TestServer.UDP,
+          TestServer.SSH
+        ],
+        "HTTP Servers": [
           TestServer.HTTP.Server,
           TestServer.HTTP.Server.Httpd,
           TestServer.HTTP.Server.Bandit,
           TestServer.HTTP.Server.Plug.Cowboy
-        ],
-        SSH: [
-          TestServer.SSH
-        ],
-        TCP: [
-          TestServer.TCP
-        ],
-        UDP: [
-          TestServer.UDP
         ]
       ]
     ]

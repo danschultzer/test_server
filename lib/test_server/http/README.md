@@ -6,8 +6,6 @@ Mock HTTP/1, HTTP/2, and WebSocket endpoints with plug pipelines and TLS support
 
 ## Usage
 
-### HTTP
-
 Add request expectations with `TestServer.HTTP.handle/2`:
 
 ```elixir
@@ -78,7 +76,7 @@ end)
 TestServer.HTTP.plug(MyPlug)
 ```
 
-### HTTPS
+## HTTPS
 
 By default the test server serves plain HTTP. HTTPS can be enabled with the `:scheme` option when calling `TestServer.HTTP.start/1`. A self-signed certificate suite is automatically generated:
 
@@ -103,7 +101,7 @@ Custom TLS certificates can be used by setting the `:tls` option:
 TestServer.HTTP.start!(scheme: :https, tls: [keyfile: key, certfile: cert])
 ```
 
-### WebSocket
+## WebSocket
 
 A WebSocket endpoint can be set up by calling `TestServer.HTTP.websocket/1`. By default any path is matched, and `TestServer.HTTP.websocket_handle/2` echoes the received message. Messages can be sent from the test server with `TestServer.HTTP.websocket_send/2`.
 
@@ -128,11 +126,11 @@ test "WebSocketClient" do
 end
 ```
 
-*Note: WebSocket is not supported by the `:httpd` adapter.*
+*Note: WebSocket is not supported by the `m::httpd` adapter.*
 
-### HTTP Server Adapter
+## HTTP Server Adapter
 
-TestServer supports `Bandit`, `Plug.Cowboy`, and `:httpd` out of the box. The HTTP adapter is selected in this order based on which dependencies are available. You can also explicitly set the HTTP server when calling `TestServer.HTTP.start/1`:
+TestServer supports `Bandit`, `Plug.Cowboy`, and `m::httpd` out of the box. The HTTP adapter is selected in this order based on which dependencies are available. You can also explicitly set the HTTP server when calling `TestServer.HTTP.start/1`:
 
 ```elixir
 TestServer.HTTP.start!(http_server: {TestServer.HTTP.Server.Bandit, []})
@@ -140,7 +138,7 @@ TestServer.HTTP.start!(http_server: {TestServer.HTTP.Server.Bandit, []})
 
 You can create your own Plug-based HTTP server adapter using the `TestServer.HTTP.Server` behaviour.
 
-### IPv6
+## IPv6
 
 Use the `:ipfamily` option to test with IPv6 when starting the test server with `TestServer.HTTP.start/1`:
 

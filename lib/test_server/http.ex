@@ -510,7 +510,7 @@ defmodule TestServer.HTTP do
       assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
   """
   @spec websocket_handle(websocket(), keyword()) :: :ok
-  def websocket_handle({instance, websocket_ref}, options) do
+  def websocket_handle({instance, websocket_ref} = _websocket, options) do
     Keyword.validate!(options, [:match, :to])
     TestServer.assert_instance_alive!(__MODULE__, instance)
 
@@ -548,7 +548,7 @@ defmodule TestServer.HTTP do
       assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """
   @spec websocket_send(websocket(), keyword()) :: :ok
-  def websocket_send({instance, websocket_ref}, options) do
+  def websocket_send({instance, websocket_ref} = _websocket, options) do
     Keyword.validate!(options, [:to])
     TestServer.assert_instance_alive!(__MODULE__, instance)
 

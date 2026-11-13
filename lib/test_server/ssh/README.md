@@ -110,7 +110,7 @@ assert :ok = SSHClient.send(conn, channel_id, "ping")
 assert SSHClient.receive_data(conn, channel_id) == {:ok, "example"}
 ```
 
-### Host keys
+## Host keys
 
 Host keys can be configured in `TestServer.SSH.start/1`. By default host keys are auto generated to cover most algorithms and can be fetched with `TestServer.SSH.host_keys/1`
 
@@ -120,7 +120,7 @@ instance = TestServer.SSH.start!(host_keys: [host_key])
 [%{fingerprint: fingerprint}] = TestServer.SSH.host_keys(instance)
 ```
 
-### Authentication
+## Authentication
 
 By default the test server accepts unauthenticated requests. Pass in `:user_passwords` and/or `:auth_keys` options to `TestServer.SSH.start/1` to require authentication:
 
@@ -134,7 +134,7 @@ TestServer.SSH.start!(
 )
 ```
 
-### IPv6
+## IPv6
 
 Use the `:ipfamily` option to test with IPv6 when starting the test server with `TestServer.SSH.start/1`:
 
@@ -145,7 +145,7 @@ assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
 assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port} = SSHClient.sockname(conn)
 ```
 
-### Example: SSHKit
+## Example: SSHKit
 
 The SSH test server can test an SSH client such as `SSHKit`:
 

@@ -315,7 +315,7 @@ defmodule TestServer.UDP do
       assert UDPClient.receive_data(socket) == {:ok, "echo"}
   """
   @spec handle(peer(), keyword()) :: :ok
-  def handle({instance, peer_ref}, options)
+  def handle({instance, peer_ref} = _peer, options)
       when is_pid(instance) and is_reference(peer_ref) and is_list(options) do
     Keyword.validate!(options, [:match, :to])
     TestServer.assert_instance_alive!(__MODULE__, instance)
@@ -363,7 +363,7 @@ defmodule TestServer.UDP do
       assert UDPClient.receive_data(socket) == {:ok, "hello"}
   """
   @spec send(peer(), keyword()) :: :ok
-  def send({instance, peer_ref}, options)
+  def send({instance, peer_ref} = _peer, options)
       when is_pid(instance) and is_reference(peer_ref) and is_list(options) do
     Keyword.validate!(options, [:to, :timeout])
     TestServer.assert_instance_alive!(__MODULE__, instance)

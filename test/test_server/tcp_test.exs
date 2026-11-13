@@ -624,8 +624,8 @@ defmodule TestServer.TCPTest do
       assert TCPClient.receive_data(socket) == {:ok, "ping"}
     end
 
-    # It's not possible to test actual TCP errors in a controlled manner so
-    # we simulate it by sending a :tcp_error message to the owner process
+    # It's not possible to test actual TCP errors in a controlled manner so we
+    # simulate it by sending a :tcp_error message to the owner process
     test "when receiving :tcp_error" do
       defmodule HandleTCPErrorTest do
         use ExUnit.Case
@@ -656,8 +656,8 @@ defmodule TestServer.TCPTest do
       assert data =~ "could not receive TCP data: :test"
     end
 
-    # It's not possible to test actual SSL errors in a controlled manner so
-    # we simulate it by sending a :ssl_error message to the owner process
+    # It's not possible to test actual SSL errors in a controlled manner so we
+    # simulate it by sending a :ssl_error message to the owner process
     test "when receiving :ssl_error" do
       defmodule HandleSSLErrorTest do
         use ExUnit.Case

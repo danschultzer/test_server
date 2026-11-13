@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(:httpd) do
   defmodule TestServer.HTTP.Server.Httpd do
     @moduledoc """
-    HTTP server adapter using `:httpd`.
+    HTTP server adapter using `m::httpd`.
 
     This adapter will be used by default if there is no `Bandit` or
     `Plug.Cowboy` loaded in the project.

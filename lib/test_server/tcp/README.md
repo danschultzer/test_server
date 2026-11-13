@@ -80,7 +80,7 @@ assert TCPClient.receive_data(socket_1) == {:ok, "connection 1"}
 assert TCPClient.receive_data(socket_2) == {:ok, "connection 2"}
 ```
 
-### TLS
+## TLS
 
 TLS can be enabled with the `:transport` option when calling `TestServer.TCP.start/1`. A self-signed certificate suite is automatically generated:
 
@@ -127,7 +127,7 @@ TestServer.TCP.handle(
 
 Connections begin as plain TCP when both transports are enabled.
 
-### IPv6
+## IPv6
 
 Use the `:ipfamily` option to test with IPv6:
 
@@ -138,7 +138,7 @@ assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
 assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port} = :inet.peername(socket)
 ```
 
-### Example: SMTP
+## Example: SMTP
 
 The TCP test server can be used to test a SMTP client such as `:gen_smtp`:
 

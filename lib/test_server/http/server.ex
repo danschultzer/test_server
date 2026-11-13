@@ -2,6 +2,8 @@ defmodule TestServer.HTTP.Server do
   @moduledoc """
   HTTP server adapter behaviour.
 
+  Defines the behaviour for custom HTTP server adapters used by `TestServer.HTTP`.
+
   ## Usage
 
       defmodule MyApp.MyHTTPServer do

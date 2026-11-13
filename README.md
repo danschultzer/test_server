@@ -1,7 +1,7 @@
 # TestServer
 
-[![Github CI](https://github.com/danschultzer/test_server/workflows/CI/badge.svg)](https://github.com/danschultzer/test_server/actions?query=workflow%3ACI)
 [![hex.pm](https://img.shields.io/hexpm/v/test_server.svg)](https://hex.pm/packages/test_server)
+[![Github CI](https://github.com/danschultzer/test_server/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/danschultzer/test_server/actions?query=workflow%3ACI)
 
 <!-- MDOC !-->
 

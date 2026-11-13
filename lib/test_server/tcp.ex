@@ -327,7 +327,7 @@ defmodule TestServer.TCP do
       assert TCPClient.receive_data(socket) == {:ok, "echo"}
   """
   @spec handle(connection(), keyword()) :: :ok
-  def handle({instance, connection_ref}, options)
+  def handle({instance, connection_ref} = _connection, options)
       when is_pid(instance) and is_reference(connection_ref) and is_list(options) do
     Keyword.validate!(options, [:match, :to])
     TestServer.assert_instance_alive!(__MODULE__, instance)
@@ -372,7 +372,7 @@ defmodule TestServer.TCP do
       assert TCPClient.receive_data(socket) == {:ok, "hello"}
   """
   @spec send(connection(), keyword()) :: :ok
-  def send({instance, connection_ref}, options)
+  def send({instance, connection_ref} = _connection, options)
       when is_pid(instance) and is_reference(connection_ref) and is_list(options) do
     Keyword.validate!(options, [:to, :timeout])
     TestServer.assert_instance_alive!(__MODULE__, instance)

@@ -77,7 +77,7 @@ assert UDPClient.send(socket_1, TestServer.UDP.address(), "ping") == :ok
 assert UDPClient.receive_data(socket_1) == {:ok, "peer 2"}
 ```
 
-### DTLS
+## DTLS
 
 DTLS can be enabled with the `:transport` option when calling
 `TestServer.UDP.start/1`. A self-signed certificate suite is automatically
@@ -113,7 +113,7 @@ TestServer.UDP.start!(
 )
 ```
 
-### IPv6
+## IPv6
 
 Use the `:ipfamily` option to test with IPv6:
 
@@ -127,7 +127,7 @@ assert UDPClient.send(socket, TestServer.UDP.address(), "ping", :inet6) == :ok
 assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port, "ping"}} = UDPClient.receive_data(socket)
 ```
 
-### Example: DNS
+## Example: DNS
 
 The UDP test server can test a DNS client:
 

@@ -663,8 +663,8 @@ defmodule TestServer.UDPTest do
       assert UDPClient.receive_data(socket) == {:ok, "ping"}
     end
 
-    # It's not possible to test actual SSL errors in a controlled manner so
-    # we simulate it by sending a :ssl_error message to the owner process
+    # It's not possible to test actual SSL errors in a controlled manner so we
+    # simulate it by sending a :ssl_error message to the owner process
     test "when receiving :ssl_error" do
       defmodule HandleSSLErrorTest do
         use ExUnit.Case

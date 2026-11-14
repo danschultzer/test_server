@@ -371,13 +371,13 @@ defmodule TestServer.TCP.Instance do
 
       _other ->
         raise """
-        invalid callback response, got: #{inspect(response)}
-
-        Expected one of the following:
+        expected callback response to be one of:
 
           - {:reply, data, state}, where data is iodata
           - {:reply, {data, options}, state}, where data is iodata
           - {:ok, state}
+
+        Got: #{inspect(response)}
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
@@ -393,7 +393,7 @@ defmodule TestServer.TCP.Instance do
 
       {:error, _keys} ->
         raise """
-        invalid options in callback response, got: #{inspect(options)}
+        expected valid options in callback response, got: #{inspect(options)}
 
         Valid options are: #{inspect(valid_options)}
 
@@ -424,12 +424,12 @@ defmodule TestServer.TCP.Instance do
 
       _other ->
         raise """
-        invalid callback response, got: #{inspect(response)}
-
-        Expected one of the following:
+        expected callback response to be one of:
 
           - {:reply, data, state}, where data is iodata
           - {:ok, state}
+
+        Got: #{inspect(response)}
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """

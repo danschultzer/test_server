@@ -14,14 +14,17 @@ defmodule TestServer.HTTP.WebSocket do
           |> append_formatted_frame(frame)
           |> append_formatted_websocket_handlers(instance, websocket_ref)
 
-        reply_with_error({instance, websocket_ref, state}, {RuntimeError.exception(message), []})
+        handle_error_reply(
+          {instance, websocket_ref, state},
+          {RuntimeError.exception(message), []}
+        )
 
       {:error, {error, stacktrace}} ->
-        reply_with_error({instance, websocket_ref, state}, {error, stacktrace})
+        handle_error_reply({instance, websocket_ref, state}, {error, stacktrace})
     end
   end
 
-  defp reply_with_error({instance, _websocket_ref, state}, {exception, stacktrace}) do
+  defp handle_error_reply({instance, _websocket_ref, state}, {exception, stacktrace}) do
     TestServer.report_error(Instance.options(instance), {exception, stacktrace})
 
     {:reply, :ok, {:text, Exception.format(:error, exception, stacktrace)}, state}
@@ -87,7 +90,7 @@ defmodule TestServer.HTTP.WebSocket do
         handle_reply(result, instance, websocket_ref)
 
       {:error, {error, stacktrace}} ->
-        reply_with_error({instance, websocket_ref, state}, {error, stacktrace})
+        handle_error_reply({instance, websocket_ref, state}, {error, stacktrace})
     end
   end
 end

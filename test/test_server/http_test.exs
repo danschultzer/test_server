@@ -146,14 +146,14 @@ defmodule TestServer.HTTPTest do
       port = instance |> TestServer.HTTP.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/could not start TestServer.HTTP instance on port #{port}/,
+                   ~r/could not start TestServer.HTTP instance on port #{port}:/,
                    fn -> TestServer.HTTP.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.HTTP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.HTTP.Instance to be running", fn ->
         TestServer.HTTP.stop()
       end
 
@@ -172,7 +172,7 @@ defmodule TestServer.HTTPTest do
       {:ok, _instance_2} = TestServer.HTTP.start()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.stop\/1/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.HTTP\.stop\/1/,
                    fn -> TestServer.HTTP.stop() end
 
       assert TestServer.HTTP.stop(instance_1) == :ok
@@ -191,7 +191,7 @@ defmodule TestServer.HTTPTest do
 
   describe "url/3" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.HTTP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.HTTP.Instance to be running", fn ->
         TestServer.HTTP.url()
       end
 
@@ -210,7 +210,7 @@ defmodule TestServer.HTTPTest do
       instance_2 = TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.url\/3/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.HTTP\.url\/3/,
                    fn -> TestServer.HTTP.url() end
 
       refute TestServer.HTTP.url(instance_1) == TestServer.HTTP.url(instance_2)
@@ -290,7 +290,7 @@ defmodule TestServer.HTTPTest do
       _instance_2 = TestServer.HTTP.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.handle\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.HTTP\.handle\/2/,
                    fn -> TestServer.HTTP.handle() end
 
       TestServer.HTTP.handle(instance_1)
@@ -348,7 +348,9 @@ defmodule TestServer.HTTPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "did not receive a request for these handlers before the test ended:"
+
+      assert io =~
+               ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to receive a request for these handlers before the test ended:/
     end
 
     test "when receiving unexpected request" do
@@ -773,7 +775,7 @@ defmodule TestServer.HTTPTest do
 
   describe "cacerts/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.HTTP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.HTTP.Instance to be running", fn ->
         TestServer.HTTP.cacerts()
       end
 
@@ -861,7 +863,7 @@ defmodule TestServer.HTTPTest do
         TestServer.HTTP.start!()
 
         assert_raise RuntimeError,
-                     ~r/multiple instances are running; pass the instance to TestServer\.HTTP\.websocket\/2/,
+                     ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.HTTP\.websocket\/2/,
                      fn -> TestServer.HTTP.websocket("/ws") end
       end
 
@@ -909,7 +911,7 @@ defmodule TestServer.HTTPTest do
 
         # Ensure that the websocket was not accepted
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket because no client has connected to it/,
+                     ~r/cannot send to websocket on TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> because no client has connected to it/,
                      fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
@@ -969,7 +971,9 @@ defmodule TestServer.HTTPTest do
         end
 
         assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "did not receive a frame for these websocket handlers before the test ended:"
+
+        assert io =~
+                 ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to receive a frame for these websocket handlers before the test ended:/
       end
 
       test "when receiving unexpected frame" do
@@ -1126,7 +1130,8 @@ defmodule TestServer.HTTPTest do
         Process.register(self(), WebSocketHandleToFunctionInvalidResponseTest)
 
         assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+        assert io =~ "(RuntimeError) expected callback response to be one of:"
+        assert io =~ "Got: :invalid"
         assert_receive {:frame, {:text, frame}}
         assert_io_websocket_message(io, frame)
       end
@@ -1223,7 +1228,7 @@ defmodule TestServer.HTTPTest do
         websocket = TestServer.HTTP.websocket("/ws")
 
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket because no client has connected to it/,
+                     ~r/cannot send to websocket on TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> because no client has connected to it/,
                      fn -> TestServer.HTTP.websocket_send(websocket) end
 
         TestServer.HTTP.stop()
@@ -1233,7 +1238,7 @@ defmodule TestServer.HTTPTest do
         instance = TestServer.HTTP.start!()
 
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket because the websocket does not exist/,
+                     ~r/cannot send to websocket on TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> because it does not exist/,
                      fn -> TestServer.HTTP.websocket_send({instance, make_ref()}) end
       end
 
@@ -1248,7 +1253,7 @@ defmodule TestServer.HTTPTest do
         assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
 
         assert_raise RuntimeError,
-                     ~r/cannot send to the websocket because the client has disconnected/,
+                     ~r/cannot send to websocket on TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,
                      fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
@@ -1310,7 +1315,8 @@ defmodule TestServer.HTTPTest do
         Process.register(self(), WebSocketSendToInvalidResponseTest)
 
         assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+        assert io =~ "(RuntimeError) expected callback response to be one of:"
+        assert io =~ "Got: :invalid"
         assert_receive {:frame, {:text, message}}
         assert_io_websocket_message(io, message)
       end
@@ -1338,7 +1344,8 @@ defmodule TestServer.HTTPTest do
         Process.register(self(), WebSocketSendToInvalidFrameTest)
 
         assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) invalid callback response, got: {:reply, :invalid, %{}}"
+        assert io =~ "(RuntimeError) expected callback response to be one of:"
+        assert io =~ "Got: {:reply, :invalid, %{}}"
         assert_receive {:frame, {:text, message}}
         assert_io_websocket_message(io, message)
       end

@@ -45,7 +45,7 @@ defmodule TestServer do
 
       :error ->
         raise ArgumentError,
-              "cannot start a #{inspect(protocol_module)} instance outside the test process"
+              "cannot start a #{inspect(protocol_module)} instance outside a test process"
     end
   end
 
@@ -106,7 +106,7 @@ defmodule TestServer do
   def assert_instance_alive!(protocol_module, instance) do
     case InstanceManager.fetch_instance_entry(instance) do
       {:error, :not_found} ->
-        raise "expected #{format_instance(protocol_module, instance)} to be an TestServer managed instance"
+        raise "expected #{format_instance(protocol_module, instance)} to be a TestServer-managed instance"
 
       {:ok, %{exit: nil}} ->
         :ok
@@ -194,7 +194,7 @@ defmodule TestServer do
     instance_module = Module.concat(protocol_module, Instance)
 
     case InstanceManager.fetch_instance(self(), protocol_module) do
-      :error -> raise "no current #{inspect(instance_module)} is running"
+      :error -> raise "expected #{inspect(instance_module)} to be running"
       {:ok, instance} -> instance
     end
   end

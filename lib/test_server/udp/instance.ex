@@ -364,12 +364,12 @@ defmodule TestServer.UDP.Instance do
 
       _other ->
         raise """
-        invalid callback response, got: #{inspect(response)}
-
-        Expected one of the following:
+        expected callback response to be one of:
 
           - {:reply, data, state}, where data is iodata
           - {:ok, state}
+
+        Got: #{inspect(response)}
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """

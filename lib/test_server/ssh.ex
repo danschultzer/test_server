@@ -175,7 +175,7 @@ defmodule TestServer.SSH do
 
       unused_channels ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} has channels that were not used:
+        expected all channels on #{TestServer.format_instance(__MODULE__, instance)} to be used, but some were not:
 
         #{Instance.format_channels(unused_channels)}
         """
@@ -192,7 +192,7 @@ defmodule TestServer.SSH do
 
       active_handlers ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} did not receive a message for these handlers before the test ended:
+        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a message for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -398,7 +398,7 @@ defmodule TestServer.SSH do
           channel(instance, [])
 
         _multiple_channels ->
-          raise "multiple channels are available; pass the channel to TestServer.SSH.handle/2"
+          raise "expected exactly one channel to be available, but got multiple channels; pass the channel to TestServer.SSH.handle/2"
       end
 
     handle(channel, options)

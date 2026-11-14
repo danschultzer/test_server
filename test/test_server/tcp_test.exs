@@ -178,14 +178,14 @@ defmodule TestServer.TCPTest do
       port = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/could not start TestServer.TCP instance on port #{port}/,
+                   ~r/could not start TestServer.TCP instance on port #{port}:/,
                    fn -> TestServer.TCP.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.TCP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.TCP.Instance to be running", fn ->
         TestServer.TCP.stop()
       end
 
@@ -204,7 +204,7 @@ defmodule TestServer.TCPTest do
       {:ok, _instance_2} = TestServer.TCP.start()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.stop\/1/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.TCP\.stop\/1/,
                    fn -> TestServer.TCP.stop() end
 
       assert TestServer.TCP.stop(instance_1) == :ok
@@ -251,7 +251,7 @@ defmodule TestServer.TCPTest do
 
   describe "address/2" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.TCP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.TCP.Instance to be running", fn ->
         TestServer.TCP.address()
       end
 
@@ -270,7 +270,7 @@ defmodule TestServer.TCPTest do
       instance_2 = TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.address\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.TCP\.address\/2/,
                    fn -> TestServer.TCP.address() end
 
       refute TestServer.TCP.address(instance_1) == TestServer.TCP.address(instance_2)
@@ -322,7 +322,7 @@ defmodule TestServer.TCPTest do
 
   describe "cacerts/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.TCP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.TCP.Instance to be running", fn ->
         TestServer.TCP.cacerts()
       end
 
@@ -370,7 +370,7 @@ defmodule TestServer.TCPTest do
       {:ok, _instance_2} = TestServer.TCP.start()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.connection\/1/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.TCP\.connection\/1/,
                    fn -> TestServer.TCP.connection() end
 
       assert TestServer.TCP.connection(instance_1)
@@ -388,7 +388,9 @@ defmodule TestServer.TCPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "has connections that were not used:"
+
+      assert io =~
+               ~r/expected all connections on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be used, but some were not:/
     end
 
     test "when receiving an unexpected socket" do
@@ -468,7 +470,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.TCP\.handle\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.TCP\.handle\/2/,
                    fn -> TestServer.TCP.handle() end
     end
 
@@ -477,7 +479,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.connection()
 
       assert_raise RuntimeError,
-                   ~r/multiple connections are available; pass the connection to TestServer\.TCP\.handle\/2/,
+                   ~r/expected exactly one connection to be available, but got multiple connections; pass the connection to TestServer\.TCP\.handle\/2/,
                    fn -> TestServer.TCP.handle() end
 
       TestServer.TCP.stop()
@@ -522,7 +524,9 @@ defmodule TestServer.TCPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "did not receive data for these handlers before the test ended"
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to receive data for these handlers before the test ended:/
     end
 
     test "when receiving unexpected data" do
@@ -735,7 +739,8 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+      assert io =~ "(RuntimeError) expected callback response to be one of:"
+      assert io =~ "Got: :invalid"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -808,7 +813,7 @@ defmodule TestServer.TCPTest do
       Process.register(self(), HandleToReplyResponseInvalidReplyOptionsTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "invalid options in callback response, got: [invalid: true]"
+      assert io =~ "expected valid options in callback response, got: [invalid: true]"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end
@@ -1057,7 +1062,7 @@ defmodule TestServer.TCPTest do
       instance = TestServer.TCP.start!()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection because the connection does not exist/,
+                   ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because it does not exist/,
                    fn -> TestServer.TCP.send({instance, make_ref()}) end
     end
 
@@ -1065,7 +1070,7 @@ defmodule TestServer.TCPTest do
       connection = TestServer.TCP.connection()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection because no client has connected to it/,
+                   ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because no client has connected to it/,
                    fn -> TestServer.TCP.send(connection, timeout: 1) end
 
       TestServer.TCP.stop()
@@ -1085,7 +1090,7 @@ defmodule TestServer.TCPTest do
       assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection because the client has disconnected/,
+                   ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,
                    fn -> TestServer.TCP.send(connection) end
     end
 
@@ -1103,7 +1108,7 @@ defmodule TestServer.TCPTest do
       assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the connection because the client has disconnected/,
+                   ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,
                    fn -> TestServer.TCP.send(connection) end
     end
 
@@ -1201,7 +1206,8 @@ defmodule TestServer.TCPTest do
       Process.register(self(), SendToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+      assert io =~ "(RuntimeError) expected callback response to be one of:"
+      assert io =~ "Got: :invalid"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
     end

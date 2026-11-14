@@ -10,10 +10,10 @@ Requires Elixir 1.15 or higher.
 
 - Moved all public functions from `TestServer` to `TestServer.HTTP`
 - Moved HTTP server adapters from `TestServer.HTTPServer.*` to `TestServer.HTTP.Server.*`
-- Renamed `add/3` to `TestServer.HTTP.handle/3`; it now accepts the `:method` option instead of `:via` and no longer accepts binary method value such as `"POST"`
-- Renamed `websocket_init/3` to `TestServer.HTTP.websocket/3`; it now returns the WebSocket directly instead of `{:ok, websocket}`
+- Renamed `add/1` to `TestServer.HTTP.handle/1`; it now accepts the `:method` option instead of `:via` and no longer accepts binary method value such as `"POST"`
+- Renamed `websocket_init/1` to `TestServer.HTTP.websocket/1`; it now returns the WebSocket directly instead of `{:ok, websocket}`
 - Renamed `websocket_info/2` to `TestServer.HTTP.websocket_send/2`; it now accepts options as its second argument instead of a function
-- Replaced `x509_suite/1` with `TestServer.HTTP.cacerts/1`, which returns the CA certificates directly
+- Replaced `x509_suite/0` with `TestServer.HTTP.cacerts/0`, which returns the CA certificates directly
 - Changed `TestServer.HTTP.start/1` to return `{:error, reason}` instead of raising
 
 ### Added

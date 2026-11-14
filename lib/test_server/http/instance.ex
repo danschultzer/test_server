@@ -571,13 +571,13 @@ defmodule TestServer.HTTP.Instance do
 
   defp validate_websocket_frame!(response, stacktrace) do
     raise """
-    invalid callback response, got: #{inspect(response)}
-
-    Expected one of the following:
+    expected callback response to be one of:
 
       - {:reply, {:text, iodata}, state}
       - {:reply, {:binary, iodata}, state}
       - {:ok, state}
+
+    Got: #{inspect(response)}
 
     #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
     """

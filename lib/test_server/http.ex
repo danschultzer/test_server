@@ -115,7 +115,7 @@ defmodule TestServer.HTTP do
 
       active_handlers ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} did not receive a request for these handlers before the test ended:
+        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a request for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -132,7 +132,7 @@ defmodule TestServer.HTTP do
 
       active_websocket_handlers ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} did not receive a frame for these websocket handlers before the test ended:
+        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a frame for these websocket handlers before the test ended:
 
         #{Instance.format_websocket_handlers(active_websocket_handlers)}
         """
@@ -144,9 +144,9 @@ defmodule TestServer.HTTP do
 
   ## Examples
 
-      TestServer.HTTP.start!()
+      _instance = TestServer.HTTP.start!()
       url = TestServer.HTTP.url()
-      TestServer.HTTP.stop()
+      :ok = TestServer.HTTP.stop()
 
       assert {:error, %Req.TransportError{}} = Req.get(url, retry: false)
   """
@@ -564,15 +564,19 @@ defmodule TestServer.HTTP do
         :ok
 
       {:error, :einval} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket because the websocket does not exist"
+        raise_send_error!(instance, "it does not exist")
 
       {:error, :enotconn} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket because no client has connected to it"
+        raise_send_error!(instance, "no client has connected to it")
 
       {:error, :closed} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the websocket because the client has disconnected"
+        raise_send_error!(instance, "the client has disconnected")
     end
   end
 
   defp default_websocket_send(state), do: {:reply, {:text, "ping"}, state}
+
+  defp raise_send_error!(instance, reason) do
+    raise "cannot send to websocket on #{TestServer.format_instance(__MODULE__, instance)} because #{reason}"
+  end
 end

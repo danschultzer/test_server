@@ -67,7 +67,7 @@ defmodule TestServer.InstanceManager do
       end)
 
     raise """
-    multiple instances are running; pass the instance to #{inspect(m)}.#{f}/#{a + 1}
+    expected exactly one instance to be running, but got multiple instances; pass the instance to #{inspect(m)}.#{f}/#{a + 1}
 
     #{formatted_instances}
     """

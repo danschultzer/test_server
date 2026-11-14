@@ -32,10 +32,10 @@ defmodule TestServer.HTTP.Plug do
           |> append_formatted_params(conn)
           |> append_formatted_handlers(instance)
 
-        resp_error(conn, instance, {RuntimeError.exception(message), []})
+        send_error_resp(conn, instance, {RuntimeError.exception(message), []})
 
       {:error, {error, stacktrace}} ->
-        resp_error(conn, instance, {error, stacktrace})
+        send_error_resp(conn, instance, {error, stacktrace})
     end
   end
 
@@ -87,7 +87,7 @@ defmodule TestServer.HTTP.Plug do
     """
   end
 
-  defp resp_error(conn, instance, {exception, stacktrace}) do
+  defp send_error_resp(conn, instance, {exception, stacktrace}) do
     TestServer.report_error(Instance.options(instance), {exception, stacktrace})
 
     Conn.send_resp(conn, 500, Exception.format(:error, exception, stacktrace))

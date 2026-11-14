@@ -27,7 +27,7 @@ defmodule TestServerTest do
     test "when not called from a test process" do
       assert %ArgumentError{
                message:
-                 "cannot start a TestServerTest.FakeProtocol instance outside the test process"
+                 "cannot start a TestServerTest.FakeProtocol instance outside a test process"
              } =
                Task.async(fn ->
                  try do
@@ -243,7 +243,7 @@ defmodule TestServerTest do
   describe "stop_instance/2" do
     test "when instance doesn't exist" do
       assert_raise RuntimeError,
-                   ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be an TestServer managed instance/,
+                   ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be a TestServer-managed instance/,
                    fn ->
                      assert TestServer.stop_instance(unquote(__MODULE__).FakeProtocol, self()) ==
                               :ok

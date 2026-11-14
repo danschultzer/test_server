@@ -93,7 +93,7 @@ defmodule TestServer.TCP do
 
       active_handlers ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} did not receive data for these handlers before the test ended:
+        expected #{TestServer.format_instance(__MODULE__, instance)} to receive data for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -110,7 +110,7 @@ defmodule TestServer.TCP do
 
       unused_connections ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} has connections that were not used:
+        expected all connections on #{TestServer.format_instance(__MODULE__, instance)} to be used, but some were not:
 
         #{Instance.format_connections(unused_connections)}
         """
@@ -319,7 +319,7 @@ defmodule TestServer.TCP do
           connection(instance)
 
         _multiple_connections ->
-          raise "multiple connections are available; pass the connection to TestServer.TCP.handle/2"
+          raise "expected exactly one connection to be available, but got multiple connections; pass the connection to TestServer.TCP.handle/2"
       end
 
     handle(connection, options)
@@ -394,15 +394,19 @@ defmodule TestServer.TCP do
         :ok
 
       {:error, :einval} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection because the connection does not exist"
+        raise_send_error!(instance, "it does not exist")
 
       {:error, :enotconn} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection because no client has connected to it"
+        raise_send_error!(instance, "no client has connected to it")
 
       {:error, :closed} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the connection because the client has disconnected"
+        raise_send_error!(instance, "the client has disconnected")
     end
   end
 
   defp default_send(state), do: {:reply, "ping", state}
+
+  defp raise_send_error!(instance, reason) do
+    raise "cannot send to connection on #{TestServer.format_instance(__MODULE__, instance)} because #{reason}"
+  end
 end

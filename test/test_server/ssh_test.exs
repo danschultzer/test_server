@@ -379,14 +379,14 @@ defmodule TestServer.SSHTest do
       port = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/could not start TestServer.SSH instance on port #{port}/,
+                   ~r/could not start TestServer.SSH instance on port #{port}:/,
                    fn -> TestServer.SSH.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.SSH.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.SSH.Instance to be running", fn ->
         TestServer.SSH.stop()
       end
 
@@ -405,7 +405,7 @@ defmodule TestServer.SSHTest do
       {:ok, _instance_2} = TestServer.SSH.start()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.stop\/1/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.SSH\.stop\/1/,
                    fn -> TestServer.SSH.stop() end
 
       assert TestServer.SSH.stop(instance_1) == :ok
@@ -425,7 +425,7 @@ defmodule TestServer.SSHTest do
 
   describe "address/2" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.SSH.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.SSH.Instance to be running", fn ->
         TestServer.SSH.address()
       end
 
@@ -444,7 +444,7 @@ defmodule TestServer.SSHTest do
       instance_2 = TestServer.SSH.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.address\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.SSH\.address\/2/,
                    fn -> TestServer.SSH.address() end
 
       refute TestServer.SSH.address(instance_1) == TestServer.SSH.address(instance_2)
@@ -505,7 +505,7 @@ defmodule TestServer.SSHTest do
       {:ok, _instance_2} = TestServer.SSH.start()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.channel\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.SSH\.channel\/2/,
                    fn -> TestServer.SSH.channel() end
 
       assert TestServer.SSH.channel(instance_1, [])
@@ -542,7 +542,9 @@ defmodule TestServer.SSHTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "has channels that were not used:"
+
+      assert io =~
+               ~r/expected all channels on TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be used, but some were not:/
     end
 
     test "when receiving unexpected channel up message" do
@@ -694,7 +696,7 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.SSH\.handle\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.SSH\.handle\/2/,
                    fn -> TestServer.SSH.handle() end
     end
 
@@ -703,7 +705,7 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.channel()
 
       assert_raise RuntimeError,
-                   ~r/multiple channels are available; pass the channel to TestServer\.SSH\.handle\/2/,
+                   ~r/expected exactly one channel to be available, but got multiple channels; pass the channel to TestServer\.SSH\.handle\/2/,
                    fn -> TestServer.SSH.handle() end
 
       TestServer.SSH.stop()
@@ -747,7 +749,9 @@ defmodule TestServer.SSHTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "did not receive a message for these handlers before the test ended"
+
+      assert io =~
+               ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to receive a message for these handlers before the test ended:/
     end
 
     test "when receiving unexpected message" do
@@ -870,7 +874,8 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo3ArityFunctionInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+      assert io =~ "(RuntimeError) expected callback response to be one of:"
+      assert io =~ "Got: :invalid"
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -957,7 +962,8 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo2ArityFunctionInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+      assert io =~ "(RuntimeError) expected callback response to be one of:"
+      assert io =~ "Got: :invalid"
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -1045,7 +1051,10 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo2ArityFunctionInvalidOptionsTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid options in callback response, got: [invalid: :option]"
+
+      assert io =~
+               "(RuntimeError) expected valid options in callback response, got: [invalid: :option]"
+
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -1072,7 +1081,10 @@ defmodule TestServer.SSHTest do
       Process.register(self(), HandleTo2ArityFunctionInvalidCloseOptionTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid options in callback response, got: [close: :invalid]"
+
+      assert io =~
+               "(RuntimeError) expected valid options in callback response, got: [close: :invalid]"
+
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
     end
@@ -1101,7 +1113,7 @@ defmodule TestServer.SSHTest do
       assert io = capture_io(fn -> ExUnit.run() end)
 
       assert io =~
-               "(RuntimeError) invalid options in callback response, got: [exit_status: :invalid]"
+               "(RuntimeError) expected valid options in callback response, got: [exit_status: :invalid]"
 
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
@@ -1131,7 +1143,7 @@ defmodule TestServer.SSHTest do
       assert io = capture_io(fn -> ExUnit.run() end)
 
       assert io =~
-               "(RuntimeError) invalid options in callback response, got: [exit_status: #{0xFFFF_FFFF + 1}]"
+               "(RuntimeError) expected valid options in callback response, got: [exit_status: #{0xFFFF_FFFF + 1}]"
 
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
@@ -1161,7 +1173,7 @@ defmodule TestServer.SSHTest do
       assert io = capture_io(fn -> ExUnit.run() end)
 
       assert io =~
-               "(RuntimeError) invalid options in callback response, got: [data_type_code: :invalid]"
+               "(RuntimeError) expected valid options in callback response, got: [data_type_code: :invalid]"
 
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
@@ -1191,7 +1203,7 @@ defmodule TestServer.SSHTest do
       assert io = capture_io(fn -> ExUnit.run() end)
 
       assert io =~
-               "(RuntimeError) invalid options in callback response, got: [data_type_code: #{0xFFFF_FFFF + 1}]"
+               "(RuntimeError) expected valid options in callback response, got: [data_type_code: #{0xFFFF_FFFF + 1}]"
 
       assert_receive {:data, data}
       assert_io_ssh_data(io, data)
@@ -1268,7 +1280,7 @@ defmodule TestServer.SSHTest do
 
   describe "host_keys/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.SSH.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.SSH.Instance to be running", fn ->
         TestServer.SSH.host_keys()
       end
 

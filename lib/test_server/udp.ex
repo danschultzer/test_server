@@ -87,7 +87,7 @@ defmodule TestServer.UDP do
 
       active_handlers ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} did not receive data for these handlers before the test ended:
+        expected #{TestServer.format_instance(__MODULE__, instance)} to receive data for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -104,7 +104,7 @@ defmodule TestServer.UDP do
 
       unused_peers ->
         raise """
-        #{TestServer.format_instance(__MODULE__, instance)} has peers that were not used:
+        expected all peers on #{TestServer.format_instance(__MODULE__, instance)} to be used, but some were not:
 
         #{Instance.format_peers(unused_peers)}
         """
@@ -307,7 +307,7 @@ defmodule TestServer.UDP do
           peer(instance)
 
         _multiple_peers ->
-          raise "multiple peers are available; pass the peer to TestServer.UDP.handle/2"
+          raise "expected exactly one peer to be available, but got multiple peers; pass the peer to TestServer.UDP.handle/2"
       end
 
     handle(peer, options)
@@ -386,15 +386,22 @@ defmodule TestServer.UDP do
         :ok
 
       {:error, :einval} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer because the peer does not exist"
+        raise_send_error!(instance, "it does not exist")
 
       {:error, :enotconn} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer because no client has sent a datagram or established a DTLS connection"
+        raise_send_error!(
+          instance,
+          "no client has sent a datagram or established a DTLS connection"
+        )
 
       {:error, :closed} ->
-        raise "#{TestServer.format_instance(__MODULE__, instance)} cannot send to the peer because the client has disconnected"
+        raise_send_error!(instance, "the client has disconnected")
     end
   end
 
   defp default_send(state), do: {:reply, "ping", state}
+
+  defp raise_send_error!(instance, reason) do
+    raise "cannot send to peer on #{TestServer.format_instance(__MODULE__, instance)} because #{reason}"
+  end
 end

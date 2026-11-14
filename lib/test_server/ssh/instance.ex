@@ -276,12 +276,12 @@ defmodule TestServer.SSH.Instance do
 
       _other ->
         raise """
-        invalid callback response, got: #{inspect(response)}
-
-        Expected one of the following:
+        expected callback response to be one of:
 
           - {:ok, state}
           - {:stop, channel_id, state}
+
+        Got: #{inspect(response)}
 
           #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
@@ -308,14 +308,14 @@ defmodule TestServer.SSH.Instance do
 
       _other ->
         raise """
-        invalid callback response, got: #{inspect(response)}
-
-        Expected one of the following:
+        expected callback response to be one of:
 
           - {:reply, data, state}
           - {:reply, {data, options}, state}
           - {:ok, state}
           - {:ok, options, state}
+
+        Got: #{inspect(response)}
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
@@ -331,7 +331,7 @@ defmodule TestServer.SSH.Instance do
     else
       false ->
         raise """
-        invalid options in callback response, got: #{inspect(options)}
+        expected valid options in callback response, got: #{inspect(options)}
 
         Valid options are: #{inspect(valid_options)}
 

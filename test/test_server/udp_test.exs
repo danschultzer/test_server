@@ -177,14 +177,14 @@ defmodule TestServer.UDPTest do
       port = instance |> TestServer.UDP.Instance.options() |> Keyword.fetch!(:port)
 
       assert_raise RuntimeError,
-                   ~r/could not start TestServer.UDP instance on port #{port}/,
+                   ~r/could not start TestServer.UDP instance on port #{port}:/,
                    fn -> TestServer.UDP.start!(port: port) end
     end
   end
 
   describe "stop/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.UDP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.UDP.Instance to be running", fn ->
         TestServer.UDP.stop()
       end
 
@@ -203,7 +203,7 @@ defmodule TestServer.UDPTest do
       {:ok, _instance_2} = TestServer.UDP.start()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.stop\/1/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.UDP\.stop\/1/,
                    fn -> TestServer.UDP.stop() end
 
       assert TestServer.UDP.stop(instance_1) == :ok
@@ -252,7 +252,7 @@ defmodule TestServer.UDPTest do
 
   describe "address/2" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.UDP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.UDP.Instance to be running", fn ->
         TestServer.UDP.address()
       end
 
@@ -271,7 +271,7 @@ defmodule TestServer.UDPTest do
       instance_2 = TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.address\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.UDP\.address\/2/,
                    fn -> TestServer.UDP.address() end
 
       refute TestServer.UDP.address(instance_1) == TestServer.UDP.address(instance_2)
@@ -323,7 +323,7 @@ defmodule TestServer.UDPTest do
 
   describe "cacerts/1" do
     test "when instance not running" do
-      assert_raise RuntimeError, "no current TestServer.UDP.Instance is running", fn ->
+      assert_raise RuntimeError, "expected TestServer.UDP.Instance to be running", fn ->
         TestServer.UDP.cacerts()
       end
 
@@ -374,7 +374,7 @@ defmodule TestServer.UDPTest do
       {:ok, _instance_2} = TestServer.UDP.start()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.peer\/1/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.UDP\.peer\/1/,
                    fn -> TestServer.UDP.peer() end
 
       assert TestServer.UDP.peer(instance_1)
@@ -392,7 +392,9 @@ defmodule TestServer.UDPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "has peers that were not used:"
+
+      assert io =~
+               ~r/expected all peers on TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be used, but some were not:/
     end
 
     test "when receiving an unexpected peer" do
@@ -508,7 +510,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/multiple instances are running; pass the instance to TestServer\.UDP\.handle\/2/,
+                   ~r/expected exactly one instance to be running, but got multiple instances; pass the instance to TestServer\.UDP\.handle\/2/,
                    fn -> TestServer.UDP.handle() end
     end
 
@@ -517,7 +519,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.peer()
 
       assert_raise RuntimeError,
-                   "multiple peers are available; pass the peer to TestServer.UDP.handle/2",
+                   ~r/expected exactly one peer to be available, but got multiple peers; pass the peer to TestServer\.UDP\.handle\/2/,
                    fn -> TestServer.UDP.handle() end
 
       TestServer.UDP.stop()
@@ -561,7 +563,9 @@ defmodule TestServer.UDPTest do
       end
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "did not receive data for these handlers before the test ended"
+
+      assert io =~
+               ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to receive data for these handlers before the test ended:/
     end
 
     test "when receiving unexpected data" do
@@ -739,7 +743,8 @@ defmodule TestServer.UDPTest do
       Process.register(self(), HandleToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+      assert io =~ "(RuntimeError) expected callback response to be one of:"
+      assert io =~ "Got: :invalid"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
     end
@@ -882,7 +887,7 @@ defmodule TestServer.UDPTest do
       instance = TestServer.UDP.start!()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the peer because the peer does not exist/,
+                   ~r/cannot send to peer on TestServer\.UDP\.Instance \#PID\<[0-9.]+\> because it does not exist/,
                    fn -> TestServer.UDP.send({instance, make_ref()}) end
     end
 
@@ -890,7 +895,7 @@ defmodule TestServer.UDPTest do
       peer = TestServer.UDP.peer()
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the peer because no client has sent a datagram or established a DTLS connection/,
+                   ~r/cannot send to peer on TestServer\.UDP\.Instance \#PID\<[0-9.]+\> because no client has sent a datagram or established a DTLS connection/,
                    fn -> TestServer.UDP.send(peer, timeout: 1) end
 
       TestServer.UDP.stop()
@@ -907,7 +912,7 @@ defmodule TestServer.UDPTest do
       assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to the peer because the client has disconnected/,
+                   ~r/cannot send to peer on TestServer\.UDP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,
                    fn -> TestServer.UDP.send(peer) end
     end
 
@@ -1014,7 +1019,8 @@ defmodule TestServer.UDPTest do
       Process.register(self(), SendToInvalidResponseTest)
 
       assert io = capture_io(fn -> ExUnit.run() end)
-      assert io =~ "(RuntimeError) invalid callback response, got: :invalid"
+      assert io =~ "(RuntimeError) expected callback response to be one of:"
+      assert io =~ "Got: :invalid"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
     end

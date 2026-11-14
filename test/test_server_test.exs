@@ -254,18 +254,18 @@ defmodule TestServerTest do
       {:ok, instance} = TestServer.start_instance(FakeProtocol, [], fn _instance -> :ok end)
       :ok = TestServer.stop_instance(FakeProtocol, instance)
 
-      exception =
+      error =
         assert_raise RuntimeError, fn ->
           TestServer.stop_instance(FakeProtocol, instance)
         end
 
-      assert exception.message =~
+      message = Exception.message(error)
+
+      assert message =~
                ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/
 
-      assert exception.message =~ ~r/test\/test_server_test\.exs:\d+/
-
-      assert exception.message =~
-               "TestServerTest.\"test stop_instance/2 with stopped instance\"/1"
+      assert message =~ ~r/test\/test_server_test\.exs:\d+/
+      assert message =~ "TestServerTest.\"test stop_instance/2 with stopped instance\"/1"
     end
 
     test "when test ends" do

@@ -14,13 +14,15 @@ defmodule TestServer.UDP do
   @type peer_ref :: reference()
   @type data :: iodata()
   @type state :: term()
-  @type handler_fun :: (data(), state() ->
-                          {:reply, iodata(), state()}
-                          | {:ok, state()})
+
+  @typedoc "An anonymous function that matches received data."
   @type match_fun :: (data(), state() -> boolean())
-  @type send_fun :: (state() ->
-                       {:reply, iodata(), state()}
-                       | {:ok, state()})
+
+  @typedoc "An anonymous function that processes received data."
+  @type handler_fun :: (data(), state() -> {:reply, iodata(), state()} | {:ok, state()})
+
+  @typedoc "An anonymous function that sends data."
+  @type send_fun :: (state() -> {:reply, iodata(), state()} | {:ok, state()})
 
   @doc """
   Same as `start/1`, but returns the instance and raises on failure.

@@ -14,15 +14,21 @@ defmodule TestServer.TCP do
   @type connection_ref :: reference()
   @type data :: iodata()
   @type state :: term()
-  @type reply_options :: [upgrade: :tls]
+
+  @typedoc "An anonymous function that matches received data."
+  @type match_fun :: (data(), state() -> boolean())
+
+  @typedoc "An anonymous function that processes received data."
   @type handler_fun :: (data(), state() ->
                           {:reply, iodata(), state()}
                           | {:reply, {iodata(), reply_options()}, state()}
                           | {:ok, state()})
-  @type match_fun :: (data(), state() -> boolean())
-  @type send_fun :: (state() ->
-                       {:reply, iodata(), state()}
-                       | {:ok, state()})
+
+  @typedoc "Options for the `{:reply, {data, options}, state}` and `{:ok, options, state}` return of a `t:handler_fun/0`."
+  @type reply_options :: [upgrade: :tls]
+
+  @typedoc "An anonymous function that sends data."
+  @type send_fun :: (state() -> {:reply, iodata(), state()} | {:ok, state()})
 
   @doc """
   Same as `start/1`, but returns the instance and raises on failure.

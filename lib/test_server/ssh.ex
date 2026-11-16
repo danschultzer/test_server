@@ -12,28 +12,33 @@ defmodule TestServer.SSH do
   @type channel_ref :: reference()
   @type state :: term()
 
-  @type response_options :: [
-          close: boolean(),
-          exit_status: 0..0xFFFF_FFFF
-        ]
+  @typedoc "An anonymous function that matches a channel message."
+  @type match_fun :: (:ssh_connection.channel_msg(), state() -> boolean())
 
-  @type reply_options :: [
-          data_type_code: 0..0xFFFF_FFFF,
-          close: boolean(),
-          exit_status: 0..0xFFFF_FFFF
-        ]
-
+  @typedoc "An anonymous function that processes a channel message."
   @type handler_fun :: (:ssh_connection.channel_msg(), state() ->
                           {:reply, iodata(), state()}
                           | {:reply, {iodata(), reply_options()}, state()}
                           | {:ok, state()}
                           | {:ok, response_options(), state()})
 
+  @typedoc "Options for the `{:ok, options, state}` return of a `t:handler_fun/0`."
+  @type response_options :: [
+          close: boolean(),
+          exit_status: 0..0xFFFF_FFFF
+        ]
+
+  @typedoc "Options for the `{:reply, {data, options}, state}` return of a `t:handler_fun/0`."
+  @type reply_options :: [
+          data_type_code: 0..0xFFFF_FFFF,
+          close: boolean(),
+          exit_status: 0..0xFFFF_FFFF
+        ]
+
+  @typedoc "An anonymous function that processes a raw channel message."
   @type raw_handler_fun :: (:ssh_connection.channel_msg(), :ssh.connection_ref(), state() ->
                               {:ok, state()}
                               | {:stop, :ssh.channel_id(), state()})
-
-  @type match_fun :: (:ssh_connection.channel_msg(), state() -> boolean())
 
   @type host_key :: %{
           key:
@@ -336,8 +341,8 @@ defmodule TestServer.SSH do
   The `:to` callback can be either a two-arity `t:handler_fun/0` or a
   three-arity `t:raw_handler_fun/0`. A two-arity handler uses the default SSH
   handling, including request acknowledgements, sending replies, and closing
-  `:exec` channels. A three-arity handler gives you full control over the SSH
-  connection response.
+  `:exec` channels. A three-arity handler does nothing; you instead get full
+  control over the SSH connection with the raw `t::ssh.connection_ref/0`.
 
   ## Options
 

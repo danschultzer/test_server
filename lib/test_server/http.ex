@@ -10,23 +10,33 @@ defmodule TestServer.HTTP do
   alias TestServer.HTTP.{Instance, Server}
 
   @type handler_ref :: reference()
-  @type handler_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
   @type plug_module :: module()
   @type plug_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
+
+  @typedoc "An anonymous function that matches a request."
   @type match_fun :: (conn :: Plug.Conn.t() -> boolean())
+
+  @typedoc "An anonymous function that processes a request."
+  @type handler_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
 
   @type websocket_ref :: reference()
   @type websocket :: {TestServer.instance(), websocket_ref()}
   @type websocket_frame :: {:text | :binary, iodata()}
   @type websocket_state :: term()
-  @type websocket_handler_fun :: (frame :: websocket_frame(), state :: websocket_state() ->
-                                    websocket_reply())
+
+  @typedoc "An anonymous function that matches a websocket frame."
   @type websocket_match_fun :: (frame :: websocket_frame(), state :: websocket_state() ->
                                   boolean())
-  @type websocket_send_fun :: (state :: websocket_state() -> websocket_reply())
+
+  @typedoc "An anonymous function that processes a websocket frame."
+  @type websocket_handler_fun :: (frame :: websocket_frame(), state :: websocket_state() ->
+                                    websocket_reply())
 
   @type websocket_reply ::
           {:reply, websocket_frame(), websocket_state()} | {:ok, websocket_state()}
+
+  @typedoc "An anonymous function that sends a websocket frame."
+  @type websocket_send_fun :: (state :: websocket_state() -> websocket_reply())
 
   @doc """
   Same as `start/1`, but returns the instance and raises on failure.
@@ -477,7 +487,7 @@ defmodule TestServer.HTTP do
   def websocket_handle(websocket), do: websocket_handle(websocket, [])
 
   @doc """
-  Adds a message handler to a websocket instance.
+  Adds a message handler to a websocket endpoint.
 
   Messages are matched FIFO (first in, first out). Any messages not expected by
   TestServer or any message expectations not receiving a message will raise an
@@ -532,7 +542,7 @@ defmodule TestServer.HTTP do
   def websocket_send(websocket), do: websocket_send(websocket, [])
 
   @doc """
-  Sends a message to a websocket instance.
+  Sends a message to a websocket endpoint.
 
     * `:to` - a `t:websocket_send_fun/0` that will run on the server;
 

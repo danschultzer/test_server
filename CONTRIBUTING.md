@@ -40,7 +40,7 @@ If the protocol is bidirectional you would also have:
 ### Option conventions
 
 - Options should mirror the underlying OTP option names verbatim when it makes sense (e.g. `:ipfamily` or `:no_auth_needed`)
-- Options should otherwise use Elixir conventions like snake case (`:listen_options`, `:recv_timeout`).
+- Options should otherwise use Elixir conventions like snake case (`:on_conflict`, `:max_children`).
 
 ## Submitting a PR
 

@@ -359,7 +359,7 @@ defmodule TestServer.TCP.Instance do
   defp validate_handler_response!(response, stacktrace) do
     case response do
       {:reply, {data, options}, state} ->
-        validate_handler_options!(options, stacktrace)
+        validate_handler_response_options!(options, stacktrace)
 
         {:reply, {data, options}, state}
 
@@ -384,7 +384,7 @@ defmodule TestServer.TCP.Instance do
     end
   end
 
-  defp validate_handler_options!(options, stacktrace) do
+  defp validate_handler_response_options!(options, stacktrace) do
     valid_options = ~w(upgrade)a
 
     case Keyword.validate(options, valid_options) do

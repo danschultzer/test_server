@@ -586,8 +586,26 @@ defmodule TestServer.HTTPTest do
       assert io =~ "anonymous fn/1 in TestServer.HTTPTest.HandleToFunctionRaiseTest"
     end
 
-    test "when `:to` function halts conn" do
-      defmodule HandleToFunctionHaltsTest do
+    test "with `:to` function returning invalid result" do
+      defmodule HandleToFunctionInvalidResultTest do
+        use ExUnit.Case
+
+        alias unquote(__MODULE__).HTTPClient
+
+        test "fails" do
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle(to: fn _conn -> :invalid end)
+
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
+        end
+      end
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "expected a Plug.Conn struct, got: :invalid"
+    end
+
+    test "with `:to` function returning halted conn" do
+      defmodule HandleToFunctionHaltedConnTest do
         use ExUnit.Case
 
         alias unquote(__MODULE__).HTTPClient
@@ -753,8 +771,27 @@ defmodule TestServer.HTTPTest do
       assert io =~ "anonymous fn/1 in TestServer.HTTPTest.PlugFunctionRaiseTest"
     end
 
-    test "when plug function halts conn" do
-      defmodule PlugFunctionHaltsTest do
+    test "when plug function returning invalid result" do
+      defmodule PlugFunctionInvalidResultTest do
+        use ExUnit.Case
+
+        alias unquote(__MODULE__).HTTPClient
+
+        test "fails" do
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.plug(fn _conn -> :invalid end)
+          TestServer.HTTP.handle()
+
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
+        end
+      end
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "expected a Plug.Conn struct, got: :invalid"
+    end
+
+    test "when plug function returning halted conn" do
+      defmodule PlugFunctionHaltedConnTest do
         use ExUnit.Case
 
         alias unquote(__MODULE__).HTTPClient
@@ -898,7 +935,7 @@ defmodule TestServer.HTTPTest do
         assert WebSocketClient.close(client) == :ok
       end
 
-      test "with `:to` function returning set conn" do
+      test "with `:to` function returning a set conn" do
         websocket =
           TestServer.HTTP.websocket("/ws",
             to: fn conn ->
@@ -915,7 +952,7 @@ defmodule TestServer.HTTPTest do
                      fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
-      test "with `:to` function returning unset conn" do
+      test "with `:to` function" do
         TestServer.HTTP.websocket("/ws",
           to: fn conn ->
             assert Plug.Conn.get_req_header(conn, "upgrade") == ["websocket"]

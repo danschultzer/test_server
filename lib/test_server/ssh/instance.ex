@@ -253,7 +253,7 @@ defmodule TestServer.SSH.Instance do
   defp try_run_handler(handler, message, connection, channel_state, stacktrace) do
     message
     |> run_handler(handler, connection, channel_state)
-    |> validate_response!(handler, stacktrace)
+    |> validate_handler_response!(handler, stacktrace)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
@@ -266,7 +266,7 @@ defmodule TestServer.SSH.Instance do
     handler.(message, channel_state)
   end
 
-  defp validate_response!(response, handler, stacktrace) when is_function(handler, 3) do
+  defp validate_handler_response!(response, handler, stacktrace) when is_function(handler, 3) do
     case response do
       {:ok, state} ->
         {:raw, {:ok, state}}
@@ -288,10 +288,14 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_response!(response, handler, stacktrace) when is_function(handler, 2) do
+  defp validate_handler_response!(response, handler, stacktrace) when is_function(handler, 2) do
     case response do
       {:reply, {data, options}, state} ->
-        validate_response_options!(options, ~w(exit_status data_type_code close)a, stacktrace)
+        validate_handler_response_options!(
+          options,
+          ~w(exit_status data_type_code close)a,
+          stacktrace
+        )
 
         {:reply, {data, options}, state}
 
@@ -302,7 +306,7 @@ defmodule TestServer.SSH.Instance do
         {:ok, [], state}
 
       {:ok, options, state} ->
-        validate_response_options!(options, ~w(exit_status close)a, stacktrace)
+        validate_handler_response_options!(options, ~w(exit_status close)a, stacktrace)
 
         {:ok, options, state}
 
@@ -322,8 +326,8 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_response_options!(options, valid_options, stacktrace) do
-    with true <- validate_options(options, valid_options),
+  defp validate_handler_response_options!(options, valid_options, stacktrace) do
+    with true <- validate_handler_response_options(options, valid_options),
          true <- validate_close_option(options),
          true <- validate_exit_status_option(options),
          true <- validate_data_type_code_option(options) do
@@ -340,7 +344,7 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_options(options, valid_options) do
+  defp validate_handler_response_options(options, valid_options) do
     case Keyword.validate(options, valid_options) do
       {:ok, _} -> true
       {:error, _} -> false

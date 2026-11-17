@@ -113,7 +113,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
                http_request(:get, TestServer.HTTP.url("/?foo=bar?foo=baz"))
     end
 
-    test "with UTF-8 header and body" do
+    test "with UTF-8 request header and body" do
       header = "héllo 👋"
       body = "héllo 👋"
 
@@ -158,7 +158,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
   end
 
   describe "send_resp/4" do
-    test "with UTF-8 header and body" do
+    test "with UTF-8 response header and body" do
       header = "héllo 👋"
       body = "héllo 👋"
 

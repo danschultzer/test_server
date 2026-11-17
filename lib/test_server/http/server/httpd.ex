@@ -91,8 +91,7 @@ if Code.ensure_loaded?(:httpd) do
     defp conn(data) do
       {path, qs} = request_path(data)
       {port, host} = host(data)
-      {_port, remote_ip} = peer(data)
-      {:ok, remote_ip} = :inet.parse_address(remote_ip)
+      %{address: remote_ip} = peer_data(data)
 
       headers =
         data
@@ -101,18 +100,29 @@ if Code.ensure_loaded?(:httpd) do
           {IO.iodata_to_binary(name), IO.iodata_to_binary(value)}
         end)
 
+      scheme = scheme(data)
+
       %Conn{
         adapter: {__MODULE__, data},
         host: host,
         method: method(data),
         path_info: split_path(path),
-        port: port,
+        port: port || ((scheme == :https && 443) || 80),
         remote_ip: remote_ip,
         query_string: qs,
         req_headers: headers,
         request_path: path,
-        scheme: nil
+        scheme: scheme
       }
+    end
+
+    defp scheme(data) do
+      case httpd(data, :socket_type) do
+        :ip_comm -> :http
+        {:ip_comm, _options} -> :http
+        :ssl -> :https
+        {:ssl, _options} -> :https
+      end
     end
 
     defp method(data), do: data |> httpd(:method) |> IO.iodata_to_binary()
@@ -158,10 +168,11 @@ if Code.ensure_loaded?(:httpd) do
       end
     end
 
-    defp peer(data) do
-      {:init_data, peer, _, _} = httpd(data, :init_data)
+    defp peer_data(data) do
+      {:init_data, {port, address}, _, _} = httpd(data, :init_data)
+      {:ok, address} = :inet.parse_address(address)
 
-      peer
+      %{address: address, port: port, ssl_cert: nil}
     end
 
     defp parsed_header(data), do: httpd(data, :parsed_header)
@@ -221,6 +232,6 @@ if Code.ensure_loaded?(:httpd) do
     def inform(_, _, _), do: {:error, :not_implemented}
 
     @impl Plug.Conn.Adapter
-    def get_peer_data(_), do: %{address: {127, 0, 0, 1}, port: 0, ssl_cert: nil}
+    def get_peer_data(data), do: peer_data(data)
   end
 end

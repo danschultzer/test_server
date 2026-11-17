@@ -4,9 +4,9 @@ defmodule TestServer.HTTP.Server.HttpdTest do
 
   setup context do
     TestServer.HTTP.start!(
-      scheme: :http,
+      scheme: Map.get(context, :scheme, :http),
       http_server: {TestServer.HTTP.Server.Httpd, []},
-      ipfamily: context[:ipfamily] || :inet
+      ipfamily: Map.get(context, :ipfamily, :inet)
     )
 
     :ok
@@ -18,7 +18,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
         to: fn conn ->
           refute List.keyfind(conn.req_headers, "host", 0)
           assert conn.host == ""
-          refute conn.port
+          assert conn.port == 80
 
           Plug.Conn.resp(conn, 200, "OK")
         end
@@ -32,7 +32,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "localhost"
-          refute conn.port
+          assert conn.port == 80
 
           Plug.Conn.resp(conn, 200, "OK")
         end
@@ -42,11 +42,29 @@ defmodule TestServer.HTTP.Server.HttpdTest do
                http_request(:get, TestServer.HTTP.url(), [{"Host", "localhost"}])
     end
 
+    @tag scheme: :https
+    test "with TLS with host header without port" do
+      url = TestServer.HTTP.url()
+      options = [ssl: tls_options(TestServer.HTTP.cacerts())]
+
+      TestServer.HTTP.handle(
+        to: fn conn ->
+          assert conn.host == "localhost"
+          assert conn.port == 443
+
+          Plug.Conn.resp(conn, 200, "OK")
+        end
+      )
+
+      assert {:ok, {200, _headers, "OK"}} =
+               http_request(:get, url, [{"Host", "localhost"}], nil, options)
+    end
+
     test "with host header with invalid port" do
       TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "localhost"
-          refute conn.port
+          assert conn.port == 80
 
           Plug.Conn.resp(conn, 200, "OK")
         end
@@ -60,7 +78,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "localhost"
-          refute conn.port
+          assert conn.port == 80
 
           Plug.Conn.resp(conn, 200, "OK")
         end
@@ -90,7 +108,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.host == "::1"
-          refute conn.port
+          assert conn.port == 80
 
           Plug.Conn.resp(conn, 200, "OK")
         end
@@ -142,18 +160,36 @@ defmodule TestServer.HTTP.Server.HttpdTest do
           assert conn.port == port
           assert conn.remote_ip == {127, 0, 0, 1}
           assert conn.query_string == "foo=bar"
-
-          assert List.keyfind(conn.req_headers, "host", 0) ==
-                   {"host", "localhost:#{port}"}
-
+          assert conn.scheme == :http
+          assert Plug.Conn.get_req_header(conn, "host") == ["localhost:#{port}"]
           assert conn.request_path
-          refute conn.scheme
+
+          assert peer_data = Plug.Conn.get_peer_data(conn)
+          assert peer_data.address == {127, 0, 0, 1}
+          assert peer_data.port > 0
+          assert peer_data.ssl_cert == nil
 
           Plug.Conn.resp(conn, 200, "OK")
         end
       )
 
       assert {:ok, {200, _headers, "OK"}} = http_request(:get, url)
+    end
+
+    @tag scheme: :https
+    test "with TLS" do
+      url = TestServer.HTTP.url()
+      options = [ssl: tls_options(TestServer.HTTP.cacerts())]
+
+      TestServer.HTTP.handle(
+        to: fn conn ->
+          assert conn.scheme == :https
+
+          Plug.Conn.resp(conn, 200, "OK")
+        end
+      )
+
+      assert {:ok, {200, _headers, "OK"}} = http_request(:get, url, [], nil, options)
     end
   end
 
@@ -202,5 +238,16 @@ defmodule TestServer.HTTP.Server.HttpdTest do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp tls_options(cacerts) do
+    [
+      verify: :verify_peer,
+      cacerts: cacerts,
+      customize_hostname_check: [
+        match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+      ],
+      log_level: :warning
+    ]
   end
 end

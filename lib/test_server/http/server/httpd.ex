@@ -131,7 +131,7 @@ if Code.ensure_loaded?(:httpd) do
       data
       |> httpd(:request_uri)
       |> IO.iodata_to_binary()
-      |> String.split("?")
+      |> String.split("?", parts: 2)
       |> case do
         [request_path] -> {request_path, ""}
         [request_path, qs | _] -> {request_path, qs}

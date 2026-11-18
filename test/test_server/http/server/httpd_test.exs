@@ -121,7 +121,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
     test "with extra query segment" do
       TestServer.HTTP.handle(
         to: fn conn ->
-          assert conn.query_string == "foo=bar"
+          assert conn.query_string == "foo=bar?foo=baz"
 
           Plug.Conn.resp(conn, 200, "OK")
         end

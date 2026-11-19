@@ -32,6 +32,14 @@ defmodule TestServer.SSHTest do
                    fn -> TestServer.SSH.start(subsystems: [:invalid]) end
     end
 
+    test "with invalid `daemon: [log_level: ...]` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :log_level in :daemon to be one of :emergency, :alert, :critical, :error, :warning, :notice, :info, :debug, :none, :all, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.start(daemon: [log_level: :invalid])
+                   end
+    end
+
     test "with multiple instances" do
       instance_1 = TestServer.SSH.start!()
       instance_2 = TestServer.SSH.start!()
@@ -292,33 +300,36 @@ defmodule TestServer.SSHTest do
       assert SSHClient.close(conn, channel_id) == :ok
     end
 
-    test "with `suppress_ssh_strict_kex_ordering_log: true` option" do
-      :logger.remove_primary_filter(:test_server_suppress_ssh_strict_kex_ordering)
-      TestServer.SSH.start!(suppress_ssh_strict_kex_ordering_log: true)
-
-      assert %{filters: filters} = :logger.get_primary_config()
-      assert List.keyfind(filters, :test_server_suppress_ssh_strict_kex_ordering, 0)
+    test "with `daemon: [log_level: :none]` option" do
+      TestServer.SSH.start!(daemon: [log_level: :none])
 
       assert capture_log(fn ->
                assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
              end) == ""
-
-      :ok = TestServer.SSH.stop()
-
-      assert %{filters: filters} = :logger.get_primary_config()
-      refute List.keyfind(filters, :test_server_suppress_ssh_strict_kex_ordering, 0)
     end
 
-    test "with `suppress_ssh_strict_kex_ordering_log: false` option" do
-      :logger.remove_primary_filter(:test_server_suppress_ssh_strict_kex_ordering)
-      TestServer.SSH.start!(suppress_ssh_strict_kex_ordering_log: false)
-
-      assert %{filters: filters} = :logger.get_primary_config()
-      refute List.keyfind(filters, :test_server_suppress_ssh_strict_kex_ordering, 0)
+    test "with `daemon: [log_level: :all]` option" do
+      TestServer.SSH.start!(daemon: [log_level: :all])
 
       assert capture_log(fn ->
                assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
              end) =~ "server will use strict KEX ordering"
+    end
+
+    test "with `daemon: [log_level: :debug]` option" do
+      TestServer.SSH.start!(daemon: [log_level: :debug])
+
+      assert capture_log(fn ->
+               assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
+             end) =~ "server will use strict KEX ordering"
+    end
+
+    test "with `daemon: [log_level: :info]` option" do
+      TestServer.SSH.start!(daemon: [log_level: :info])
+
+      assert capture_log(fn ->
+               assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
+             end) == ""
     end
 
     test "when test ends" do

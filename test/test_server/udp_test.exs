@@ -715,10 +715,13 @@ defmodule TestServer.UDPTest do
 
         test "fails" do
           instance = TestServer.UDP.start!(transport: :dtls, suppress_warning: true)
-          _peer = TestServer.UDP.peer()
+          peer = TestServer.UDP.peer()
 
           assert {:ok, socket} =
                    DTLSClient.connect(TestServer.UDP.address(), unquote(__MODULE__).tls_options())
+
+          assert TestServer.UDP.send(peer) == :ok
+          assert DTLSClient.receive_data(socket) == {:ok, "ping"}
 
           assert [%{owner: owner, socket: {:dtls, raw_socket}}] =
                    TestServer.UDP.Instance.peers(instance)

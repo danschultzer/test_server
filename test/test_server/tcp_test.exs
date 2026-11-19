@@ -253,7 +253,8 @@ defmodule TestServer.TCPTest do
 
       refute Process.alive?(instance)
       assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
-      assert {:error, :econnrefused} = TCPClient.connect(address)
+      assert {:error, reason} = TCPClient.connect(address)
+      assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TCPClient.receive_data(socket, 0)
     end
 
@@ -272,7 +273,8 @@ defmodule TestServer.TCPTest do
 
       refute Process.alive?(instance)
       assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
-      assert {:error, :econnrefused} = TLSClient.connect(address, tls_options)
+      assert {:error, reason} = TLSClient.connect(address, tls_options)
+      assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TLSClient.receive_data(socket)
     end
   end

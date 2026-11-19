@@ -49,6 +49,8 @@ defmodule TestServer.SSH do
           fingerprint: binary()
         }
 
+  @type log_level :: :logger.level() | :none | :all
+
   @doc """
   Same as `start/1`, but returns the instance and raises on failure.
   """
@@ -92,12 +94,10 @@ defmodule TestServer.SSH do
       expectations. Channels initialized with subsystems will have a
       `:subsystem` key set in the state. Defaults to `[]`;
 
-    * `:suppress_ssh_strict_kex_ordering_log` - boolean that suppresses OTP
-      SSH debug messages for strict KEX ordering. Defaults to `true`.  Note:
-      the filter is installed when the server starts and removed when it stops.
-      If a test crashes the filter may persist into the next test;
-
     * `:daemon`           - options to pass directly to `:ssh.daemon/2`;
+
+      * `:log_level`      - a `t:log_level/0` that sets the minimum severity
+      log level for SSH daemon log messages. Defaults to `:warning`;
 
     * `:suppress_warning` - Suppresses IO warnings on expectation failures
       related to this instance. Defaults to `false`;
@@ -157,7 +157,6 @@ defmodule TestServer.SSH do
       :no_auth_needed,
       :ipfamily,
       :subsystems,
-      :suppress_ssh_strict_kex_ordering_log,
       :daemon,
       :suppress_warning
     ])

@@ -16,7 +16,7 @@ defmodule TestServer.SSH.Server do
         |> Keyword.put(:daemon_ref, daemon_ref)
 
       stop_on_exit(options)
-      suppress_ssh_strict_kex_ordering_log?(options) && install_strict_kex_filter()
+      install_ssh_log_filter()
 
       {:ok, options}
     end
@@ -24,6 +24,13 @@ defmodule TestServer.SSH.Server do
 
   defp daemon_options(instance, options) do
     tmp_dir = to_charlist(System.tmp_dir!())
+
+    {log_level, daemon_options} =
+      options
+      |> Keyword.get(:daemon, [])
+      |> Keyword.pop(:log_level, :warning)
+
+    validate_log_level!(log_level)
 
     {host_keys_fn, host_keys} =
       case host_keys(options) do
@@ -44,7 +51,8 @@ defmodule TestServer.SSH.Server do
           host_key: host_keys_fn,
           host_keys: host_keys,
           is_auth_key: auth_key_fn,
-          auth_keys: auth_keys
+          auth_keys: auth_keys,
+          log_level: log_level
         ]
       }
 
@@ -72,7 +80,7 @@ defmodule TestServer.SSH.Server do
         user_dir: tmp_dir,
         parallel_login: true
       )
-      |> Keyword.merge(Keyword.get(options, :daemon, []))
+      |> Keyword.merge(daemon_options)
       |> put_subsystems(instance, options)
 
     daemon_options =
@@ -84,37 +92,13 @@ defmodule TestServer.SSH.Server do
     {host_keys, daemon_options}
   end
 
-  defp put_subsystems(daemon_options, instance, options) do
-    subsystems = Keyword.get(options, :subsystems, [])
+  @levels [:emergency, :alert, :critical, :error, :warning, :notice, :info, :debug, :none, :all]
 
-    validate_subsystems!(subsystems)
+  defp validate_log_level!(level) when level in @levels, do: :ok
 
-    subsystems
-    |> Enum.map(fn name ->
-      {String.to_charlist(name), {Channel, [instance: instance, subsystem: name]}}
-    end)
-    |> case do
-      [] ->
-        daemon_options
-
-      subsystems ->
-        Keyword.update(daemon_options, :subsystems, subsystems, &(subsystems ++ &1))
-    end
-  end
-
-  defp validate_subsystems!(subsystems) when is_list(subsystems) do
-    case Enum.all?(subsystems, &(is_binary(&1) and &1 != "")) do
-      true ->
-        :ok
-
-      false ->
-        raise ArgumentError,
-              "expected :subsystems to be a list of non-empty strings, got: #{inspect(subsystems)}"
-    end
-  end
-
-  defp validate_subsystems!(subsystems) do
-    raise ArgumentError, "expected :subsystems to be a list, got: #{inspect(subsystems)}"
+  defp validate_log_level!(level) do
+    raise ArgumentError,
+          "expected :log_level in :daemon to be one of #{Enum.map_join(@levels, ", ", &inspect/1)}, got: #{inspect(level)}"
   end
 
   defp host_keys(options) do
@@ -215,6 +199,39 @@ defmodule TestServer.SSH.Server do
     end
   end
 
+  defp put_subsystems(daemon_options, instance, options) do
+    subsystems = Keyword.get(options, :subsystems, [])
+
+    validate_subsystems!(subsystems)
+
+    subsystems
+    |> Enum.map(fn name ->
+      {String.to_charlist(name), {Channel, [instance: instance, subsystem: name]}}
+    end)
+    |> case do
+      [] ->
+        daemon_options
+
+      subsystems ->
+        Keyword.update(daemon_options, :subsystems, subsystems, &(subsystems ++ &1))
+    end
+  end
+
+  defp validate_subsystems!(subsystems) when is_list(subsystems) do
+    case Enum.all?(subsystems, &(is_binary(&1) and &1 != "")) do
+      true ->
+        :ok
+
+      false ->
+        raise ArgumentError,
+              "expected :subsystems to be a list of non-empty strings, got: #{inspect(subsystems)}"
+    end
+  end
+
+  defp validate_subsystems!(subsystems) do
+    raise ArgumentError, "expected :subsystems to be a list, got: #{inspect(subsystems)}"
+  end
+
   # SSH traps exits so we must ensure we stop it explicitly when the instance
   # dies.
   defp stop_on_exit(options) do
@@ -227,29 +244,36 @@ defmodule TestServer.SSH.Server do
     end)
   end
 
-  defp suppress_ssh_strict_kex_ordering_log?(options),
-    do: Keyword.get(options, :suppress_ssh_strict_kex_ordering_log, true)
+  @ssh_log_filter __MODULE__
 
-  @ssh_strict_kex_filter :test_server_suppress_ssh_strict_kex_ordering
-
-  # Erlang's ssh_transport module logs "server will use strict KEX ordering" at
-  # debug level using logger:debug/1 (bare string, no metadata). Because
-  # there's no module metadata, set_module_level/set_application_level can't
-  # target it. We use a primary filter that drops this specific debug message.
-  defp install_strict_kex_filter do
+  # This installs a global filter to control SSH log messages, as there is no
+  # way to configure `:ssh` log level directly.
+  defp install_ssh_log_filter do
     %{filters: filters} = :logger.get_primary_config()
 
-    unless List.keyfind(filters, @ssh_strict_kex_filter, 0) do
-      :logger.add_primary_filter(@ssh_strict_kex_filter, {
-        fn
-          %{level: :debug, msg: {:string, ~c"server will use strict KEX ordering"}}, _extra ->
-            :stop
+    case List.keymember?(filters, @ssh_log_filter, 0) do
+      true ->
+        :ok
 
-          _event, _extra ->
-            :ignore
-        end,
-        []
-      })
+      false ->
+        :logger.add_primary_filter(
+          @ssh_log_filter,
+          {
+            fn
+              %{meta: %{test_server_ssh_log_level: process_level}, level: level}, _extra ->
+                cond do
+                  process_level == :none -> :stop
+                  process_level == :all -> :ignore
+                  Logger.compare_levels(level, process_level) == :lt -> :stop
+                  true -> :ignore
+                end
+
+              _event, _extra ->
+                :ignore
+            end,
+            []
+          }
+        )
     end
   end
 
@@ -258,11 +282,6 @@ defmodule TestServer.SSH.Server do
   def stop(options) do
     daemon_ref = Keyword.fetch!(options, :daemon_ref)
 
-    try do
-      :ssh.stop_daemon(daemon_ref)
-    after
-      suppress_ssh_strict_kex_ordering_log?(options) &&
-        :logger.remove_primary_filter(@ssh_strict_kex_filter)
-    end
+    :ssh.stop_daemon(daemon_ref)
   end
 end

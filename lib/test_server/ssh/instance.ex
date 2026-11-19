@@ -27,8 +27,8 @@ defmodule TestServer.SSH.Instance do
         ) ::
           {:ok, map()}
   def register(instance, {:handle, channel_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, [2, 3])
 
     GenServer.call(instance, {:register, {:handle, channel_ref, options, stacktrace}})
   end
@@ -56,16 +56,17 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_function_option!(options, option) do
+  defp validate_function_option!(options, option, arity) do
     value = Keyword.get(options, option)
+    arities = List.wrap(arity)
 
-    case is_function(value) do
+    case Enum.any?(arities, &is_function(value, &1)) do
       true ->
         :ok
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a function, got: #{inspect(value)}"
+              "expected #{inspect(option)} to be a #{Enum.join(arities, " or ")}-arity function, got: #{inspect(value)}"
     end
   end
 
@@ -253,7 +254,7 @@ defmodule TestServer.SSH.Instance do
   defp try_run_handler(handler, message, connection, channel_state, stacktrace) do
     message
     |> run_handler(handler, connection, channel_state)
-    |> validate_response!(handler, stacktrace)
+    |> validate_handler_response!(handler, stacktrace)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
@@ -266,7 +267,7 @@ defmodule TestServer.SSH.Instance do
     handler.(message, channel_state)
   end
 
-  defp validate_response!(response, handler, stacktrace) when is_function(handler, 3) do
+  defp validate_handler_response!(response, handler, stacktrace) when is_function(handler, 3) do
     case response do
       {:ok, state} ->
         {:raw, {:ok, state}}
@@ -288,10 +289,14 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_response!(response, handler, stacktrace) when is_function(handler, 2) do
+  defp validate_handler_response!(response, handler, stacktrace) when is_function(handler, 2) do
     case response do
       {:reply, {data, options}, state} ->
-        validate_response_options!(options, ~w(exit_status data_type_code close)a, stacktrace)
+        validate_handler_response_options!(
+          options,
+          ~w(exit_status data_type_code close)a,
+          stacktrace
+        )
 
         {:reply, {data, options}, state}
 
@@ -302,7 +307,7 @@ defmodule TestServer.SSH.Instance do
         {:ok, [], state}
 
       {:ok, options, state} ->
-        validate_response_options!(options, ~w(exit_status close)a, stacktrace)
+        validate_handler_response_options!(options, ~w(exit_status close)a, stacktrace)
 
         {:ok, options, state}
 
@@ -322,8 +327,8 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_response_options!(options, valid_options, stacktrace) do
-    with true <- validate_options(options, valid_options),
+  defp validate_handler_response_options!(options, valid_options, stacktrace) do
+    with true <- validate_handler_response_options(options, valid_options),
          true <- validate_close_option(options),
          true <- validate_exit_status_option(options),
          true <- validate_data_type_code_option(options) do
@@ -340,7 +345,7 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_options(options, valid_options) do
+  defp validate_handler_response_options(options, valid_options) do
     case Keyword.validate(options, valid_options) do
       {:ok, _} -> true
       {:error, _} -> false

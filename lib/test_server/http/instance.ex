@@ -44,8 +44,8 @@ defmodule TestServer.HTTP.Instance do
         instance,
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
       ) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
-    validate_function_option!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
+    validate_function_option!(options, :to, 2)
 
     GenServer.call(
       instance,
@@ -58,7 +58,7 @@ defmodule TestServer.HTTP.Instance do
           {:websocket, {:send, TestServer.HTTP.websocket_ref(), keyword()}}
         ) :: {:ok, pid()} | {:error, :einval} | {:error, :enotconn} | {:error, :closed}
   def register(instance, {:websocket, {:send, websocket_ref, options}}) do
-    validate_function_option!(options, :to)
+    validate_function_option!(options, :to, 1)
 
     GenServer.call(instance, {:register, {:websocket, {:send, websocket_ref, options}}})
   end
@@ -70,7 +70,7 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected a function of arity 1 or a Plug module, got: #{inspect(plug)}"
+              "expected a 1-arity function or a Plug module, got: #{inspect(plug)}"
     end
   end
 
@@ -83,7 +83,7 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a function of arity 1 or a Plug module, got: #{inspect(plug)}"
+              "expected #{inspect(option)} to be a 1-arity function or a Plug module, got: #{inspect(plug)}"
     end
   end
 
@@ -96,16 +96,16 @@ defmodule TestServer.HTTP.Instance do
       function_exported?(plug, :call, 2)
   end
 
-  defp validate_function_option!(options, option) do
+  defp validate_function_option!(options, option, arity) do
     value = Keyword.get(options, option)
 
-    case is_function(value) do
+    case is_function(value, arity) do
       true ->
         :ok
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a function, got: #{inspect(value)}"
+              "expected #{inspect(option)} to be a #{arity}-arity function, got: #{inspect(value)}"
     end
   end
 
@@ -340,7 +340,7 @@ defmodule TestServer.HTTP.Instance do
 
     result =
       try do
-        frame = validate_websocket_frame!(to.(websocket_state), stacktrace)
+        frame = validate_websocket_handler_response!(to.(websocket_state), stacktrace)
 
         {:ok, frame}
       rescue
@@ -409,11 +409,11 @@ defmodule TestServer.HTTP.Instance do
       :error ->
         nil
 
-      {:ok, match_fn} when is_function(match_fn) ->
+      {:ok, match_fn} when is_function(match_fn, 1) ->
         match_fn
 
       {:ok, match} ->
-        raise ArgumentError, "expected :match to be a function, got: #{inspect(match)}"
+        raise ArgumentError, "expected :match to be a 1-arity function, got: #{inspect(match)}"
     end
   end
 
@@ -443,39 +443,50 @@ defmodule TestServer.HTTP.Instance do
       plugs -> plugs
     end
     |> Enum.reduce_while(conn, fn %{plug: plug, stacktrace: stacktrace}, conn ->
-      case try_run_plug(conn, plug, stacktrace) do
+      case try_run_plug_handler(conn, plug, stacktrace) do
         {:ok, conn} -> {:cont, conn}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp try_run_plug(conn, plug, stacktrace) do
+  defp try_run_plug_handler(conn, plug, stacktrace) do
     conn
-    |> run_plug(plug)
-    |> validate_not_halted!(plug, stacktrace)
+    |> run_plug_handler(plug)
+    |> validate_plug_handler_response!(plug, stacktrace)
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  defp validate_not_halted!(%{halted: true}, plug, stacktrace) do
-    raise """
-    cannot halt a connection because all requests must be processed
-
-    # #{inspect(plug)}
-        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
-    """
-  end
-
-  defp validate_not_halted!(conn, _plug, _stacktrace), do: {:ok, conn}
-
-  defp run_plug(conn, plug) when is_function(plug) do
+  defp run_plug_handler(conn, plug) when is_function(plug) do
     plug.(conn)
   end
 
-  defp run_plug(conn, plug) when is_atom(plug) do
+  defp run_plug_handler(conn, plug) when is_atom(plug) do
     options = plug.init([])
     plug.call(conn, options)
+  end
+
+  defp validate_plug_handler_response!(response, plug, stacktrace) do
+    case response do
+      %Plug.Conn{halted: true} ->
+        raise """
+        cannot halt a connection because all requests must be processed
+
+        # #{inspect(plug)}
+            #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+        """
+
+      %Plug.Conn{halted: false} = conn ->
+        {:ok, conn}
+
+      _other ->
+        raise """
+        expected a Plug.Conn struct, got: #{inspect(response)}
+
+        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+        """
+    end
   end
 
   defp run_handlers({:error, error}, state), do: {{:error, error}, state}
@@ -502,7 +513,7 @@ defmodule TestServer.HTTP.Instance do
             websocket: handler.websocket,
             handler_ref: handler.ref
           })
-          |> try_run_plug(plug, stacktrace)
+          |> try_run_plug_handler(plug, stacktrace)
 
         handler = %{handler | suspended: true}
         handlers = List.replace_at(state.handlers, index, handler)
@@ -540,7 +551,6 @@ defmodule TestServer.HTTP.Instance do
 
       {:ok, index} ->
         %{to: handler, stacktrace: stacktrace} = Enum.at(state.websocket_handlers, index)
-
         result = try_run_websocket_handler(frame, websocket_state, stacktrace, handler)
 
         websocket_handlers =
@@ -554,32 +564,39 @@ defmodule TestServer.HTTP.Instance do
 
   defp try_run_websocket_handler(frame, websocket_state, stacktrace, handler) do
     frame =
-      frame
-      |> handler.(websocket_state)
-      |> validate_websocket_frame!(stacktrace)
+      handler
+      |> run_websocket_handler(frame, websocket_state)
+      |> validate_websocket_handler_response!(stacktrace)
 
     {:ok, frame}
   rescue
     error -> {:error, {error, __STACKTRACE__}}
   end
 
-  defp validate_websocket_frame!({:reply, {opcode, _data}, _state} = response, _stacktrace)
-       when opcode in [:text, :binary],
-       do: response
+  defp run_websocket_handler(handler, frame, websocket_state) do
+    handler.(frame, websocket_state)
+  end
 
-  defp validate_websocket_frame!({:ok, _state} = response, _stacktrace), do: response
+  defp validate_websocket_handler_response!(response, stacktrace) do
+    case response do
+      {:reply, {opcode, data}, state} when opcode in [:text, :binary] ->
+        {:reply, {opcode, data}, state}
 
-  defp validate_websocket_frame!(response, stacktrace) do
-    raise """
-    expected callback response to be one of:
+      {:ok, state} ->
+        {:ok, state}
 
-      - {:reply, {:text, iodata}, state}
-      - {:reply, {:binary, iodata}, state}
-      - {:ok, state}
+      _other ->
+        raise """
+        expected callback response to be one of:
 
-    Got: #{inspect(response)}
+          - {:reply, {:text, iodata}, state}
+          - {:reply, {:binary, iodata}, state}
+          - {:ok, state}
 
-    #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
-    """
+        Got: #{inspect(response)}
+
+        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+        """
+    end
   end
 end

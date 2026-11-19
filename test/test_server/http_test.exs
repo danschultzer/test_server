@@ -319,22 +319,30 @@ defmodule TestServer.HTTPTest do
     end
 
     test "with invalid `:match` option" do
-      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
-        TestServer.HTTP.handle(match: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 1-arity function, got: :invalid/,
+                   fn ->
+                     TestServer.HTTP.handle(match: :invalid)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 1-arity function, got: #Function/,
+                   fn ->
+                     TestServer.HTTP.handle(match: fn _conn, _opts -> true end)
+                   end
     end
 
     test "with invalid `:to` option" do
       assert_raise ArgumentError,
-                   ~r/expected :to to be a function of arity 1 or a Plug module, got: :invalid/,
+                   ~r/expected :to to be a 1-arity function or a Plug module, got: :invalid/,
                    fn ->
                      TestServer.HTTP.handle(to: :invalid)
                    end
 
       assert_raise ArgumentError,
-                   ~r/expected :to to be a function of arity 1 or a Plug module/,
+                   ~r/expected :to to be a 1-arity function or a Plug module/,
                    fn ->
-                     TestServer.HTTP.handle(to: fn _conn, _options -> :ok end)
+                     TestServer.HTTP.handle(to: fn conn, _options -> conn end)
                    end
     end
 
@@ -586,8 +594,26 @@ defmodule TestServer.HTTPTest do
       assert io =~ "anonymous fn/1 in TestServer.HTTPTest.HandleToFunctionRaiseTest"
     end
 
-    test "when `:to` function halts conn" do
-      defmodule HandleToFunctionHaltsTest do
+    test "with `:to` function returning invalid result" do
+      defmodule HandleToFunctionInvalidResultTest do
+        use ExUnit.Case
+
+        alias unquote(__MODULE__).HTTPClient
+
+        test "fails" do
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.handle(to: fn _conn -> :invalid end)
+
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
+        end
+      end
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "expected a Plug.Conn struct, got: :invalid"
+    end
+
+    test "with `:to` function returning halted conn" do
+      defmodule HandleToFunctionHaltedConnTest do
         use ExUnit.Case
 
         alias unquote(__MODULE__).HTTPClient
@@ -698,12 +724,12 @@ defmodule TestServer.HTTPTest do
 
     test "with invalid plug" do
       assert_raise ArgumentError,
-                   ~r/expected a function of arity 1 or a Plug module, got: :invalid/,
+                   ~r/expected a 1-arity function or a Plug module, got: :invalid/,
                    fn ->
                      TestServer.HTTP.plug(:invalid)
                    end
 
-      assert_raise ArgumentError, ~r/expected a function of arity 1 or a Plug module/, fn ->
+      assert_raise ArgumentError, ~r/expected a 1-arity function or a Plug module/, fn ->
         TestServer.HTTP.plug(InvalidPlug)
       end
     end
@@ -753,8 +779,27 @@ defmodule TestServer.HTTPTest do
       assert io =~ "anonymous fn/1 in TestServer.HTTPTest.PlugFunctionRaiseTest"
     end
 
-    test "when plug function halts conn" do
-      defmodule PlugFunctionHaltsTest do
+    test "when plug function returning invalid result" do
+      defmodule PlugFunctionInvalidResultTest do
+        use ExUnit.Case
+
+        alias unquote(__MODULE__).HTTPClient
+
+        test "fails" do
+          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.plug(fn _conn -> :invalid end)
+          TestServer.HTTP.handle()
+
+          assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
+        end
+      end
+
+      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io =~ "expected a Plug.Conn struct, got: :invalid"
+    end
+
+    test "when plug function returning halted conn" do
+      defmodule PlugFunctionHaltedConnTest do
         use ExUnit.Case
 
         alias unquote(__MODULE__).HTTPClient
@@ -872,14 +917,28 @@ defmodule TestServer.HTTPTest do
           TestServer.HTTP.websocket(invalid: :option)
         end
 
-        assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket(match: :invalid)
-        end
+        assert_raise ArgumentError,
+                     ~r/expected :match to be a 1-arity function, got: :invalid/,
+                     fn ->
+                       TestServer.HTTP.websocket(match: :invalid)
+                     end
 
         assert_raise ArgumentError,
-                     ~r/expected :to to be a function of arity 1 or a Plug module, got: :invalid/,
+                     ~r/expected :match to be a 1-arity function, got: #Function/,
+                     fn ->
+                       TestServer.HTTP.websocket(match: fn _conn, _opts -> true end)
+                     end
+
+        assert_raise ArgumentError,
+                     ~r/expected :to to be a 1-arity function or a Plug module, got: :invalid/,
                      fn ->
                        TestServer.HTTP.websocket(to: :invalid)
+                     end
+
+        assert_raise ArgumentError,
+                     ~r/expected :to to be a 1-arity function or a Plug module, got: #Function/,
+                     fn ->
+                       TestServer.HTTP.websocket(to: fn conn, _options -> conn end)
                      end
       end
 
@@ -898,7 +957,7 @@ defmodule TestServer.HTTPTest do
         assert WebSocketClient.close(client) == :ok
       end
 
-      test "with `:to` function returning set conn" do
+      test "with `:to` function returning a set conn" do
         websocket =
           TestServer.HTTP.websocket("/ws",
             to: fn conn ->
@@ -915,7 +974,7 @@ defmodule TestServer.HTTPTest do
                      fn -> TestServer.HTTP.websocket_send(websocket) end
       end
 
-      test "with `:to` function returning unset conn" do
+      test "with `:to` function" do
         TestServer.HTTP.websocket("/ws",
           to: fn conn ->
             assert Plug.Conn.get_req_header(conn, "upgrade") == ["websocket"]
@@ -946,13 +1005,33 @@ defmodule TestServer.HTTPTest do
           TestServer.HTTP.websocket_handle(websocket, invalid: :option)
         end
 
-        assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_handle(websocket, match: :invalid)
-        end
+        assert_raise ArgumentError,
+                     ~r/expected :match to be a 2-arity function, got: :invalid/,
+                     fn ->
+                       TestServer.HTTP.websocket_handle(websocket, match: :invalid)
+                     end
 
-        assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_handle(websocket, to: :invalid)
-        end
+        assert_raise ArgumentError,
+                     ~r/expected :match to be a 2-arity function, got: #Function/,
+                     fn ->
+                       TestServer.HTTP.websocket_handle(websocket,
+                         match: fn _frame, _state, _option -> true end
+                       )
+                     end
+
+        assert_raise ArgumentError,
+                     ~r/expected :to to be a 2-arity function, got: :invalid/,
+                     fn ->
+                       TestServer.HTTP.websocket_handle(websocket, to: :invalid)
+                     end
+
+        assert_raise ArgumentError,
+                     ~r/expected :to to be a 2-arity function, got: #Function/,
+                     fn ->
+                       TestServer.HTTP.websocket_handle(websocket,
+                         to: fn _frame, _option, state -> {:reply, {:text, "pong"}, state} end
+                       )
+                     end
 
         TestServer.HTTP.stop()
       end
@@ -1007,7 +1086,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
             websocket = TestServer.HTTP.websocket("/ws")
 
             TestServer.HTTP.websocket_handle(websocket,
@@ -1040,10 +1119,9 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
             websocket = TestServer.HTTP.websocket("/ws")
-
-            TestServer.HTTP.websocket_handle(websocket)
+            :ok = TestServer.HTTP.websocket_handle(websocket)
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
             assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
@@ -1067,8 +1145,7 @@ defmodule TestServer.HTTPTest do
 
       test "when receiving control frame" do
         websocket = TestServer.HTTP.websocket("/ws")
-
-        TestServer.HTTP.websocket_handle(websocket)
+        :ok = TestServer.HTTP.websocket_handle(websocket)
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
         assert WebSocketClient.send_frame(client, {:pong, "client-pong"}) == :ok
@@ -1078,84 +1155,12 @@ defmodule TestServer.HTTPTest do
         assert WebSocketClient.receive_frame(client) == {:ok, {:text, "ping"}}
       end
 
-      test "when `:to` function raises exception" do
-        defmodule WebSocketHandleToFunctionRaiseTest do
-          use ExUnit.Case
-
-          test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
-            websocket = TestServer.HTTP.websocket("/ws")
-
-            TestServer.HTTP.websocket_handle(websocket,
-              to: fn _frame, _state -> raise "boom" end
-            )
-
-            assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
-            assert {:ok, frame} = WebSocketClient.receive_frame(client)
-
-            send(__MODULE__, {:frame, frame})
-          end
-        end
-
-        Process.register(self(), WebSocketHandleToFunctionRaiseTest)
-
-        assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) boom"
-        assert io =~ "anonymous fn/2 in TestServer.HTTPTest.WebSocketHandleToFunctionRaiseTest"
-        assert_receive {:frame, {:text, frame}}
-        assert_io_websocket_message(io, frame)
-      end
-
-      test "when `:to` function returns invalid response" do
-        defmodule WebSocketHandleToFunctionInvalidResponseTest do
-          use ExUnit.Case
-
-          test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
-            websocket = TestServer.HTTP.websocket("/ws")
-
-            TestServer.HTTP.websocket_handle(websocket,
-              to: fn _frame, _state -> :invalid end
-            )
-
-            assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
-            assert {:ok, frame} = WebSocketClient.receive_frame(client)
-
-            send(__MODULE__, {:frame, frame})
-          end
-        end
-
-        Process.register(self(), WebSocketHandleToFunctionInvalidResponseTest)
-
-        assert io = capture_io(fn -> ExUnit.run() end)
-        assert io =~ "(RuntimeError) expected callback response to be one of:"
-        assert io =~ "Got: :invalid"
-        assert_receive {:frame, {:text, frame}}
-        assert_io_websocket_message(io, frame)
-      end
-
-      test "with `:to` function" do
-        websocket = TestServer.HTTP.websocket("/ws")
-
-        TestServer.HTTP.websocket_handle(websocket,
-          to: fn {:text, _any}, state -> {:reply, {:text, "function called"}, state} end
-        )
-
-        assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-        assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
-        assert {:ok, frame} = WebSocketClient.receive_frame(client)
-        assert frame == {:text, "function called"}
-      end
-
       test "when `:match` function raises exception" do
         defmodule WebSocketHandleMatchFunctionRaiseTest do
           use ExUnit.Case
 
           test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
-
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
             websocket = TestServer.HTTP.websocket("/ws")
 
             TestServer.HTTP.websocket_handle(websocket,
@@ -1197,6 +1202,78 @@ defmodule TestServer.HTTPTest do
         assert WebSocketClient.send_frame(client, {:text, "first"}) == :ok
         assert WebSocketClient.receive_frame(client) == {:ok, {:text, "pong"}}
       end
+
+      test "when `:to` function raises exception" do
+        defmodule WebSocketHandleToFunctionRaiseTest do
+          use ExUnit.Case
+
+          test "fails" do
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            websocket = TestServer.HTTP.websocket("/ws")
+
+            TestServer.HTTP.websocket_handle(websocket,
+              to: fn _frame, _state -> raise "boom" end
+            )
+
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
+
+            send(__MODULE__, {:frame, frame})
+          end
+        end
+
+        Process.register(self(), WebSocketHandleToFunctionRaiseTest)
+
+        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io =~ "(RuntimeError) boom"
+        assert io =~ "anonymous fn/2 in TestServer.HTTPTest.WebSocketHandleToFunctionRaiseTest"
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
+      end
+
+      test "when `:to` function returns invalid response" do
+        defmodule WebSocketHandleToFunctionInvalidResponseTest do
+          use ExUnit.Case
+
+          test "fails" do
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            websocket = TestServer.HTTP.websocket("/ws")
+
+            TestServer.HTTP.websocket_handle(websocket,
+              to: fn _frame, _state -> :invalid end
+            )
+
+            assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
+            assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+            assert {:ok, frame} = WebSocketClient.receive_frame(client)
+
+            send(__MODULE__, {:frame, frame})
+          end
+        end
+
+        Process.register(self(), WebSocketHandleToFunctionInvalidResponseTest)
+
+        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io =~ "(RuntimeError) expected callback response to be one of:"
+        assert io =~ "Got: :invalid"
+        assert_receive {:frame, {:text, frame}}
+        assert_io_websocket_message(io, frame)
+      end
+
+      test "with `:to` function" do
+        _instance = TestServer.HTTP.start!(suppress_warning: true)
+        websocket = TestServer.HTTP.websocket("/ws")
+
+        TestServer.HTTP.websocket_handle(websocket,
+          to: fn {:text, _any}, state -> {:reply, {:text, "function called"}, state} end
+        )
+
+        assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
+        assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
+        assert {:ok, frame} = WebSocketClient.receive_frame(client)
+        assert frame == {:text, "function called"}
+      end
     end
 
     describe "websocket_send/2" do
@@ -1219,9 +1296,19 @@ defmodule TestServer.HTTPTest do
           TestServer.HTTP.websocket_send(websocket, invalid: :option)
         end
 
-        assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
-          TestServer.HTTP.websocket_send(websocket, to: :invalid)
-        end
+        assert_raise ArgumentError,
+                     ~r/expected :to to be a 1-arity function, got: :invalid/,
+                     fn ->
+                       TestServer.HTTP.websocket_send(websocket, to: :invalid)
+                     end
+
+        assert_raise ArgumentError,
+                     ~r/expected :to to be a 1-arity function, got: #Function/,
+                     fn ->
+                       TestServer.HTTP.websocket_send(websocket,
+                         to: fn _options, state -> {:ok, state} end
+                       )
+                     end
       end
 
       test "when client has not connected" do
@@ -1243,7 +1330,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "when client has disconnected" do
-        {:ok, instance} = TestServer.HTTP.start()
+        instance = TestServer.HTTP.start!()
         websocket = TestServer.HTTP.websocket("/ws")
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -1259,6 +1346,7 @@ defmodule TestServer.HTTPTest do
 
       test "sends" do
         websocket = TestServer.HTTP.websocket("/ws")
+
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
         TestServer.HTTP.websocket_send(websocket)
@@ -1271,8 +1359,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
-
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
             websocket = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -1299,7 +1386,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
             websocket = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -1326,7 +1413,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(suppress_warning: true)
             websocket = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -1352,6 +1439,7 @@ defmodule TestServer.HTTPTest do
 
       test "when `:to` function returns `{:reply, {:text, text}, state}`" do
         websocket = TestServer.HTTP.websocket("/ws")
+
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
         TestServer.HTTP.websocket_send(websocket,
@@ -1365,6 +1453,7 @@ defmodule TestServer.HTTPTest do
 
       test "when `:to` function returns `{:reply, {:binary, binary}, state}`" do
         websocket = TestServer.HTTP.websocket("/ws")
+
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
         TestServer.HTTP.websocket_send(websocket,
@@ -1378,6 +1467,7 @@ defmodule TestServer.HTTPTest do
 
       test "when `:to` function returns `{:ok, state}`" do
         websocket = TestServer.HTTP.websocket("/ws")
+
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
         TestServer.HTTP.websocket_send(websocket,

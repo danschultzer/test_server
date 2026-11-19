@@ -542,12 +542,24 @@ defmodule TestServer.UDPTest do
         TestServer.UDP.handle(peer, invalid: :option)
       end
 
-      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
-        TestServer.UDP.handle(peer, match: :invalid)
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 2-arity function, got: :invalid/,
+                   fn ->
+                     TestServer.UDP.handle(peer, match: :invalid)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 2-arity function, got: #Function/,
+                   fn ->
+                     TestServer.UDP.handle(peer, match: fn state -> {:ok, state} end)
+                   end
+
+      assert_raise ArgumentError, ~r/expected :to to be a 2-arity function, got: :invalid/, fn ->
+        TestServer.UDP.handle(peer, to: :invalid)
       end
 
-      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
-        TestServer.UDP.handle(peer, to: :invalid)
+      assert_raise ArgumentError, ~r/expected :to to be a 2-arity function, got: #Function/, fn ->
+        TestServer.UDP.handle(peer, to: fn state -> {:ok, state} end)
       end
 
       TestServer.UDP.stop()
@@ -862,8 +874,12 @@ defmodule TestServer.UDPTest do
         TestServer.UDP.send(peer, invalid: :option)
       end
 
-      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
+      assert_raise ArgumentError, ~r/expected :to to be a 1-arity function, got: :invalid/, fn ->
         TestServer.UDP.send(peer, to: :invalid)
+      end
+
+      assert_raise ArgumentError, ~r/expected :to to be a 1-arity function, got: #Function/, fn ->
+        TestServer.UDP.send(peer, to: fn _options, state -> {:ok, state} end)
       end
 
       assert_raise ArgumentError,

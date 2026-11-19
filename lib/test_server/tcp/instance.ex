@@ -22,8 +22,8 @@ defmodule TestServer.TCP.Instance do
           {:handle, TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}
         ) :: {:ok, map()}
   def register(instance, {:handle, connection_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 2)
 
     GenServer.call(instance, {:register, {:handle, connection_ref, options, stacktrace}})
   end
@@ -39,7 +39,7 @@ defmodule TestServer.TCP.Instance do
   def register(instance, {:send, connection_ref, options}) do
     timeout = validate_timeout!(options)
 
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 1)
 
     GenServer.call(
       instance,
@@ -48,16 +48,16 @@ defmodule TestServer.TCP.Instance do
     )
   end
 
-  defp validate_function_option!(options, option) do
+  defp validate_function_option!(options, option, arity) do
     value = Keyword.get(options, option)
 
-    case is_function(value) do
+    case is_function(value, arity) do
       true ->
         :ok
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a function, got: #{inspect(value)}"
+              "expected #{inspect(option)} to be a #{arity}-arity function, got: #{inspect(value)}"
     end
   end
 
@@ -103,8 +103,6 @@ defmodule TestServer.TCP.Instance do
           | {:ok, TestServer.TCP.state()}
           | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(instance, {:send, options, connection_state, stacktrace}) do
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
-
     GenServer.call(instance, {:dispatch, {:send, options, connection_state, stacktrace}})
   end
 
@@ -359,7 +357,7 @@ defmodule TestServer.TCP.Instance do
   defp validate_handler_response!(response, stacktrace) do
     case response do
       {:reply, {data, options}, state} ->
-        validate_handler_options!(options, stacktrace)
+        validate_handler_response_options!(options, stacktrace)
 
         {:reply, {data, options}, state}
 
@@ -384,7 +382,7 @@ defmodule TestServer.TCP.Instance do
     end
   end
 
-  defp validate_handler_options!(options, stacktrace) do
+  defp validate_handler_response_options!(options, stacktrace) do
     valid_options = ~w(upgrade)a
 
     case Keyword.validate(options, valid_options) do

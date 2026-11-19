@@ -21,6 +21,8 @@ Requires Elixir 1.15 or higher.
 - Added SSH support with `TestServer.SSH`
 - Added TCP support with `TestServer.TCP`
 - Added UDP support with `TestServer.UDP`
+- Added buffered support for `Plug.Conn.send_chunked/2` to `TestServer.HTTP.Server.Httpd`
+- Added support for `Plug.Conn.send_file/3` to `TestServer.HTTP.Server.Httpd`
 
 ### Changed
 
@@ -35,6 +37,7 @@ Requires Elixir 1.15 or higher.
 - Fixed invalid host header port parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed bracketed IPv6 host header parsing in `TestServer.HTTP.Server.Httpd`
 - Fixed query string parsing with extra `?` segments in `TestServer.HTTP.Server.Httpd`
+- Fixed `:length` option support for request body reads in `TestServer.HTTP.Server.Httpd`
 - Fixed `Bandit` server adapter timeout when discarding an updated conn
 
 ## v0.1

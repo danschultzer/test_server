@@ -206,6 +206,9 @@ defmodule TestServer.SSH do
   @doc """
   Shuts down the current test server SSH instance.
 
+  Removes the ExUnit test callback which eliminates verification of any
+  outstanding expectations.
+
   ## Examples
 
       _instance = TestServer.SSH.start!()
@@ -220,6 +223,8 @@ defmodule TestServer.SSH do
 
   @doc """
   Shuts down a test server SSH instance.
+
+  See `stop/0` for more.
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do

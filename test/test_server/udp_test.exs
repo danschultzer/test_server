@@ -447,7 +447,7 @@ defmodule TestServer.UDPTest do
       assert io =~ "No peers registered."
       refute io =~ "The following peers were registered:"
       assert_receive {:data, data}
-      assert data =~ "received an unexpected UDP peer"
+      assert_io_udp_data(io, data)
     end
 
     test "when receiving unexpected peer after used peers" do
@@ -477,7 +477,7 @@ defmodule TestServer.UDPTest do
       refute io =~ "No peers registered."
       assert io =~ "The following peers were registered:"
       assert_receive {:data, data}
-      assert data =~ "received an unexpected UDP peer"
+      assert_io_udp_data(io, data)
     end
 
     test "with multiple peers" do
@@ -738,7 +738,7 @@ defmodule TestServer.UDPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "could not receive UDP data: :test"
       assert_receive {:data, data}
-      assert data =~ "could not receive UDP data: :test"
+      assert_io_udp_data(io, data)
     end
 
     test "when `:to` function raises exception" do

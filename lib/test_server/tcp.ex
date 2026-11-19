@@ -24,7 +24,7 @@ defmodule TestServer.TCP do
                           | {:reply, {iodata(), reply_options()}, state()}
                           | {:ok, state()})
 
-  @typedoc "Options for the `{:reply, {data, options}, state}` and `{:ok, options, state}` return of a `t:handler_fun/0`."
+  @typedoc "Options for the `{:reply, {data, options}, state}` return of a `t:handler_fun/0`."
   @type reply_options :: [upgrade: :tls]
 
   @typedoc "An anonymous function that sends data."
@@ -126,6 +126,9 @@ defmodule TestServer.TCP do
   @doc """
   Shuts down the current test server TCP instance.
 
+  Removes the ExUnit test callback which eliminates verification of any
+  outstanding expectations.
+
   ## Examples
 
       _instance = TestServer.TCP.start!()
@@ -139,6 +142,8 @@ defmodule TestServer.TCP do
 
   @doc """
   Shuts down a test server TCP instance.
+
+  See `stop/0` for more.
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do

@@ -152,6 +152,9 @@ defmodule TestServer.HTTP do
   @doc """
   Shuts down the current test server.
 
+  Removes the ExUnit test callback which eliminates verification of any
+  outstanding expectations.
+
   ## Examples
 
       _instance = TestServer.HTTP.start!()
@@ -165,6 +168,8 @@ defmodule TestServer.HTTP do
 
   @doc """
   Shuts down a test server instance.
+
+  See `stop/0` for more.
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do

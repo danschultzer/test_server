@@ -116,6 +116,9 @@ defmodule TestServer.UDP do
   @doc """
   Shuts down the current test server UDP instance.
 
+  Removes the ExUnit test callback which eliminates verification of any
+  outstanding expectations.
+
   ## Examples
 
       _instance = TestServer.UDP.start!()
@@ -131,6 +134,8 @@ defmodule TestServer.UDP do
 
   @doc """
   Shuts down a test server UDP instance.
+
+  See `stop/0` for more.
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
   def stop(instance) do

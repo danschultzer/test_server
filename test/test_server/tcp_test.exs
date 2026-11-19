@@ -699,7 +699,7 @@ defmodule TestServer.TCPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
-      assert data =~ "could not receive TCP data: :test"
+      assert_io_tcp_data(io, data)
     end
 
     # It's not possible to test actual SSL errors in a controlled manner so we
@@ -733,7 +733,7 @@ defmodule TestServer.TCPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
-      assert data =~ "could not receive TCP data: :test"
+      assert_io_tcp_data(io, data)
     end
 
     test "when `:to` function raises exception" do

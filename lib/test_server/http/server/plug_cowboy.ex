@@ -46,8 +46,13 @@ if Code.ensure_loaded?(Plug.Cowboy) do
              {__MODULE__, %{}, instance},
              cowboy_options
            ]) do
-        {:ok, pid} -> {:ok, pid, cowboy_options}
-        {:error, error} -> {:error, error}
+        {:ok, pid} ->
+          stop_on_exit(Keyword.fetch!(cowboy_options, :ref))
+
+          {:ok, pid, cowboy_options}
+
+        {:error, error} ->
+          {:error, error}
       end
     end
 
@@ -72,6 +77,18 @@ if Code.ensure_loaded?(Plug.Cowboy) do
 
     defp cowboy_ref(port) when is_integer(port) do
       {__MODULE__, port}
+    end
+
+    # `Plug.Cowboy` traps exits so we must ensure we stop it explicitly when
+    # the instance dies.
+    defp stop_on_exit(ref) do
+      spawn_link(fn ->
+        Process.flag(:trap_exit, true)
+
+        receive do
+          {:EXIT, _pid, _reason} -> Cowboy.shutdown(ref)
+        end
+      end)
     end
 
     @impl TestServer.HTTP.Server

@@ -32,8 +32,13 @@ if Code.ensure_loaded?(:httpd) do
         |> put_tls_options(scheme, options[:tls])
 
       case :inets.start(:httpd, httpd_options) do
-        {:ok, pid} -> {:ok, pid, httpd_options}
-        {:error, error} -> {:error, error}
+        {:ok, pid} ->
+          stop_on_exit(pid)
+
+          {:ok, pid, httpd_options}
+
+        {:error, error} ->
+          {:error, error}
       end
     end
 
@@ -43,6 +48,18 @@ if Code.ensure_loaded?(:httpd) do
       tls_options = Keyword.put_new(tls_options, :log_level, :warning)
 
       Keyword.put(httpd_options, :socket_type, {:ssl, tls_options})
+    end
+
+    # `:inets` traps exits so we must ensure we stop it explicitly when the
+    # instance dies.
+    defp stop_on_exit(daemon_ref) do
+      spawn_link(fn ->
+        Process.flag(:trap_exit, true)
+
+        receive do
+          {:EXIT, _pid, _reason} -> :inets.stop(:httpd, daemon_ref)
+        end
+      end)
     end
 
     @impl TestServer.HTTP.Server

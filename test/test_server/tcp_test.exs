@@ -165,6 +165,34 @@ defmodule TestServer.TCPTest do
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
     end
+
+    test "when instance crashes" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          instance = TestServer.TCP.start!()
+
+          acceptor =
+            instance
+            |> TestServer.TCP.Instance.options()
+            |> Keyword.fetch!(:acceptor)
+
+          monitor = Process.monitor(acceptor)
+
+          Process.exit(instance, :shutdown)
+
+          assert_receive {:DOWN, ^monitor, :process, ^acceptor, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+    end
   end
 
   describe "start!/1" do

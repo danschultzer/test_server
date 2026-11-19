@@ -346,6 +346,34 @@ defmodule TestServer.SSHTest do
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
     end
+
+    test "when instance crashes" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          instance = TestServer.SSH.start!()
+
+          daemon_ref =
+            instance
+            |> TestServer.SSH.Instance.options()
+            |> Keyword.fetch!(:daemon_ref)
+
+          monitor = Process.monitor(daemon_ref)
+
+          Process.exit(instance, :shutdown)
+
+          assert_receive {:DOWN, ^monitor, :process, ^daemon_ref, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+    end
   end
 
   defp write_user_dir_pem!(context, key) do

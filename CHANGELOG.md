@@ -39,6 +39,7 @@ Requires Elixir 1.15 or higher.
 - Fixed query string parsing with extra `?` segments in `TestServer.HTTP.Server.Httpd`
 - Fixed `:length` option support for request body reads in `TestServer.HTTP.Server.Httpd`
 - Fixed `Bandit` server adapter timeout when discarding an updated conn
+- Fixed bug where the servers of `TestServer.HTTP.Server.Httpd`, `TestServer.HTTP.Server.Plug.Cowboy`, and `TestServer.SSH.Server` could outlive crashed test server instances
 
 ## v0.1
 

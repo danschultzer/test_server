@@ -9,6 +9,7 @@ defmodule TestServer.SSH.Server do
     with {:ok, port} <- TestServer.open_port(options),
          {host_keys, daemon_options} = daemon_options(instance, options),
          {:ok, daemon_ref} <- :ssh.daemon(port, daemon_options) do
+      stop_on_exit(daemon_ref)
       suppress_ssh_strict_kex_ordering_log?(options) && install_strict_kex_filter()
 
       options =
@@ -212,6 +213,18 @@ defmodule TestServer.SSH.Server do
       false ->
         options
     end
+  end
+
+  # SSH traps exits so we must ensure we stop it explicitly when the instance
+  # dies.
+  defp stop_on_exit(daemon_ref) do
+    spawn_link(fn ->
+      Process.flag(:trap_exit, true)
+
+      receive do
+        {:EXIT, _pid, _reason} -> :ssh.stop_daemon(daemon_ref)
+      end
+    end)
   end
 
   defp suppress_ssh_strict_kex_ordering_log?(options),

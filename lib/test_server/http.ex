@@ -354,6 +354,8 @@ defmodule TestServer.HTTP do
   """
   @spec plug(TestServer.instance(), plug_module() | plug_fun()) :: :ok
   def plug(instance, plug) do
+    TestServer.assert_instance_alive!(__MODULE__, instance)
+
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
     {:ok, _plug} = Instance.register(instance, {:plug, plug, stacktrace})
 

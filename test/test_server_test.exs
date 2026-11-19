@@ -250,6 +250,17 @@ defmodule TestServerTest do
                    end
     end
 
+    test "with different instance protocol module" do
+      {:ok, instance} = TestServer.start_instance(FakeProtocol, [], fn _instance -> :ok end)
+
+      assert_raise RuntimeError,
+                   ~r/expected InvalidProtocol\.Instance \#PID\<[0-9.]+\>, but got TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\>/,
+                   fn ->
+                     assert TestServer.stop_instance(InvalidProtocol, instance) ==
+                              :ok
+                   end
+    end
+
     test "with stopped instance" do
       {:ok, instance} = TestServer.start_instance(FakeProtocol, [], fn _instance -> :ok end)
       :ok = TestServer.stop_instance(FakeProtocol, instance)
@@ -280,8 +291,7 @@ defmodule TestServerTest do
               unquote(__MODULE__).FakeProtocol,
               [],
               fn instance ->
-                assert TestServer.InstanceManager.fetch_instance_entry(instance) ==
-                         {:error, :not_found}
+                send(unquote(__MODULE__), {:verified, instance})
               end
             )
 
@@ -296,6 +306,7 @@ defmodule TestServerTest do
       end)
 
       assert_received {:instance, instance}
+      refute_received {:verified, ^instance}
       assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
       refute Process.alive?(instance)
     end

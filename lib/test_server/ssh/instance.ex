@@ -27,8 +27,8 @@ defmodule TestServer.SSH.Instance do
         ) ::
           {:ok, map()}
   def register(instance, {:handle, channel_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
+    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, [2, 3])
 
     GenServer.call(instance, {:register, {:handle, channel_ref, options, stacktrace}})
   end
@@ -56,16 +56,17 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_function_option!(options, option) do
+  defp validate_function_option!(options, option, arity) do
     value = Keyword.get(options, option)
+    arities = List.wrap(arity)
 
-    case is_function(value) do
+    case Enum.any?(arities, &is_function(value, &1)) do
       true ->
         :ok
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a function, got: #{inspect(value)}"
+              "expected #{inspect(option)} to be a #{Enum.join(arities, " or ")}-arity function, got: #{inspect(value)}"
     end
   end
 

@@ -725,13 +725,29 @@ defmodule TestServer.SSHTest do
         TestServer.SSH.handle(invalid: :option)
       end
 
-      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
-        TestServer.SSH.handle(match: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 2-arity function, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.handle(match: :invalid)
+                   end
 
-      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
-        TestServer.SSH.handle(to: :invalid)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 2-arity function, got: #Function/,
+                   fn ->
+                     TestServer.SSH.handle(match: fn _state -> true end)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/expected :to to be a 2 or 3-arity function, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.handle(to: :invalid)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/expected :to to be a 2 or 3-arity function, got: #Function/,
+                   fn ->
+                     TestServer.SSH.handle(to: fn state -> {:ok, state} end)
+                   end
 
       TestServer.SSH.stop()
     end

@@ -501,12 +501,24 @@ defmodule TestServer.TCPTest do
         TestServer.TCP.handle(connection, invalid: :option)
       end
 
-      assert_raise ArgumentError, ~r/expected :match to be a function, got: :invalid/, fn ->
-        TestServer.TCP.handle(connection, match: :invalid)
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 2-arity function, got: :invalid/,
+                   fn ->
+                     TestServer.TCP.handle(connection, match: :invalid)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/expected :match to be a 2-arity function, got: #Function/,
+                   fn ->
+                     TestServer.TCP.handle(connection, match: fn state -> {:ok, state} end)
+                   end
+
+      assert_raise ArgumentError, ~r/expected :to to be a 2-arity function, got: :invalid/, fn ->
+        TestServer.TCP.handle(connection, to: :invalid)
       end
 
-      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
-        TestServer.TCP.handle(connection, to: :invalid)
+      assert_raise ArgumentError, ~r/expected :to to be a 2-arity function, got: #Function/, fn ->
+        TestServer.TCP.handle(connection, to: fn state -> {:ok, state} end)
       end
 
       TestServer.TCP.stop()
@@ -1037,8 +1049,12 @@ defmodule TestServer.TCPTest do
         TestServer.TCP.send(connection, invalid: :option)
       end
 
-      assert_raise ArgumentError, ~r/expected :to to be a function, got: :invalid/, fn ->
+      assert_raise ArgumentError, ~r/expected :to to be a 1-arity function, got: :invalid/, fn ->
         TestServer.TCP.send(connection, to: :invalid)
+      end
+
+      assert_raise ArgumentError, ~r/expected :to to be a 1-arity function, got: #Function/, fn ->
+        TestServer.TCP.send(connection, to: fn _options, state -> {:ok, state} end)
       end
 
       assert_raise ArgumentError,

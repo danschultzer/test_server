@@ -44,8 +44,8 @@ defmodule TestServer.HTTP.Instance do
         instance,
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
       ) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match)
-    validate_function_option!(options, :to)
+    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
+    validate_function_option!(options, :to, 2)
 
     GenServer.call(
       instance,
@@ -58,7 +58,7 @@ defmodule TestServer.HTTP.Instance do
           {:websocket, {:send, TestServer.HTTP.websocket_ref(), keyword()}}
         ) :: {:ok, pid()} | {:error, :einval} | {:error, :enotconn} | {:error, :closed}
   def register(instance, {:websocket, {:send, websocket_ref, options}}) do
-    validate_function_option!(options, :to)
+    validate_function_option!(options, :to, 1)
 
     GenServer.call(instance, {:register, {:websocket, {:send, websocket_ref, options}}})
   end
@@ -70,7 +70,7 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected a function of arity 1 or a Plug module, got: #{inspect(plug)}"
+              "expected a 1-arity function or a Plug module, got: #{inspect(plug)}"
     end
   end
 
@@ -83,7 +83,7 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a function of arity 1 or a Plug module, got: #{inspect(plug)}"
+              "expected #{inspect(option)} to be a 1-arity function or a Plug module, got: #{inspect(plug)}"
     end
   end
 
@@ -96,16 +96,16 @@ defmodule TestServer.HTTP.Instance do
       function_exported?(plug, :call, 2)
   end
 
-  defp validate_function_option!(options, option) do
+  defp validate_function_option!(options, option, arity) do
     value = Keyword.get(options, option)
 
-    case is_function(value) do
+    case is_function(value, arity) do
       true ->
         :ok
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a function, got: #{inspect(value)}"
+              "expected #{inspect(option)} to be a #{arity}-arity function, got: #{inspect(value)}"
     end
   end
 
@@ -409,11 +409,11 @@ defmodule TestServer.HTTP.Instance do
       :error ->
         nil
 
-      {:ok, match_fn} when is_function(match_fn) ->
+      {:ok, match_fn} when is_function(match_fn, 1) ->
         match_fn
 
       {:ok, match} ->
-        raise ArgumentError, "expected :match to be a function, got: #{inspect(match)}"
+        raise ArgumentError, "expected :match to be a 1-arity function, got: #{inspect(match)}"
     end
   end
 

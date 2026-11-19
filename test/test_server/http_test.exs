@@ -133,6 +133,34 @@ defmodule TestServer.HTTPTest do
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
     end
+
+    test "when instance crashes" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          instance = TestServer.HTTP.start!()
+
+          server_ref =
+            instance
+            |> TestServer.HTTP.Instance.options()
+            |> Keyword.fetch!(:http_server_reference)
+
+          monitor = Process.monitor(server_ref)
+
+          Process.exit(instance, :shutdown)
+
+          assert_receive {:DOWN, ^monitor, :process, ^server_ref, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+    end
   end
 
   describe "start!/1" do

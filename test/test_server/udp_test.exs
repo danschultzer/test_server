@@ -164,6 +164,34 @@ defmodule TestServer.UDPTest do
       assert {:ok, socket} = :gen_udp.open(port, [])
       assert :ok = :gen_udp.close(socket)
     end
+
+    test "when instance crashes" do
+      Process.register(self(), __MODULE__)
+
+      defmodule StartInstanceCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          instance = TestServer.UDP.start!()
+
+          receiver =
+            instance
+            |> TestServer.UDP.Instance.options()
+            |> Keyword.fetch!(:receiver)
+
+          monitor = Process.monitor(receiver)
+
+          Process.exit(instance, :shutdown)
+
+          assert_receive {:DOWN, ^monitor, :process, ^receiver, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+    end
   end
 
   describe "start!/1" do

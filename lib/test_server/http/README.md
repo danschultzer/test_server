@@ -116,7 +116,7 @@ test "WebSocketClient" do
   assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
 
   assert WebSocketClient.send_frame(client, {:text, "ping"}) == :ok
-  assert WebSocket.receive_frame(client) == {:text, "ping"}
+  assert WebSocketClient.receive_frame(client) == {:ok, {:text, "pong"}}
 
   TestServer.HTTP.websocket_send(websocket,
     to: fn state -> {:reply, {:text, "hello"}, state} end

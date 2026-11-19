@@ -253,7 +253,8 @@ defmodule TestServer.TCPTest do
 
       refute Process.alive?(instance)
       assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
-      assert {:error, :econnrefused} = TCPClient.connect(address)
+      assert {:error, reason} = TCPClient.connect(address)
+      assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TCPClient.receive_data(socket, 0)
     end
 
@@ -272,7 +273,8 @@ defmodule TestServer.TCPTest do
 
       refute Process.alive?(instance)
       assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
-      assert {:error, :econnrefused} = TLSClient.connect(address, tls_options)
+      assert {:error, reason} = TLSClient.connect(address, tls_options)
+      assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TLSClient.receive_data(socket)
     end
   end
@@ -697,7 +699,7 @@ defmodule TestServer.TCPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
-      assert data =~ "could not receive TCP data: :test"
+      assert_io_tcp_data(io, data)
     end
 
     # It's not possible to test actual SSL errors in a controlled manner so we
@@ -731,7 +733,7 @@ defmodule TestServer.TCPTest do
       assert io = capture_io(fn -> ExUnit.run() end)
       assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
-      assert data =~ "could not receive TCP data: :test"
+      assert_io_tcp_data(io, data)
     end
 
     test "when `:to` function raises exception" do

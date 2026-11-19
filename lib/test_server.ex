@@ -108,17 +108,22 @@ defmodule TestServer do
       {:error, :not_found} ->
         raise "expected #{format_instance(protocol_module, instance)} to be a TestServer-managed instance"
 
-      {:ok, %{exit: nil}} ->
+      {:ok, %{protocol_module: other_protocol_module}}
+      when other_protocol_module != protocol_module ->
+        raise "expected #{format_instance(protocol_module, instance)}, but got #{format_instance(other_protocol_module, instance)}"
+
+      {:ok, %{protocol_module: ^protocol_module, exit: nil}} ->
         :ok
 
-      {:ok, %{exit: %{reason: nil, stacktrace: stacktrace}}} when is_list(stacktrace) ->
+      {:ok, %{protocol_module: ^protocol_module, exit: %{reason: nil, stacktrace: stacktrace}}}
+      when is_list(stacktrace) ->
         raise """
         expected #{format_instance(protocol_module, instance)} to be running, but it was stopped at:
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
 
-      {:ok, %{exit: %{reason: reason, stacktrace: nil}}} ->
+      {:ok, %{protocol_module: ^protocol_module, exit: %{reason: reason, stacktrace: nil}}} ->
         raise """
         expected #{format_instance(protocol_module, instance)} to be running, but it exited with reason:
 

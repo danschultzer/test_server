@@ -750,6 +750,15 @@ defmodule TestServer.HTTPTest do
       def init(options), do: options
     end
 
+    test "when instance not running" do
+      instance = TestServer.HTTP.start!()
+      :ok = TestServer.HTTP.stop(instance)
+
+      assert_raise RuntimeError,
+                   ~r/expected TestServer\.HTTP\.Instance .* to be running, but it was stopped at:/,
+                   fn -> TestServer.HTTP.plug(instance, fn conn -> conn end) end
+    end
+
     test "with invalid plug" do
       assert_raise ArgumentError,
                    ~r/expected a 1-arity function or a Plug module, got: :invalid/,

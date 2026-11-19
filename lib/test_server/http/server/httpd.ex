@@ -33,7 +33,7 @@ if Code.ensure_loaded?(:httpd) do
 
       case :inets.start(:httpd, httpd_options) do
         {:ok, pid} ->
-          stop_on_exit(pid)
+          stop_on_exit(pid, httpd_options)
 
           {:ok, pid, httpd_options}
 
@@ -52,12 +52,12 @@ if Code.ensure_loaded?(:httpd) do
 
     # `:inets` traps exits so we must ensure we stop it explicitly when the
     # instance dies.
-    defp stop_on_exit(daemon_ref) do
+    defp stop_on_exit(daemon_ref, httpd_options) do
       spawn_link(fn ->
         Process.flag(:trap_exit, true)
 
         receive do
-          {:EXIT, _pid, _reason} -> :inets.stop(:httpd, daemon_ref)
+          {:EXIT, _pid, _reason} -> stop(daemon_ref, httpd_options)
         end
       end)
     end

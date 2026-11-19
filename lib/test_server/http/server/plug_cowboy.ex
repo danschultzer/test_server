@@ -47,7 +47,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
              cowboy_options
            ]) do
         {:ok, pid} ->
-          stop_on_exit(Keyword.fetch!(cowboy_options, :ref))
+          stop_on_exit(pid, cowboy_options)
 
           {:ok, pid, cowboy_options}
 
@@ -81,12 +81,12 @@ if Code.ensure_loaded?(Plug.Cowboy) do
 
     # `Plug.Cowboy` traps exits so we must ensure we stop it explicitly when
     # the instance dies.
-    defp stop_on_exit(ref) do
+    defp stop_on_exit(pid, cowboy_options) do
       spawn_link(fn ->
         Process.flag(:trap_exit, true)
 
         receive do
-          {:EXIT, _pid, _reason} -> Cowboy.shutdown(ref)
+          {:EXIT, _pid, _reason} -> stop(pid, cowboy_options)
         end
       end)
     end

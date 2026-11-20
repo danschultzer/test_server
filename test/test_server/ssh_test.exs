@@ -365,7 +365,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.SSH.start!()
+          {TestServer.SSH, instance_pid} = instance = TestServer.SSH.start!()
 
           daemon_pid =
             instance
@@ -374,7 +374,7 @@ defmodule TestServer.SSHTest do
 
           monitor = Process.monitor(daemon_pid)
 
-          Process.exit(instance, :shutdown)
+          Process.exit(instance_pid, :shutdown)
 
           assert_receive {:DOWN, ^monitor, :process, ^daemon_pid, _reason}
         end
@@ -409,8 +409,8 @@ defmodule TestServer.SSHTest do
 
   describe "start!/1" do
     test "returns instance" do
-      assert instance = TestServer.SSH.start!()
-      assert is_pid(instance)
+      assert {TestServer.SSH, instance_pid} = TestServer.SSH.start!()
+      assert is_pid(instance_pid)
     end
 
     test "when start fails" do
@@ -452,11 +452,11 @@ defmodule TestServer.SSHTest do
     end
 
     test "stops" do
-      instance = TestServer.SSH.start!()
+      {TestServer.SSH, instance_pid} = TestServer.SSH.start!()
       address = TestServer.SSH.address()
 
       assert TestServer.SSH.stop() == :ok
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
       assert {:error, reason} = SSHClient.connect(address)
       assert reason in [:econnrefused, :econnreset]
     end

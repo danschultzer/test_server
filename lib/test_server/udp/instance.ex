@@ -13,19 +13,19 @@ defmodule TestServer.UDP.Instance do
 
   @spec register(TestServer.instance(), {:peer, TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.UDP.peer_ref()}}
-  def register(instance, {:peer, stacktrace}) do
-    GenServer.call(instance, {:register, {:peer, stacktrace}})
+  def register({TestServer.UDP, instance_pid}, {:peer, stacktrace}) do
+    GenServer.call(instance_pid, {:register, {:peer, stacktrace}})
   end
 
   @spec register(
           TestServer.instance(),
           {:handle, TestServer.UDP.peer_ref(), keyword(), TestServer.stacktrace()}
         ) :: {:ok, map()}
-  def register(instance, {:handle, peer_ref, options, stacktrace}) do
+  def register({TestServer.UDP, instance_pid}, {:handle, peer_ref, options, stacktrace}) do
     Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
     Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 2)
 
-    GenServer.call(instance, {:register, {:handle, peer_ref, options, stacktrace}})
+    GenServer.call(instance_pid, {:register, {:handle, peer_ref, options, stacktrace}})
   end
 
   @spec register(
@@ -36,13 +36,13 @@ defmodule TestServer.UDP.Instance do
           | {:error, :einval}
           | {:error, :enotconn}
           | {:error, :closed}
-  def register(instance, {:send, peer_ref, options}) do
+  def register({TestServer.UDP, instance_pid}, {:send, peer_ref, options}) do
     timeout = validate_timeout!(options)
 
     Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 1)
 
     GenServer.call(
-      instance,
+      instance_pid,
       {:register, {:send, peer_ref, timeout}},
       timeout + 1_000
     )
@@ -81,8 +81,8 @@ defmodule TestServer.UDP.Instance do
            | {:dtls, :ssl.sslsocket()}}
         ) ::
           {:ok, map(), TestServer.UDP.state()} | {:error, :not_found}
-  def dispatch(instance, {:peer, owner, socket}) do
-    GenServer.call(instance, {:dispatch, {:peer, owner, socket}})
+  def dispatch({TestServer.UDP, instance_pid}, {:peer, owner, socket}) do
+    GenServer.call(instance_pid, {:dispatch, {:peer, owner, socket}})
   end
 
   @spec dispatch(
@@ -93,8 +93,8 @@ defmodule TestServer.UDP.Instance do
           | {:ok, TestServer.UDP.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:handle, owner, data, peer_state}) do
-    GenServer.call(instance, {:dispatch, {:handle, owner, data, peer_state}})
+  def dispatch({TestServer.UDP, instance_pid}, {:handle, owner, data, peer_state}) do
+    GenServer.call(instance_pid, {:dispatch, {:handle, owner, data, peer_state}})
   end
 
   @spec dispatch(
@@ -104,23 +104,23 @@ defmodule TestServer.UDP.Instance do
           {:reply, iodata(), TestServer.UDP.state()}
           | {:ok, TestServer.UDP.state()}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:send, options, peer_state, stacktrace}) do
-    GenServer.call(instance, {:dispatch, {:send, options, peer_state, stacktrace}})
+  def dispatch({TestServer.UDP, instance_pid}, {:send, options, peer_state, stacktrace}) do
+    GenServer.call(instance_pid, {:dispatch, {:send, options, peer_state, stacktrace}})
   end
 
   @spec options(TestServer.instance()) :: keyword()
-  def options(instance) do
-    GenServer.call(instance, :options)
+  def options({TestServer.UDP, instance_pid}) do
+    GenServer.call(instance_pid, :options)
   end
 
   @spec peers(TestServer.instance()) :: [map()]
-  def peers(instance) do
-    GenServer.call(instance, :peers)
+  def peers({TestServer.UDP, instance_pid}) do
+    GenServer.call(instance_pid, :peers)
   end
 
   @spec handlers(TestServer.instance()) :: [map()]
-  def handlers(instance) do
-    GenServer.call(instance, :handlers)
+  def handlers({TestServer.UDP, instance_pid}) do
+    GenServer.call(instance_pid, :handlers)
   end
 
   @spec format_handlers([map()]) :: binary()
@@ -149,7 +149,9 @@ defmodule TestServer.UDP.Instance do
 
   @impl true
   def init(options) do
-    case Server.start(self(), options) do
+    {protocol_module, options} = Keyword.pop!(options, :protocol_module)
+
+    case Server.start({protocol_module, self()}, options) do
       {:ok, options} ->
         {:ok, %{options: options, handlers: [], peers: []}}
 

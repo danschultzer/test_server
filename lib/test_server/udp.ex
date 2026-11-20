@@ -89,7 +89,7 @@ defmodule TestServer.UDP do
 
       active_handlers ->
         raise """
-        expected #{TestServer.format_instance(__MODULE__, instance)} to receive data for these handlers before the test ended:
+        expected #{TestServer.format_instance(instance)} to receive data for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -106,7 +106,7 @@ defmodule TestServer.UDP do
 
       unused_peers ->
         raise """
-        expected all peers on #{TestServer.format_instance(__MODULE__, instance)} to be used, but some were not:
+        expected all peers on #{TestServer.format_instance(instance)} to be used, but some were not:
 
         #{Instance.format_peers(unused_peers)}
         """
@@ -130,7 +130,7 @@ defmodule TestServer.UDP do
       assert {:error, _reason} = UDPClient.receive_data(socket)
   """
   @spec stop() :: :ok | {:error, term()}
-  def stop, do: stop(TestServer.fetch_instance!(__MODULE__))
+  def stop, do: stop(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Shuts down a test server UDP instance.
@@ -138,9 +138,9 @@ defmodule TestServer.UDP do
   See `stop/0` for more.
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
-  def stop(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
-    TestServer.stop_instance(__MODULE__, instance)
+  def stop({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
+    TestServer.stop_instance(instance)
   end
 
   @spec address() :: {binary(), :inet.port_number()}
@@ -163,9 +163,9 @@ defmodule TestServer.UDP do
   """
   @spec address(keyword() | TestServer.instance()) :: {binary(), :inet.port_number()}
   def address(options) when is_list(options),
-    do: address(TestServer.fetch_instance!(__MODULE__), options)
+    do: address(TestServer.fetch_protocol_instance!(__MODULE__), options)
 
-  def address(instance) when is_pid(instance), do: address(instance, [])
+  def address({__MODULE__, _instance_pid} = instance), do: address(instance, [])
 
   @doc """
   Returns the address for a test server instance.
@@ -173,9 +173,9 @@ defmodule TestServer.UDP do
   See `address/1` for options.
   """
   @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
-  def address(instance, options) when is_pid(instance) and is_list(options) do
+  def address({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:host])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     host = TestServer.host(options)
     port = instance |> Instance.options() |> Keyword.fetch!(:port)
@@ -198,7 +198,7 @@ defmodule TestServer.UDP do
       assert DTLSClient.receive_data(socket) == {:ok, "ping"}
   """
   @spec cacerts() :: TestServer.cacerts()
-  def cacerts, do: cacerts(TestServer.fetch_instance!(__MODULE__))
+  def cacerts, do: cacerts(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Fetches the generated CA certificates for a test server instance.
@@ -206,17 +206,17 @@ defmodule TestServer.UDP do
   See `cacerts/0` for more.
   """
   @spec cacerts(TestServer.instance()) :: TestServer.cacerts()
-  def cacerts(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def cacerts({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
 
     options = Instance.options(instance)
 
     cond do
       options[:transport] != :dtls ->
-        raise "expected #{TestServer.format_instance(__MODULE__, instance)} to be running with [transport: :dtls] option"
+        raise "expected #{TestServer.format_instance(instance)} to be running with [transport: :dtls] option"
 
       not Keyword.has_key?(options, :cacerts) ->
-        raise "expected #{TestServer.format_instance(__MODULE__, instance)} not to be running with [tls: [cacerts: ...]] option"
+        raise "expected #{TestServer.format_instance(instance)} not to be running with [tls: [cacerts: ...]] option"
 
       true ->
         Keyword.fetch!(options, :cacerts)
@@ -257,8 +257,8 @@ defmodule TestServer.UDP do
   See `peer/0` for behaviour.
   """
   @spec peer(TestServer.instance()) :: peer()
-  def peer(instance) when is_pid(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def peer({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -329,13 +329,12 @@ defmodule TestServer.UDP do
   See `handle/1` for options.
   """
   @spec handle(peer(), keyword()) :: :ok
-  def handle({instance, peer_ref} = _peer, options)
-      when is_pid(instance) and is_reference(peer_ref) and is_list(options) do
+  def handle({{__MODULE__, _instance_pid} = instance, peer_ref} = _peer, options)
+      when is_list(options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_handler/2)
 
     {:ok, _handler} = Instance.register(instance, {:handle, peer_ref, options, stacktrace})
@@ -377,13 +376,12 @@ defmodule TestServer.UDP do
       assert UDPClient.receive_data(socket) == {:ok, "hello"}
   """
   @spec send(peer(), keyword()) :: :ok
-  def send({instance, peer_ref} = _peer, options)
-      when is_pid(instance) and is_reference(peer_ref) and is_list(options) do
+  def send({{__MODULE__, _instance_pid} = instance, peer_ref} = _peer, options)
+      when is_list(options) do
     Keyword.validate!(options, [:to, :timeout])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_send/1)
 
     case Instance.register(instance, {:send, peer_ref, options}) do
@@ -409,6 +407,6 @@ defmodule TestServer.UDP do
   defp default_send(state), do: {:reply, "ping", state}
 
   defp raise_send_error!(instance, reason) do
-    raise "cannot send to peer on #{TestServer.format_instance(__MODULE__, instance)} because #{reason}"
+    raise "cannot send to peer on #{TestServer.format_instance(instance)} because #{reason}"
   end
 end

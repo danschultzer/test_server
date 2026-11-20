@@ -136,7 +136,9 @@ defmodule TestServer.TCP.Server do
   defp start_socket(instance, socket) do
     {:ok, owner} =
       Task.start_link(fn ->
-        Process.link(instance)
+        {TestServer.TCP, instance_pid} = instance
+
+        Process.link(instance_pid)
 
         receive do
           :start -> :ok
@@ -191,7 +193,7 @@ defmodule TestServer.TCP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.TCP, instance)} received an unexpected TCP connection attempt"
+          "#{TestServer.format_instance(instance)} received an unexpected TCP connection attempt"
           |> append_formatted_connections(instance)
 
         send_error(socket, RuntimeError.exception(message), instance)
@@ -262,7 +264,7 @@ defmodule TestServer.TCP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.TCP, instance)} received unexpected TCP data"
+          "#{TestServer.format_instance(instance)} received unexpected TCP data"
           |> append_formatted_data(data)
           |> append_formatted_handlers(instance)
 

@@ -125,7 +125,7 @@ defmodule TestServer.HTTP do
 
       active_handlers ->
         raise """
-        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a request for these handlers before the test ended:
+        expected #{TestServer.format_instance(instance)} to receive a request for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -142,7 +142,7 @@ defmodule TestServer.HTTP do
 
       active_websocket_handlers ->
         raise """
-        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a frame for these websocket handlers before the test ended:
+        expected #{TestServer.format_instance(instance)} to receive a frame for these websocket handlers before the test ended:
 
         #{Instance.format_websocket_handlers(active_websocket_handlers)}
         """
@@ -164,7 +164,7 @@ defmodule TestServer.HTTP do
       assert {:error, %Req.TransportError{}} = Req.get(url, retry: false)
   """
   @spec stop() :: :ok | {:error, term()}
-  def stop, do: stop(TestServer.fetch_instance!(__MODULE__))
+  def stop, do: stop(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Shuts down a test server instance.
@@ -172,12 +172,12 @@ defmodule TestServer.HTTP do
   See `stop/0` for more.
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
-  def stop(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def stop({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
 
     :ok = Server.stop(Instance.options(instance))
 
-    TestServer.stop_instance(__MODULE__, instance)
+    TestServer.stop_instance(instance)
   end
 
   @spec url() :: binary()
@@ -202,14 +202,15 @@ defmodule TestServer.HTTP do
   @spec url(uri_path :: binary() | keyword() | TestServer.instance()) :: binary()
   def url(path) when is_binary(path), do: url(path, [])
   def url(options) when is_list(options), do: url("", options)
-  def url(instance) when is_pid(instance), do: url(instance, "", [])
+  def url({__MODULE__, _instance_pid} = instance), do: url(instance, "", [])
 
   @spec url(uri_path :: binary(), keyword()) :: binary()
-  def url(path, options) when is_binary(path),
-    do: url(TestServer.fetch_instance!(__MODULE__), path, options)
+  def url(path, options) when is_binary(path) and is_list(options),
+    do: url(TestServer.fetch_protocol_instance!(__MODULE__), path, options)
 
   @spec url(TestServer.instance(), uri_path :: binary()) :: binary()
-  def url(instance, path) when is_pid(instance), do: url(instance, path, [])
+  def url({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
+    do: url(instance, path, [])
 
   @doc """
   Produces a URL for a test server instance.
@@ -217,9 +218,10 @@ defmodule TestServer.HTTP do
   See `url/1` for options.
   """
   @spec url(TestServer.instance(), uri_path :: binary(), keyword()) :: binary()
-  def url(instance, path, options) do
+  def url({__MODULE__, _instance_pid} = instance, path, options)
+      when is_binary(path) and is_list(options) do
     Keyword.validate!(options, [:host])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     domain = TestServer.host(options)
     options = Instance.options(instance)
@@ -280,10 +282,10 @@ defmodule TestServer.HTTP do
   def handle(path) when is_binary(path), do: handle(path, [])
 
   @spec handle(TestServer.instance()) :: :ok
-  def handle(instance) when is_pid(instance), do: handle(instance, [])
+  def handle({__MODULE__, _instance_pid} = instance), do: handle(instance, [])
 
   @spec handle(TestServer.instance(), uri_path :: binary()) :: :ok
-  def handle(instance, path) when is_pid(instance) and is_binary(path),
+  def handle({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
     do: handle(instance, path, [])
 
   @doc """
@@ -292,7 +294,7 @@ defmodule TestServer.HTTP do
   See `handle/1` for options.
   """
   @spec handle(TestServer.instance(), keyword()) :: :ok
-  def handle(instance, options) when is_pid(instance) and is_list(options) do
+  def handle({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:path, :method, :match, :to])
 
     {:ok, _handler} = register_handler(instance, options)
@@ -306,13 +308,13 @@ defmodule TestServer.HTTP do
   end
 
   @spec handle(TestServer.instance(), uri_path :: binary(), keyword()) :: :ok
-  def handle(instance, path, options)
-      when is_pid(instance) and is_binary(path) and is_list(options) do
+  def handle({__MODULE__, _instance_pid} = instance, path, options)
+      when is_binary(path) and is_list(options) do
     handle(instance, Keyword.put(options, :path, path))
   end
 
   defp register_handler(instance, options) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -353,8 +355,8 @@ defmodule TestServer.HTTP do
   See `plug/1` for more.
   """
   @spec plug(TestServer.instance(), plug_module() | plug_fun()) :: :ok
-  def plug(instance, plug) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def plug({__MODULE__, _instance_pid} = instance, plug) do
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
     {:ok, _plug} = Instance.register(instance, {:plug, plug, stacktrace})
@@ -377,7 +379,7 @@ defmodule TestServer.HTTP do
               Req.get(TestServer.HTTP.url(), req_options)
   """
   @spec cacerts() :: TestServer.cacerts()
-  def cacerts, do: cacerts(TestServer.fetch_instance!(__MODULE__))
+  def cacerts, do: cacerts(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Fetches the generated CA certificates for a test server instance.
@@ -385,17 +387,17 @@ defmodule TestServer.HTTP do
   See `cacerts/0` for more.
   """
   @spec cacerts(TestServer.instance()) :: TestServer.cacerts()
-  def cacerts(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def cacerts({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
 
     options = Instance.options(instance)
 
     cond do
       options[:scheme] != :https ->
-        raise "expected #{TestServer.format_instance(__MODULE__, instance)} to be running with [scheme: :https] option"
+        raise "expected #{TestServer.format_instance(instance)} to be running with [scheme: :https] option"
 
       not Keyword.has_key?(options, :cacerts) ->
-        raise "expected #{TestServer.format_instance(__MODULE__, instance)} not to be running with [tls: [cacerts: ...]] option"
+        raise "expected #{TestServer.format_instance(instance)} not to be running with [tls: [cacerts: ...]] option"
 
       true ->
         Keyword.fetch!(options, :cacerts)
@@ -454,10 +456,10 @@ defmodule TestServer.HTTP do
   def websocket(path) when is_binary(path), do: websocket(path, [])
 
   @spec websocket(TestServer.instance()) :: websocket()
-  def websocket(instance) when is_pid(instance), do: websocket(instance, [])
+  def websocket({__MODULE__, _instance_pid} = instance), do: websocket(instance, [])
 
   @spec websocket(TestServer.instance(), uri_path :: binary()) :: websocket()
-  def websocket(instance, path) when is_pid(instance) and is_binary(path),
+  def websocket({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
     do: websocket(instance, path, [])
 
   @doc """
@@ -466,7 +468,7 @@ defmodule TestServer.HTTP do
   See `websocket/1` for options.
   """
   @spec websocket(TestServer.instance(), keyword()) :: websocket()
-  def websocket(instance, options) when is_pid(instance) and is_list(options) do
+  def websocket({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:path, :method, :match, :to])
 
     options =
@@ -485,8 +487,8 @@ defmodule TestServer.HTTP do
   end
 
   @spec websocket(TestServer.instance(), uri_path :: binary(), keyword()) :: websocket()
-  def websocket(instance, path, options)
-      when is_pid(instance) and is_binary(path) and is_list(options) do
+  def websocket({__MODULE__, _instance_pid} = instance, path, options)
+      when is_binary(path) and is_list(options) do
     websocket(instance, Keyword.put(options, :path, path))
   end
 
@@ -528,12 +530,15 @@ defmodule TestServer.HTTP do
       assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
   """
   @spec websocket_handle(websocket(), keyword()) :: :ok
-  def websocket_handle({instance, websocket_ref} = _websocket, options) do
+  def websocket_handle(
+        {{__MODULE__, _instance_pid} = instance, websocket_ref} = _websocket,
+        options
+      )
+      when is_list(options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_websocket_handler/2)
 
     {:ok, _handler} =
@@ -566,12 +571,15 @@ defmodule TestServer.HTTP do
       assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """
   @spec websocket_send(websocket(), keyword()) :: :ok
-  def websocket_send({instance, websocket_ref} = _websocket, options) do
+  def websocket_send(
+        {{__MODULE__, _instance_pid} = instance, websocket_ref} = _websocket,
+        options
+      )
+      when is_list(options) do
     Keyword.validate!(options, [:to])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_websocket_send/1)
 
     case Instance.register(instance, {:websocket, {:send, websocket_ref, options}}) do
@@ -594,6 +602,6 @@ defmodule TestServer.HTTP do
   defp default_websocket_send(state), do: {:reply, {:text, "ping"}, state}
 
   defp raise_send_error!(instance, reason) do
-    raise "cannot send to websocket on #{TestServer.format_instance(__MODULE__, instance)} because #{reason}"
+    raise "cannot send to websocket on #{TestServer.format_instance(instance)} because #{reason}"
   end
 end

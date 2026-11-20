@@ -18,23 +18,25 @@ defmodule TestServer.InstanceManager do
 
     options =
       options
-      |> Keyword.put_new(:caller, caller)
-      |> Keyword.put_new(:stacktrace, stacktrace)
+      |> Keyword.put(:protocol_module, protocol_module)
+      |> Keyword.put(:caller, caller)
+      |> Keyword.put(:stacktrace, stacktrace)
 
     child_spec = Supervisor.child_spec({instance_module, options}, restart: :temporary)
 
     case DynamicSupervisor.start_child(InstanceSupervisor, child_spec) do
-      {:ok, instance} ->
-        GenServer.call(__MODULE__, {:register, {caller, protocol_module, instance}})
+      {:ok, instance_pid} ->
+        GenServer.call(__MODULE__, {:register, {caller, {protocol_module, instance_pid}}})
 
       {:error, error} ->
         {:error, error}
     end
   end
 
-  @spec stop_instance(TestServer.instance(), module()) :: :ok | {:error, :not_found}
-  def stop_instance(instance, protocol_module) do
-    res = DynamicSupervisor.terminate_child(InstanceSupervisor, instance)
+  @spec stop_instance(TestServer.instance()) :: :ok | {:error, :not_found}
+  def stop_instance(instance) do
+    {protocol_module, instance_pid} = instance
+    res = DynamicSupervisor.terminate_child(InstanceSupervisor, instance_pid)
     [_first | stacktrace] = TestServer.pruned_stacktrace(protocol_module)
 
     GenServer.call(__MODULE__, {:stop_instance, instance, stacktrace})
@@ -42,27 +44,37 @@ defmodule TestServer.InstanceManager do
     res
   end
 
-  @spec fetch_instance(pid(), module()) :: {:ok, TestServer.instance()} | :error
-  def fetch_instance(caller, protocol_module) do
+  @spec fetch_instance_by_caller_protocol(pid(), module()) ::
+          {:ok, TestServer.instance()} | :error
+  def fetch_instance_by_caller_protocol(caller, protocol_module) do
     case GenServer.call(__MODULE__, {:list_instances_by_caller, caller, protocol_module}) do
-      [] -> :error
-      [instance] -> {:ok, instance}
-      instances -> raise_multiple_instances_error(instances, protocol_module)
+      [] ->
+        :error
+
+      [instance] ->
+        {:ok, instance}
+
+      instances ->
+        [{m, f, a, _} | _] = TestServer.pruned_stacktrace(protocol_module)
+
+        raise_multiple_instances_error(protocol_module, instances, {m, f, a})
     end
   end
 
-  defp raise_multiple_instances_error(instances, protocol_module) do
-    [{m, f, a, _} | _] = TestServer.pruned_stacktrace(protocol_module)
-
+  defp raise_multiple_instances_error(protocol_module, instances, {m, f, a}) do
     formatted_instances =
       instances
       |> Enum.with_index()
       |> Enum.map_join("\n\n", fn {instance, index} ->
-        options = GenServer.call(instance, :options)
+        stacktrace =
+          protocol_module
+          |> Module.concat(Instance)
+          |> apply(:options, [instance])
+          |> Keyword.fetch!(:stacktrace)
 
         """
-        ##{index + 1}: #{inspect(instance)}
-            #{Enum.map_join(options[:stacktrace], "\n    ", &Exception.format_stacktrace_entry/1)}
+        ##{index + 1}: #{TestServer.format_instance(instance)}
+            #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
       end)
 
@@ -73,13 +85,12 @@ defmodule TestServer.InstanceManager do
     """
   end
 
-  @spec fetch_instance_entry(pid()) ::
+  @spec fetch_instance_entry(TestServer.instance()) ::
           {:ok,
            %{
              caller: pid(),
-             instance: pid(),
+             instance: {module(), pid()},
              ref: reference(),
-             protocol_module: module(),
              exit: nil | %{reason: nil | term(), stacktrace: nil | TestServer.stacktrace()}
            }}
           | {:error, :not_found}
@@ -98,14 +109,14 @@ defmodule TestServer.InstanceManager do
   end
 
   @impl true
-  def handle_call({:register, {caller, protocol_module, instance}}, _from, state) do
-    monitor_ref = Process.monitor(instance)
+  def handle_call({:register, {caller, instance}}, _from, state) do
+    {_protocol_module, instance_pid} = instance
+    monitor = Process.monitor(instance_pid)
 
     entry = %{
       caller: caller,
       instance: instance,
-      ref: monitor_ref,
-      protocol_module: protocol_module,
+      ref: monitor,
       exit: nil
     }
 
@@ -117,10 +128,9 @@ defmodule TestServer.InstanceManager do
   def handle_call({:list_instances_by_caller, caller, protocol_module}, _from, state) do
     instances =
       state.entries
-      |> Enum.filter(fn entry ->
-        entry.caller == caller and
-          entry.protocol_module == protocol_module and
-          is_nil(entry.exit)
+      |> Enum.filter(fn
+        %{instance: {^protocol_module, _instance_pid}, caller: ^caller, exit: nil} -> true
+        %{instance: _instance, caller: _caller, exit: _exit} -> false
       end)
       |> Enum.map(& &1.instance)
 
@@ -129,16 +139,14 @@ defmodule TestServer.InstanceManager do
 
   def handle_call({:stop_instance, instance, stacktrace}, _from, state) do
     entries =
-      Enum.map(state.entries, fn entry ->
-        case entry.instance == instance do
-          true ->
-            Process.demonitor(entry.ref)
+      Enum.map(state.entries, fn
+        %{instance: ^instance, ref: ref} = entry ->
+          Process.demonitor(ref)
 
-            %{entry | exit: %{reason: nil, stacktrace: stacktrace}}
+          %{entry | exit: %{reason: nil, stacktrace: stacktrace}}
 
-          false ->
-            entry
-        end
+        %{instance: _instance, ref: _ref} = entry ->
+          entry
       end)
 
     {:reply, :ok, %{state | entries: entries}}
@@ -158,15 +166,14 @@ defmodule TestServer.InstanceManager do
   end
 
   @impl true
-  def handle_info({:DOWN, _ref, :process, instance, reason}, state) do
-    entries =
-      Enum.map(state.entries, fn entry ->
-        case entry.instance == instance do
-          true -> %{entry | exit: %{reason: reason, stacktrace: nil}}
-          false -> entry
-        end
+  def handle_info({:DOWN, _ref, :process, instance_pid, reason}, state) do
+    {[pid_entry], entries} =
+      Enum.split_with(state.entries, fn
+        %{instance: {_protocol_module, ^instance_pid}} -> true
+        %{instance: {_protocol_module, _instance_pid}} -> false
       end)
 
+    entries = entries ++ [%{pid_entry | exit: %{reason: reason, stacktrace: nil}}]
     state = %{state | entries: entries}
 
     case reason do
@@ -180,9 +187,7 @@ defmodule TestServer.InstanceManager do
         {:noreply, state}
 
       reason ->
-        entry = Enum.find(state.entries, &(&1.instance == instance))
-
-        Process.exit(entry.caller, reason)
+        Process.exit(pid_entry.caller, reason)
 
         {:noreply, state}
     end

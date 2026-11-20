@@ -13,19 +13,19 @@ defmodule TestServer.TCP.Instance do
 
   @spec register(TestServer.instance(), {:connection, TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.TCP.connection_ref()}}
-  def register(instance, {:connection, stacktrace}) do
-    GenServer.call(instance, {:register, {:connection, stacktrace}})
+  def register({TestServer.TCP, instance_pid}, {:connection, stacktrace}) do
+    GenServer.call(instance_pid, {:register, {:connection, stacktrace}})
   end
 
   @spec register(
           TestServer.instance(),
           {:handle, TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}
         ) :: {:ok, map()}
-  def register(instance, {:handle, connection_ref, options, stacktrace}) do
+  def register({TestServer.TCP, instance_pid}, {:handle, connection_ref, options, stacktrace}) do
     Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
     Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 2)
 
-    GenServer.call(instance, {:register, {:handle, connection_ref, options, stacktrace}})
+    GenServer.call(instance_pid, {:register, {:handle, connection_ref, options, stacktrace}})
   end
 
   @spec register(
@@ -36,13 +36,13 @@ defmodule TestServer.TCP.Instance do
           | {:error, :einval}
           | {:error, :enotconn}
           | {:error, :closed}
-  def register(instance, {:send, connection_ref, options}) do
+  def register({TestServer.TCP, instance_pid}, {:send, connection_ref, options}) do
     timeout = validate_timeout!(options)
 
     Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 1)
 
     GenServer.call(
-      instance,
+      instance_pid,
       {:register, {:send, connection_ref, timeout}},
       timeout + 1_000
     )
@@ -79,8 +79,8 @@ defmodule TestServer.TCP.Instance do
           {:connection, pid(), {:tcp, :gen_tcp.socket()} | {:tls, :ssl.sslsocket()}}
         ) ::
           {:ok, map(), TestServer.TCP.state()} | {:error, :not_found}
-  def dispatch(instance, {:connection, owner, socket}) do
-    GenServer.call(instance, {:dispatch, {:connection, owner, socket}})
+  def dispatch({TestServer.TCP, instance_pid}, {:connection, owner, socket}) do
+    GenServer.call(instance_pid, {:dispatch, {:connection, owner, socket}})
   end
 
   @spec dispatch(
@@ -91,8 +91,8 @@ defmodule TestServer.TCP.Instance do
           | {:ok, TestServer.TCP.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:handle, owner, data, connection_state}) do
-    GenServer.call(instance, {:dispatch, {:handle, owner, data, connection_state}})
+  def dispatch({TestServer.TCP, instance_pid}, {:handle, owner, data, connection_state}) do
+    GenServer.call(instance_pid, {:dispatch, {:handle, owner, data, connection_state}})
   end
 
   @spec dispatch(
@@ -102,23 +102,23 @@ defmodule TestServer.TCP.Instance do
           {:reply, iodata(), TestServer.TCP.state()}
           | {:ok, TestServer.TCP.state()}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:send, options, connection_state, stacktrace}) do
-    GenServer.call(instance, {:dispatch, {:send, options, connection_state, stacktrace}})
+  def dispatch({TestServer.TCP, instance_pid}, {:send, options, connection_state, stacktrace}) do
+    GenServer.call(instance_pid, {:dispatch, {:send, options, connection_state, stacktrace}})
   end
 
   @spec options(TestServer.instance()) :: keyword()
-  def options(instance) do
-    GenServer.call(instance, :options)
+  def options({TestServer.TCP, instance_pid}) do
+    GenServer.call(instance_pid, :options)
   end
 
   @spec connections(TestServer.instance()) :: [map()]
-  def connections(instance) do
-    GenServer.call(instance, :connections)
+  def connections({TestServer.TCP, instance_pid}) do
+    GenServer.call(instance_pid, :connections)
   end
 
   @spec handlers(TestServer.instance()) :: [map()]
-  def handlers(instance) do
-    GenServer.call(instance, :handlers)
+  def handlers({TestServer.TCP, instance_pid}) do
+    GenServer.call(instance_pid, :handlers)
   end
 
   @spec format_handlers([map()]) :: binary()
@@ -147,7 +147,9 @@ defmodule TestServer.TCP.Instance do
 
   @impl true
   def init(options) do
-    case Server.start(self(), options) do
+    {protocol_module, options} = Keyword.pop!(options, :protocol_module)
+
+    case Server.start({protocol_module, self()}, options) do
       {:ok, options} ->
         {:ok, %{options: options, handlers: [], connections: []}}
 

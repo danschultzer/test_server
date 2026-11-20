@@ -10,7 +10,7 @@ defmodule TestServer.HTTP.WebSocket do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.HTTP, instance)} received an unexpected WebSocket frame"
+          "#{TestServer.format_instance(instance)} received an unexpected WebSocket frame"
           |> append_formatted_frame(frame)
           |> append_formatted_websocket_handlers(instance, websocket_ref)
 

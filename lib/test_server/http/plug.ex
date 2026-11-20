@@ -28,7 +28,7 @@ defmodule TestServer.HTTP.Plug do
 
       {:error, {:not_found, conn}} ->
         message =
-          "#{TestServer.format_instance(TestServer.HTTP, instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
+          "#{TestServer.format_instance(instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
           |> append_formatted_params(conn)
           |> append_formatted_handlers(instance)
 

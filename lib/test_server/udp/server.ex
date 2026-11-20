@@ -155,7 +155,9 @@ defmodule TestServer.UDP.Server do
   defp start_peer(instance, {:udp, _listener, _address, _port} = socket) do
     {:ok, peer} =
       Task.start_link(fn ->
-        Process.link(instance)
+        {TestServer.UDP, instance_pid} = instance
+
+        Process.link(instance_pid)
 
         assign_peer(instance, socket)
       end)
@@ -166,7 +168,9 @@ defmodule TestServer.UDP.Server do
   defp start_peer(instance, {:dtls, raw_socket}) do
     {:ok, peer} =
       Task.start_link(fn ->
-        Process.link(instance)
+        {TestServer.UDP, instance_pid} = instance
+
+        Process.link(instance_pid)
 
         receive do
           :start -> :ok
@@ -207,7 +211,7 @@ defmodule TestServer.UDP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.UDP, instance)} received an unexpected UDP peer"
+          "#{TestServer.format_instance(instance)} received an unexpected UDP peer"
           |> append_formatted_peers(instance)
 
         send_error(socket, RuntimeError.exception(message), instance)
@@ -269,7 +273,7 @@ defmodule TestServer.UDP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.UDP, instance)} received unexpected UDP data"
+          "#{TestServer.format_instance(instance)} received unexpected UDP data"
           |> append_formatted_data(data)
           |> append_formatted_handlers(instance)
 

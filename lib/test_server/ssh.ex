@@ -179,7 +179,7 @@ defmodule TestServer.SSH do
 
       unused_channels ->
         raise """
-        expected all channels on #{TestServer.format_instance(__MODULE__, instance)} to be used, but some were not:
+        expected all channels on #{TestServer.format_instance(instance)} to be used, but some were not:
 
         #{Instance.format_channels(unused_channels)}
         """
@@ -196,7 +196,7 @@ defmodule TestServer.SSH do
 
       active_handlers ->
         raise """
-        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a message for these handlers before the test ended:
+        expected #{TestServer.format_instance(instance)} to receive a message for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -219,7 +219,7 @@ defmodule TestServer.SSH do
       assert reason in [:econnrefused, :econnreset]
   """
   @spec stop() :: :ok | {:error, term()}
-  def stop, do: stop(TestServer.fetch_instance!(__MODULE__))
+  def stop, do: stop(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Shuts down a test server SSH instance.
@@ -227,12 +227,12 @@ defmodule TestServer.SSH do
   See `stop/0` for more.
   """
   @spec stop(TestServer.instance()) :: :ok | {:error, term()}
-  def stop(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def stop({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
 
     :ok = Server.stop(Instance.options(instance))
 
-    TestServer.stop_instance(__MODULE__, instance)
+    TestServer.stop_instance(instance)
   end
 
   @spec address() :: {binary(), :inet.port_number()}
@@ -255,9 +255,9 @@ defmodule TestServer.SSH do
   """
   @spec address(keyword() | TestServer.instance()) :: {binary(), :inet.port_number()}
   def address(options) when is_list(options),
-    do: address(TestServer.fetch_instance!(__MODULE__), options)
+    do: address(TestServer.fetch_protocol_instance!(__MODULE__), options)
 
-  def address(instance) when is_pid(instance), do: address(instance, [])
+  def address({__MODULE__, _instance_pid} = instance), do: address(instance, [])
 
   @doc """
   Returns the address for a test server instance.
@@ -265,9 +265,9 @@ defmodule TestServer.SSH do
   See `address/1` for options.
   """
   @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
-  def address(instance, options) when is_pid(instance) and is_list(options) do
+  def address({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:host])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     host = TestServer.host(options)
     port = instance |> Instance.options() |> Keyword.fetch!(:port)
@@ -312,7 +312,7 @@ defmodule TestServer.SSH do
   end
 
   @spec channel(TestServer.instance()) :: channel()
-  def channel(instance) when is_pid(instance), do: channel(instance, [])
+  def channel({__MODULE__, _instance_pid} = instance), do: channel(instance, [])
 
   @doc """
   Adds an expected channel to a test server instance.
@@ -320,9 +320,9 @@ defmodule TestServer.SSH do
   See `channel/1` for options.
   """
   @spec channel(TestServer.instance(), keyword()) :: channel()
-  def channel(instance, options) do
+  def channel({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:messages])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
 
@@ -422,13 +422,12 @@ defmodule TestServer.SSH do
   See `handle/1` for options.
   """
   @spec handle(channel(), keyword()) :: :ok
-  def handle({instance, channel_ref} = _channel, options) do
+  def handle({{__MODULE__, _instance_pid} = instance, channel_ref} = _channel, options)
+      when is_list(options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
-    [_first_module_entry | stacktrace] =
-      TestServer.pruned_stacktrace(__MODULE__)
-
+    [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
     options = Keyword.put_new(options, :to, &default_handler/2)
 
     {:ok, _handler} = Instance.register(instance, {:handle, channel_ref, options, stacktrace})
@@ -461,7 +460,7 @@ defmodule TestServer.SSH do
           end)
   """
   @spec host_keys() :: [host_key()]
-  def host_keys, do: host_keys(TestServer.fetch_instance!(__MODULE__))
+  def host_keys, do: host_keys(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Fetches the generated host keys for a test server instance.
@@ -469,8 +468,8 @@ defmodule TestServer.SSH do
   See `host_keys/0` for more.
   """
   @spec host_keys(TestServer.instance()) :: [host_key()]
-  def host_keys(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def host_keys({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
 
     options = Instance.options(instance)
 
@@ -479,7 +478,7 @@ defmodule TestServer.SSH do
         options[:host_keys]
 
       false ->
-        raise "expected #{TestServer.format_instance(__MODULE__, instance)} not to be running with [host_keys: ...] option"
+        raise "expected #{TestServer.format_instance(instance)} not to be running with [host_keys: ...] option"
     end
   end
 end

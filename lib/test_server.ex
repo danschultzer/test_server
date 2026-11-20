@@ -7,7 +7,7 @@ defmodule TestServer do
              |> then(&Regex.replace(~r/\[(`[^`]+`)\]\([^)]+\)/, &1, "\\1"))
              |> String.trim()
 
-  @type instance :: pid()
+  @type instance :: {module(), pid()}
   @type stacktrace :: list()
   @type cacerts :: [binary()]
 
@@ -54,7 +54,7 @@ defmodule TestServer do
 
     case InstanceManager.start_instance(caller, protocol_module, options) do
       {:ok, instance} ->
-        put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn)
+        put_ex_unit_on_exit_callback(instance, verify_instance_fn)
 
         {:ok, instance}
 
@@ -66,12 +66,14 @@ defmodule TestServer do
     end
   end
 
-  defp put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn) do
+  defp put_ex_unit_on_exit_callback(instance, verify_instance_fn) do
+    {protocol_module, _instance_pid} = instance
+
     Process.put({:test_process, __MODULE__}, true)
 
     ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
       try do
-        assert_instance_alive!(protocol_module, instance)
+        assert_instance_alive!(instance)
 
         try do
           verify_instance_fn.(instance)
@@ -85,10 +87,10 @@ defmodule TestServer do
   end
 
   @doc false
-  def stop_instance(protocol_module, instance) do
-    assert_instance_alive!(protocol_module, instance)
+  def stop_instance(instance) do
+    assert_instance_alive!(instance)
 
-    case InstanceManager.stop_instance(instance, protocol_module) do
+    case InstanceManager.stop_instance(instance) do
       :ok ->
         Process.get({:test_process, __MODULE__}) &&
           ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
@@ -103,29 +105,25 @@ defmodule TestServer do
   end
 
   @doc false
-  def assert_instance_alive!(protocol_module, instance) do
+  def assert_instance_alive!(instance) do
     case InstanceManager.fetch_instance_entry(instance) do
       {:error, :not_found} ->
-        raise "expected #{format_instance(protocol_module, instance)} to be a TestServer-managed instance"
+        raise "expected #{format_instance(instance)} to be a TestServer-managed instance"
 
-      {:ok, %{protocol_module: other_protocol_module}}
-      when other_protocol_module != protocol_module ->
-        raise "expected #{format_instance(protocol_module, instance)}, but got #{format_instance(other_protocol_module, instance)}"
-
-      {:ok, %{protocol_module: ^protocol_module, exit: nil}} ->
+      {:ok, %{exit: nil}} ->
         :ok
 
-      {:ok, %{protocol_module: ^protocol_module, exit: %{reason: nil, stacktrace: stacktrace}}}
+      {:ok, %{exit: %{reason: nil, stacktrace: stacktrace}}}
       when is_list(stacktrace) ->
         raise """
-        expected #{format_instance(protocol_module, instance)} to be running, but it was stopped at:
+        expected #{format_instance(instance)} to be running, but it was stopped at:
 
         #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
         """
 
-      {:ok, %{protocol_module: ^protocol_module, exit: %{reason: reason, stacktrace: nil}}} ->
+      {:ok, %{exit: %{reason: reason, stacktrace: nil}}} ->
         raise """
-        expected #{format_instance(protocol_module, instance)} to be running, but it exited with reason:
+        expected #{format_instance(instance)} to be running, but it exited with reason:
 
         #{Exception.format_exit(reason)}
         """
@@ -133,10 +131,10 @@ defmodule TestServer do
   end
 
   @doc false
-  def format_instance(protocol_module, instance) do
+  def format_instance({protocol_module, instance_pid}) do
     instance_module = Module.concat(protocol_module, Instance)
 
-    "#{inspect(instance_module)} #{inspect(instance)}"
+    "#{inspect(instance_module)} #{inspect(instance_pid)}"
   end
 
   @doc false
@@ -153,7 +151,7 @@ defmodule TestServer do
 
   @doc false
   def autostart_instance(protocol_module) do
-    case InstanceManager.fetch_instance(self(), protocol_module) do
+    case InstanceManager.fetch_instance_by_caller_protocol(self(), protocol_module) do
       :error -> protocol_module.start!()
       {:ok, instance} -> instance
     end
@@ -195,10 +193,10 @@ defmodule TestServer do
   end
 
   @doc false
-  def fetch_instance!(protocol_module) do
+  def fetch_protocol_instance!(protocol_module) do
     instance_module = Module.concat(protocol_module, Instance)
 
-    case InstanceManager.fetch_instance(self(), protocol_module) do
+    case InstanceManager.fetch_instance_by_caller_protocol(self(), protocol_module) do
       :error -> raise "expected #{inspect(instance_module)} to be running"
       {:ok, instance} -> instance
     end

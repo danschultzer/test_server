@@ -27,7 +27,7 @@ defmodule TestServer.SSH.Channel do
       {:error, :not_found} ->
         message =
           append_formatted_channels(
-            "#{TestServer.format_instance(TestServer.SSH, state.instance)} received an unexpected SSH channel up message for channel ID #{channel_id} on connection #{inspect(connection)}.",
+            "#{TestServer.format_instance(state.instance)} received an unexpected SSH channel up message for channel ID #{channel_id} on connection #{inspect(connection)}.",
             state.instance
           )
 
@@ -170,7 +170,7 @@ defmodule TestServer.SSH.Channel do
          {:error, :not_found}
        ) do
     message =
-      "#{TestServer.format_instance(TestServer.SSH, state.instance)} received an unexpected SSH message"
+      "#{TestServer.format_instance(state.instance)} received an unexpected SSH message"
       |> append_formatted_frame(frame)
       |> append_formatted_handlers(state.instance)
 

@@ -159,9 +159,9 @@ defmodule TestServer.TCPTest do
       Process.register(self(), StartEndTest)
 
       assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
-      assert_receive {:server, instance, port}
-      assert monitor = Process.monitor(instance)
-      assert_receive {:DOWN, ^monitor, :process, ^instance, _reason}
+      assert_receive {:server, {TestServer.TCP, instance_pid}, port}
+      assert monitor = Process.monitor(instance_pid)
+      assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
     end
@@ -173,7 +173,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!()
+          {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
 
           acceptor_pid =
             instance
@@ -182,7 +182,7 @@ defmodule TestServer.TCPTest do
 
           monitor = Process.monitor(acceptor_pid)
 
-          Process.exit(instance, :shutdown)
+          Process.exit(instance_pid, :shutdown)
 
           assert_receive {:DOWN, ^monitor, :process, ^acceptor_pid, _reason}
         end
@@ -197,8 +197,8 @@ defmodule TestServer.TCPTest do
 
   describe "start!/1" do
     test "returns instance" do
-      assert instance = TestServer.TCP.start!()
-      assert is_pid(instance)
+      assert {TestServer.TCP, instance_pid} = TestServer.TCP.start!()
+      assert is_pid(instance_pid)
     end
 
     test "when start fails" do
@@ -240,7 +240,7 @@ defmodule TestServer.TCPTest do
     end
 
     test "when started with `transport: :tcp` option" do
-      instance = TestServer.TCP.start!(transport: :tcp)
+      {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!(transport: :tcp)
       connection = TestServer.TCP.connection()
       address = TestServer.TCP.address()
       {:ok, socket} = TCPClient.connect(address)
@@ -251,7 +251,7 @@ defmodule TestServer.TCPTest do
 
       assert TestServer.TCP.stop() == :ok
 
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
       assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
       assert {:error, reason} = TCPClient.connect(address)
       assert reason in [:econnrefused, :econnreset]
@@ -259,7 +259,7 @@ defmodule TestServer.TCPTest do
     end
 
     test "when started with `transport: :tls` option" do
-      instance = TestServer.TCP.start!(transport: :tls)
+      {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!(transport: :tls)
       connection = TestServer.TCP.connection()
       address = TestServer.TCP.address()
       tls_options = tls_options()
@@ -271,7 +271,7 @@ defmodule TestServer.TCPTest do
 
       assert TestServer.TCP.stop() == :ok
 
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
       assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
       assert {:error, reason} = TLSClient.connect(address, tls_options)
       assert reason in [:econnrefused, :econnreset]
@@ -1180,7 +1180,7 @@ defmodule TestServer.TCPTest do
     end
 
     test "when timeout received after connection is accepted" do
-      instance = TestServer.TCP.start!()
+      {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
       connection = TestServer.TCP.connection(instance)
       {:ok, _socket} = TCPClient.connect(TestServer.TCP.address(instance))
 
@@ -1189,7 +1189,7 @@ defmodule TestServer.TCPTest do
       tag = make_ref()
       from = {self(), tag}
 
-      send(instance, {:timeout, from, {:send, 0}})
+      send(instance_pid, {:timeout, from, {:send, 0}})
 
       assert [_connection] = TestServer.TCP.Instance.connections(instance)
       refute_receive {^tag, {:error, :enotconn}}

@@ -141,7 +141,7 @@ defmodule TestServer.HTTPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.HTTP.start!()
+          {TestServer.HTTP, instance_pid} = instance = TestServer.HTTP.start!()
 
           server_pid =
             instance
@@ -150,7 +150,7 @@ defmodule TestServer.HTTPTest do
 
           monitor = Process.monitor(server_pid)
 
-          Process.exit(instance, :shutdown)
+          Process.exit(instance_pid, :shutdown)
 
           assert_receive {:DOWN, ^monitor, :process, ^server_pid, _reason}
         end
@@ -165,8 +165,8 @@ defmodule TestServer.HTTPTest do
 
   describe "start!/1" do
     test "returns instance" do
-      assert instance = TestServer.HTTP.start!()
-      assert is_pid(instance)
+      assert {TestServer.HTTP, instance_pid} = TestServer.HTTP.start!()
+      assert is_pid(instance_pid)
     end
 
     test "when start fails" do
@@ -208,11 +208,11 @@ defmodule TestServer.HTTPTest do
     end
 
     test "stops" do
-      instance = TestServer.HTTP.start!()
+      {TestServer.HTTP, instance_pid} = TestServer.HTTP.start!()
       url = TestServer.HTTP.url()
 
       assert TestServer.HTTP.stop() == :ok
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
       assert {:error, {:failed_connect, _}} = HTTPClient.fetch(url)
     end
   end

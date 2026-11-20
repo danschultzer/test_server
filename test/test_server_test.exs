@@ -20,7 +20,7 @@ defmodule TestServerTest do
       def handle_info({:stop, reason}, state), do: {:stop, reason, state}
     end
 
-    def stop(instance), do: TestServer.stop_instance(__MODULE__, instance)
+    def stop(instance), do: TestServer.stop_instance(instance)
   end
 
   describe "start_instance/3" do
@@ -74,9 +74,9 @@ defmodule TestServerTest do
 
       assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
-      assert_received {:instance, instance}
+      assert_received {:instance, {FakeProtocol, instance_pid} = instance}
       assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
     end
 
     test "when instance crashes" do
@@ -121,10 +121,10 @@ defmodule TestServerTest do
 
       assert io =~ "an exception was raised:"
       assert io =~ "(RuntimeError) boom"
-      assert_received {:instance, instance}
+      assert_received {:instance, {FakeProtocol, instance_pid} = instance}
       assert %{active: 0} = DynamicSupervisor.count_children(TestServer.InstanceSupervisor)
       assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
     end
 
     test "when instance crashes after test ended" do
@@ -144,10 +144,13 @@ defmodule TestServerTest do
           send(unquote(__MODULE__), {:instance, instance})
 
           on_exit(fn ->
-            monitor = Process.monitor(instance)
-            send(instance, :crash)
+            {FakeProtocol, instance_pid} = instance
+            monitor = Process.monitor(instance_pid)
 
-            assert_receive {:DOWN, ^monitor, :process, ^instance, {%RuntimeError{}, _stacktrace}}
+            send(instance_pid, :crash)
+
+            assert_receive {:DOWN, ^monitor, :process, ^instance_pid,
+                            {%RuntimeError{}, _stacktrace}}
           end)
         end
       end
@@ -166,11 +169,11 @@ defmodule TestServerTest do
       assert io =~
                ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert_received {:instance, instance}
+      assert_received {:instance, {FakeProtocol, instance_pid} = instance}
       assert %{active: 0} = DynamicSupervisor.count_children(TestServer.InstanceSupervisor)
       assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
       assert io =~ "(RuntimeError) boom"
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
     end
 
     test "when instance is stopped with `:normal`" do
@@ -187,11 +190,13 @@ defmodule TestServerTest do
               fn _instance -> :ok end
             )
 
-          monitor = Process.monitor(instance)
-          send(unquote(__MODULE__), {:instance, instance})
-          send(instance, {:stop, :normal})
+          {unquote(__MODULE__).FakeProtocol, instance_pid} = instance
+          monitor = Process.monitor(instance_pid)
 
-          assert_receive {:DOWN, ^monitor, :process, ^instance, :normal}
+          send(unquote(__MODULE__), {:instance, instance})
+          send(instance_pid, {:stop, :normal})
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, :normal}
         end
       end
 
@@ -201,9 +206,9 @@ defmodule TestServerTest do
                ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
       assert io =~ "normal"
-      assert_received {:instance, instance}
+      assert_received {:instance, {FakeProtocol, instance_pid} = instance}
       assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
     end
 
     test "when instance is stopped with `{:shutdown, reason}`" do
@@ -220,11 +225,13 @@ defmodule TestServerTest do
               fn _instance -> :ok end
             )
 
-          monitor = Process.monitor(instance)
-          send(unquote(__MODULE__), {:instance, instance})
-          send(instance, {:stop, {:shutdown, :normal}})
+          {unquote(__MODULE__).FakeProtocol, instance_pid} = instance
+          monitor = Process.monitor(instance_pid)
 
-          assert_receive {:DOWN, ^monitor, :process, ^instance, {:shutdown, :normal}}
+          send(unquote(__MODULE__), {:instance, instance})
+          send(instance_pid, {:stop, {:shutdown, :normal}})
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, {:shutdown, :normal}}
         end
       end
 
@@ -234,9 +241,9 @@ defmodule TestServerTest do
                ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
       assert io =~ "shutdown"
-      assert_received {:instance, instance}
+      assert_received {:instance, {FakeProtocol, instance_pid} = instance}
       assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
     end
   end
 
@@ -245,29 +252,18 @@ defmodule TestServerTest do
       assert_raise RuntimeError,
                    ~r/expected TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\> to be a TestServer-managed instance/,
                    fn ->
-                     assert TestServer.stop_instance(unquote(__MODULE__).FakeProtocol, self()) ==
-                              :ok
-                   end
-    end
-
-    test "with different instance protocol module" do
-      {:ok, instance} = TestServer.start_instance(FakeProtocol, [], fn _instance -> :ok end)
-
-      assert_raise RuntimeError,
-                   ~r/expected InvalidProtocol\.Instance \#PID\<[0-9.]+\>, but got TestServerTest\.FakeProtocol\.Instance \#PID\<[0-9.]+\>/,
-                   fn ->
-                     assert TestServer.stop_instance(InvalidProtocol, instance) ==
+                     assert TestServer.stop_instance({unquote(__MODULE__).FakeProtocol, self()}) ==
                               :ok
                    end
     end
 
     test "with stopped instance" do
       {:ok, instance} = TestServer.start_instance(FakeProtocol, [], fn _instance -> :ok end)
-      :ok = TestServer.stop_instance(FakeProtocol, instance)
+      :ok = TestServer.stop_instance(instance)
 
       error =
         assert_raise RuntimeError, fn ->
-          TestServer.stop_instance(FakeProtocol, instance)
+          TestServer.stop_instance(instance)
         end
 
       message = Exception.message(error)
@@ -295,7 +291,7 @@ defmodule TestServerTest do
               end
             )
 
-          assert TestServer.stop_instance(unquote(__MODULE__).FakeProtocol, instance) == :ok
+          assert TestServer.stop_instance(instance) == :ok
 
           send(unquote(__MODULE__), {:instance, instance})
         end
@@ -305,10 +301,10 @@ defmodule TestServerTest do
         assert %{failures: 0} = ExUnit.run()
       end)
 
-      assert_received {:instance, instance}
+      assert_received {:instance, {FakeProtocol, instance_pid} = instance}
       refute_received {:verified, ^instance}
       assert TestServer.InstanceManager.fetch_instance_entry(instance) == {:error, :not_found}
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
     end
   end
 

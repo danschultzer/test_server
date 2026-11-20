@@ -103,40 +103,40 @@ defmodule TestServer.UDPTest do
       instance = TestServer.UDP.start!(ipfamily: :inet6)
       :ok = TestServer.UDP.handle()
       options = TestServer.UDP.Instance.options(instance)
-      listener = Keyword.fetch!(options, :listener)
+      listener_socket = Keyword.fetch!(options, :listener)
 
-      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 0}, _port}} = :inet.sockname(listener)
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
       assert {:ok, socket} = UDPClient.open(:inet6)
       assert UDPClient.send(socket, TestServer.UDP.address(), "ping", :inet6) == :ok
       assert {:ok, data} = UDPClient.receive_data(socket, :raw)
       assert {{0, 0, 0, 0, 0, 0, 0, 1}, _server_port, "ping"} = data
       assert {:ok, {_client_address, client_port}} = :inet.sockname(socket)
       assert [%{socket: socket}] = TestServer.UDP.Instance.peers(instance)
-      assert {:udp, ^listener, {0, 0, 0, 0, 0, 0, 0, 1}, ^client_port} = socket
+      assert {:udp, ^listener_socket, {0, 0, 0, 0, 0, 0, 0, 1}, ^client_port} = socket
     end
 
     test "when listener socket is closed" do
       instance = TestServer.UDP.start!()
       options = TestServer.UDP.Instance.options(instance)
-      receiver = Keyword.fetch!(options, :receiver)
-      listener = Keyword.fetch!(options, :listener)
-      monitor = Process.monitor(receiver)
+      receiver_pid = Keyword.fetch!(options, :receiver)
+      listener_socket = Keyword.fetch!(options, :listener)
+      monitor = Process.monitor(receiver_pid)
 
       # This triggers the {:error, :closed} code path for normal shutdown
-      assert :gen_udp.close(listener) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^receiver, :normal}
+      assert :gen_udp.close(listener_socket) == :ok
+      assert_receive {:DOWN, ^monitor, :process, ^receiver_pid, :normal}
     end
 
     test "with `transport: :dtls` option when listener socket is closed" do
       instance = TestServer.UDP.start!(transport: :dtls)
       options = TestServer.UDP.Instance.options(instance)
-      receiver = Keyword.fetch!(options, :receiver)
-      listener = Keyword.fetch!(options, :listener)
-      monitor = Process.monitor(receiver)
+      receiver_pid = Keyword.fetch!(options, :receiver)
+      listener_socket = Keyword.fetch!(options, :listener)
+      monitor = Process.monitor(receiver_pid)
 
       # This triggers the {:error, :closed} code path for normal shutdown
-      assert :ssl.close(listener) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^receiver, :normal}
+      assert :ssl.close(listener_socket) == :ok
+      assert_receive {:DOWN, ^monitor, :process, ^receiver_pid, :normal}
     end
 
     test "when test ends" do
@@ -146,10 +146,10 @@ defmodule TestServer.UDPTest do
         test "succeeds" do
           instance = TestServer.UDP.start!()
           options = TestServer.UDP.Instance.options(instance)
-          receiver = Keyword.fetch!(options, :receiver)
+          receiver_pid = Keyword.fetch!(options, :receiver)
           {_host, port} = TestServer.UDP.address(instance)
 
-          send(__MODULE__, {:server, receiver, port})
+          send(__MODULE__, {:server, receiver_pid, port})
 
           assert {:error, :eaddrinuse} = :gen_udp.open(port, [])
         end
@@ -158,9 +158,9 @@ defmodule TestServer.UDPTest do
       Process.register(self(), StartEndTest)
 
       assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
-      assert_receive {:server, receiver, port}
-      assert monitor = Process.monitor(receiver)
-      assert_receive {:DOWN, ^monitor, :process, ^receiver, _reason}
+      assert_receive {:server, receiver_pid, port}
+      assert monitor = Process.monitor(receiver_pid)
+      assert_receive {:DOWN, ^monitor, :process, ^receiver_pid, _reason}
       assert {:ok, socket} = :gen_udp.open(port, [])
       assert :ok = :gen_udp.close(socket)
     end
@@ -174,16 +174,16 @@ defmodule TestServer.UDPTest do
         test "fails" do
           instance = TestServer.UDP.start!()
 
-          receiver =
+          receiver_pid =
             instance
             |> TestServer.UDP.Instance.options()
             |> Keyword.fetch!(:receiver)
 
-          monitor = Process.monitor(receiver)
+          monitor = Process.monitor(receiver_pid)
 
           Process.exit(instance, :shutdown)
 
-          assert_receive {:DOWN, ^monitor, :process, ^receiver, _reason}
+          assert_receive {:DOWN, ^monitor, :process, ^receiver_pid, _reason}
         end
       end
 

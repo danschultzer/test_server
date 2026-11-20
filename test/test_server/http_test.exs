@@ -116,9 +116,9 @@ defmodule TestServer.HTTPTest do
           instance = TestServer.HTTP.start!()
           options = TestServer.HTTP.Instance.options(instance)
           port = Keyword.fetch!(options, :port)
-          server_ref = Keyword.fetch!(options, :http_server_reference)
+          server_pid = Keyword.fetch!(options, :server)
 
-          send(__MODULE__, {:server, server_ref, port})
+          send(__MODULE__, {:server, server_pid, port})
 
           assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
         end
@@ -127,9 +127,9 @@ defmodule TestServer.HTTPTest do
       Process.register(self(), StartEndTest)
 
       assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
-      assert_receive {:server, server_ref, port}
-      assert monitor = Process.monitor(server_ref)
-      assert_receive {:DOWN, ^monitor, :process, ^server_ref, _reason}
+      assert_receive {:server, server_pid, port}
+      assert monitor = Process.monitor(server_pid)
+      assert_receive {:DOWN, ^monitor, :process, ^server_pid, _reason}
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
     end
@@ -143,16 +143,16 @@ defmodule TestServer.HTTPTest do
         test "fails" do
           instance = TestServer.HTTP.start!()
 
-          server_ref =
+          server_pid =
             instance
             |> TestServer.HTTP.Instance.options()
-            |> Keyword.fetch!(:http_server_reference)
+            |> Keyword.fetch!(:server)
 
-          monitor = Process.monitor(server_ref)
+          monitor = Process.monitor(server_pid)
 
           Process.exit(instance, :shutdown)
 
-          assert_receive {:DOWN, ^monitor, :process, ^server_ref, _reason}
+          assert_receive {:DOWN, ^monitor, :process, ^server_pid, _reason}
         end
       end
 

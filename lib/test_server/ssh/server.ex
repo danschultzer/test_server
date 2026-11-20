@@ -8,12 +8,12 @@ defmodule TestServer.SSH.Server do
   def start(instance, options) do
     with {:ok, port} <- TestServer.open_port(options),
          {host_keys, daemon_options} = daemon_options(instance, options),
-         {:ok, daemon_ref} <- :ssh.daemon(port, daemon_options) do
+         {:ok, daemon_pid} <- :ssh.daemon(port, daemon_options) do
       options =
         options
         |> Keyword.put(:host_keys, host_keys)
         |> Keyword.put(:port, port)
-        |> Keyword.put(:daemon_ref, daemon_ref)
+        |> Keyword.put(:daemon, daemon_pid)
 
       stop_on_exit(options)
       install_ssh_log_filter()
@@ -280,8 +280,8 @@ defmodule TestServer.SSH.Server do
   @doc false
   @spec stop(keyword()) :: :ok
   def stop(options) do
-    daemon_ref = Keyword.fetch!(options, :daemon_ref)
+    daemon_pid = Keyword.fetch!(options, :daemon)
 
-    :ssh.stop_daemon(daemon_ref)
+    :ssh.stop_daemon(daemon_pid)
   end
 end

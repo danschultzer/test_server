@@ -49,14 +49,14 @@ defmodule TestServer.HTTP.Server do
     {mod, server_options} = http_server(options)
 
     with {:ok, port} <- TestServer.open_port(options),
-         {:ok, reference, server_options} <-
+         {:ok, server_pid, server_options} <-
            mod.start(instance, port, scheme, test_server_options, server_options) do
       options =
         options
         |> Keyword.put(:scheme, scheme)
         |> Keyword.put(:port, port)
         |> Keyword.put(:http_server, {mod, server_options})
-        |> Keyword.put(:http_server_reference, reference)
+        |> Keyword.put(:server, server_pid)
 
       {:ok, options}
     end
@@ -106,8 +106,8 @@ defmodule TestServer.HTTP.Server do
   @spec stop(keyword()) :: :ok | {:error, term()}
   def stop(options) do
     {mod, server_options} = Keyword.fetch!(options, :http_server)
-    reference = Keyword.fetch!(options, :http_server_reference)
+    server_pid = Keyword.fetch!(options, :server)
 
-    mod.stop(reference, server_options)
+    mod.stop(server_pid, server_options)
   end
 end

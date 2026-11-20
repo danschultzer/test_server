@@ -17,14 +17,14 @@ defmodule TestServer.UDP.Server do
     listen_options = listen_options(options, transport)
 
     with {:ok, socket, port} <- transport_listen(transport, port, listen_options) do
-      receiver = start_receiver(instance, socket)
-      {_transport, raw_socket} = socket
+      receiver_pid = start_receiver(instance, socket)
+      {_transport, listener_socket} = socket
 
       {:ok,
        options
        |> Keyword.put(:port, port)
-       |> Keyword.put(:listener, raw_socket)
-       |> Keyword.put(:receiver, receiver)}
+       |> Keyword.put(:listener, listener_socket)
+       |> Keyword.put(:receiver, receiver_pid)}
     end
   end
 

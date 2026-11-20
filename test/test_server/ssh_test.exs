@@ -339,10 +339,10 @@ defmodule TestServer.SSHTest do
         test "succeeds" do
           instance = TestServer.SSH.start!()
           options = TestServer.SSH.Instance.options(instance)
-          daemon_ref = Keyword.fetch!(options, :daemon_ref)
+          daemon_pid = Keyword.fetch!(options, :daemon)
           {_host, port} = TestServer.SSH.address(instance)
 
-          send(__MODULE__, {:server, daemon_ref, port})
+          send(__MODULE__, {:server, daemon_pid, port})
 
           assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
         end
@@ -351,9 +351,9 @@ defmodule TestServer.SSHTest do
       Process.register(self(), StartEndTest)
 
       assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
-      assert_receive {:server, daemon_ref, port}
-      assert monitor = Process.monitor(daemon_ref)
-      assert_receive {:DOWN, ^monitor, :process, ^daemon_ref, _reason}
+      assert_receive {:server, daemon_pid, port}
+      assert monitor = Process.monitor(daemon_pid)
+      assert_receive {:DOWN, ^monitor, :process, ^daemon_pid, _reason}
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
     end
@@ -367,16 +367,16 @@ defmodule TestServer.SSHTest do
         test "fails" do
           instance = TestServer.SSH.start!()
 
-          daemon_ref =
+          daemon_pid =
             instance
             |> TestServer.SSH.Instance.options()
-            |> Keyword.fetch!(:daemon_ref)
+            |> Keyword.fetch!(:daemon)
 
-          monitor = Process.monitor(daemon_ref)
+          monitor = Process.monitor(daemon_pid)
 
           Process.exit(instance, :shutdown)
 
-          assert_receive {:DOWN, ^monitor, :process, ^daemon_ref, _reason}
+          assert_receive {:DOWN, ^monitor, :process, ^daemon_pid, _reason}
         end
       end
 

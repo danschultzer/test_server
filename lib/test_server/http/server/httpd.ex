@@ -31,10 +31,10 @@ defmodule TestServer.HTTP.Server.Httpd do
       |> put_tls_options(scheme, options[:tls])
 
     case :inets.start(:httpd, httpd_options) do
-      {:ok, pid} ->
-        stop_on_exit(pid, httpd_options)
+      {:ok, server_pid} ->
+        stop_on_exit(server_pid, httpd_options)
 
-        {:ok, pid, httpd_options}
+        {:ok, server_pid, httpd_options}
 
       {:error, error} ->
         {:error, error}
@@ -51,19 +51,19 @@ defmodule TestServer.HTTP.Server.Httpd do
 
   # `:inets` traps exits so we must ensure we stop it explicitly when the
   # instance dies.
-  defp stop_on_exit(daemon_pid, httpd_options) do
+  defp stop_on_exit(server_pid, httpd_options) do
     spawn_link(fn ->
       Process.flag(:trap_exit, true)
 
       receive do
-        {:EXIT, _pid, _reason} -> stop(daemon_pid, httpd_options)
+        {:EXIT, _pid, _reason} -> stop(server_pid, httpd_options)
       end
     end)
   end
 
   @impl TestServer.HTTP.Server
-  def stop(pid, _httpd_options) do
-    :inets.stop(:httpd, pid)
+  def stop(server_pid, _httpd_options) do
+    :inets.stop(:httpd, server_pid)
   end
 
   @impl TestServer.HTTP.Server

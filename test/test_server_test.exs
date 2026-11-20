@@ -144,10 +144,10 @@ defmodule TestServerTest do
           send(unquote(__MODULE__), {:instance, instance})
 
           on_exit(fn ->
-            ref = Process.monitor(instance)
+            monitor = Process.monitor(instance)
             send(instance, :crash)
 
-            assert_receive {:DOWN, ^ref, :process, ^instance, {%RuntimeError{}, _stacktrace}}
+            assert_receive {:DOWN, ^monitor, :process, ^instance, {%RuntimeError{}, _stacktrace}}
           end)
         end
       end
@@ -187,11 +187,11 @@ defmodule TestServerTest do
               fn _instance -> :ok end
             )
 
-          ref = Process.monitor(instance)
+          monitor = Process.monitor(instance)
           send(unquote(__MODULE__), {:instance, instance})
           send(instance, {:stop, :normal})
 
-          assert_receive {:DOWN, ^ref, :process, ^instance, :normal}
+          assert_receive {:DOWN, ^monitor, :process, ^instance, :normal}
         end
       end
 
@@ -220,11 +220,11 @@ defmodule TestServerTest do
               fn _instance -> :ok end
             )
 
-          ref = Process.monitor(instance)
+          monitor = Process.monitor(instance)
           send(unquote(__MODULE__), {:instance, instance})
           send(instance, {:stop, {:shutdown, :normal}})
 
-          assert_receive {:DOWN, ^ref, :process, ^instance, {:shutdown, :normal}}
+          assert_receive {:DOWN, ^monitor, :process, ^instance, {:shutdown, :normal}}
         end
       end
 

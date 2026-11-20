@@ -18,14 +18,14 @@ defmodule TestServer.TCP.Server do
 
     case transport_listen(default_transport, port, listen_options) do
       {:ok, socket, port} ->
-        {:ok, accept_pid} = Task.start_link(fn -> accept_loop(instance, socket) end)
-        {_transport, raw_socket} = socket
+        {:ok, acceptor_pid} = Task.start_link(fn -> accept_loop(instance, socket) end)
+        {_transport, listener_socket} = socket
 
         options =
           options
           |> Keyword.put(:port, port)
-          |> Keyword.put(:listener, raw_socket)
-          |> Keyword.put(:acceptor, accept_pid)
+          |> Keyword.put(:listener, listener_socket)
+          |> Keyword.put(:acceptor, acceptor_pid)
 
         {:ok, options}
 

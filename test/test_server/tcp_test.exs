@@ -121,9 +121,9 @@ defmodule TestServer.TCPTest do
       instance = TestServer.TCP.start!(ipfamily: :inet6)
       :ok = TestServer.TCP.handle()
       options = TestServer.TCP.Instance.options(instance)
-      listener = Keyword.fetch!(options, :listener)
+      listener_socket = Keyword.fetch!(options, :listener)
 
-      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 0}, _port}} = :inet.sockname(listener)
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
       assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
       assert TCPClient.send(socket, "ping") == :ok
       assert TCPClient.receive_data(socket) == {:ok, "ping"}
@@ -133,13 +133,13 @@ defmodule TestServer.TCPTest do
     test "when listener socket is closed" do
       instance = TestServer.TCP.start!()
       options = TestServer.TCP.Instance.options(instance)
-      acceptor = Keyword.fetch!(options, :acceptor)
-      listener = Keyword.fetch!(options, :listener)
-      monitor = Process.monitor(acceptor)
+      acceptor_pid = Keyword.fetch!(options, :acceptor)
+      listener_socket = Keyword.fetch!(options, :listener)
+      monitor = Process.monitor(acceptor_pid)
 
       # This triggers the {:error, :closed} code path for normal shutdown
-      assert TCPClient.close(listener) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^acceptor, :normal}
+      assert TCPClient.close(listener_socket) == :ok
+      assert_receive {:DOWN, ^monitor, :process, ^acceptor_pid, :normal}
     end
 
     test "when test ends" do
@@ -175,16 +175,16 @@ defmodule TestServer.TCPTest do
         test "fails" do
           instance = TestServer.TCP.start!()
 
-          acceptor =
+          acceptor_pid =
             instance
             |> TestServer.TCP.Instance.options()
             |> Keyword.fetch!(:acceptor)
 
-          monitor = Process.monitor(acceptor)
+          monitor = Process.monitor(acceptor_pid)
 
           Process.exit(instance, :shutdown)
 
-          assert_receive {:DOWN, ^monitor, :process, ^acceptor, _reason}
+          assert_receive {:DOWN, ^monitor, :process, ^acceptor_pid, _reason}
         end
       end
 

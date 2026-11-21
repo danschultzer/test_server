@@ -79,8 +79,8 @@ defmodule TestServer.TCP.Instance do
           {:connection, pid(), {:tcp, :gen_tcp.socket()} | {:tls, :ssl.sslsocket()}}
         ) ::
           {:ok, map(), TestServer.TCP.state()} | {:error, :not_found}
-  def dispatch({TestServer.TCP, instance_pid}, {:connection, owner, socket}) do
-    GenServer.call(instance_pid, {:dispatch, {:connection, owner, socket}})
+  def dispatch({TestServer.TCP, instance_pid}, {:connection, owner_pid, socket}) do
+    GenServer.call(instance_pid, {:dispatch, {:connection, owner_pid, socket}})
   end
 
   @spec dispatch(
@@ -91,8 +91,8 @@ defmodule TestServer.TCP.Instance do
           | {:ok, TestServer.TCP.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch({TestServer.TCP, instance_pid}, {:handle, owner, data, connection_state}) do
-    GenServer.call(instance_pid, {:dispatch, {:handle, owner, data, connection_state}})
+  def dispatch({TestServer.TCP, instance_pid}, {:handle, owner_pid, data, connection_state}) do
+    GenServer.call(instance_pid, {:dispatch, {:handle, owner_pid, data, connection_state}})
   end
 
   @spec dispatch(
@@ -205,17 +205,17 @@ defmodule TestServer.TCP.Instance do
 
         {:noreply, state}
 
-      {%{owner: _owner}, false} ->
+      {%{owner: _owner_pid}, false} ->
         {:reply, {:error, :closed}, state}
 
-      {%{owner: owner}, true} ->
-        {:reply, {:ok, owner}, state}
+      {%{owner: owner_pid}, true} ->
+        {:reply, {:ok, owner_pid}, state}
     end
   end
 
-  def handle_call({:dispatch, {:connection, owner, socket}}, _from, state) do
+  def handle_call({:dispatch, {:connection, owner_pid, socket}}, _from, state) do
     connection =
-      Enum.find_index(state.connections, &(&1.owner == owner)) ||
+      Enum.find_index(state.connections, &(&1.owner == owner_pid)) ||
         Enum.find_index(state.connections, &is_nil(&1.owner))
 
     case connection do
@@ -223,8 +223,8 @@ defmodule TestServer.TCP.Instance do
         {:reply, {:error, :not_found}, state}
 
       index ->
-        connection = %{Enum.at(state.connections, index) | owner: owner, socket: socket}
-        connection = notify_connection_subscribers(connection, owner)
+        connection = %{Enum.at(state.connections, index) | owner: owner_pid, socket: socket}
+        connection = notify_connection_subscribers(connection, owner_pid)
         connections = List.replace_at(state.connections, index, connection)
         state = %{state | connections: connections}
 
@@ -232,8 +232,8 @@ defmodule TestServer.TCP.Instance do
     end
   end
 
-  def handle_call({:dispatch, {:handle, owner, data, connection_state}}, _from, state) do
-    case Enum.find(state.connections, &(&1.owner == owner)) do
+  def handle_call({:dispatch, {:handle, owner_pid, data, connection_state}}, _from, state) do
+    case Enum.find(state.connections, &(&1.owner == owner_pid)) do
       nil ->
         {:reply, {:error, :not_found}, state}
 
@@ -285,10 +285,10 @@ defmodule TestServer.TCP.Instance do
     end
   end
 
-  defp notify_connection_subscribers(connection, owner) do
+  defp notify_connection_subscribers(connection, owner_pid) do
     Enum.each(connection.subscribers, fn {from, timer} ->
       Process.cancel_timer(timer)
-      GenServer.reply(from, {:ok, owner})
+      GenServer.reply(from, {:ok, owner_pid})
     end)
 
     %{connection | subscribers: []}

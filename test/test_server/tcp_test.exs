@@ -130,18 +130,6 @@ defmodule TestServer.TCPTest do
       assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
     end
 
-    test "when listener socket is closed" do
-      instance = TestServer.TCP.start!()
-      options = TestServer.TCP.Instance.options(instance)
-      acceptor_pid = Keyword.fetch!(options, :acceptor)
-      listener_socket = Keyword.fetch!(options, :listener)
-      monitor = Process.monitor(acceptor_pid)
-
-      # This triggers the {:error, :closed} code path for normal shutdown
-      assert TCPClient.close(listener_socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^acceptor_pid, :normal}
-    end
-
     test "when test ends" do
       defmodule StartEndTest do
         use ExUnit.Case
@@ -166,9 +154,7 @@ defmodule TestServer.TCPTest do
       assert :ok = :gen_tcp.close(socket)
     end
 
-    test "when instance crashes" do
-      Process.register(self(), __MODULE__)
-
+    test "when instance shuts down" do
       defmodule StartInstanceCrashTest do
         use ExUnit.Case
 
@@ -192,6 +178,62 @@ defmodule TestServer.TCPTest do
 
       assert io =~
                ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "when acceptor process crashes" do
+      defmodule StartAcceptorProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
+
+          acceptor_pid =
+            instance
+            |> TestServer.TCP.Instance.options()
+            |> Keyword.fetch!(:acceptor)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(acceptor_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown: :killed"
+    end
+
+    test "when socket process crashes" do
+      defmodule StartSocketProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
+          connection = TestServer.TCP.connection()
+          {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+          :ok = TestServer.TCP.send(connection)
+          {:ok, "ping"} = TCPClient.receive_data(socket)
+          [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(owner_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown: :killed"
     end
   end
 
@@ -246,13 +288,16 @@ defmodule TestServer.TCPTest do
       {:ok, socket} = TCPClient.connect(address)
       :ok = TestServer.TCP.send(connection)
       {:ok, "ping"} = TCPClient.receive_data(socket)
-      [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      monitor = Process.monitor(owner)
+      [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      options = TestServer.TCP.Instance.options(instance)
+      acceptor_pid = Keyword.fetch!(options, :acceptor)
+      monitor = Process.monitor(owner_pid)
 
       assert TestServer.TCP.stop() == :ok
 
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
       refute Process.alive?(instance_pid)
-      assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
+      refute Process.alive?(acceptor_pid)
       assert {:error, reason} = TCPClient.connect(address)
       assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TCPClient.receive_data(socket, 0)
@@ -266,13 +311,16 @@ defmodule TestServer.TCPTest do
       {:ok, socket} = TLSClient.connect(address, tls_options)
       :ok = TestServer.TCP.send(connection)
       {:ok, "ping"} = TLSClient.receive_data(socket)
-      [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      monitor = Process.monitor(owner)
+      [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      options = TestServer.TCP.Instance.options(instance)
+      acceptor_pid = Keyword.fetch!(options, :acceptor)
+      monitor = Process.monitor(owner_pid)
 
       assert TestServer.TCP.stop() == :ok
 
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
       refute Process.alive?(instance_pid)
-      assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
+      refute Process.alive?(acceptor_pid)
       assert {:error, reason} = TLSClient.connect(address, tls_options)
       assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TLSClient.receive_data(socket)
@@ -684,10 +732,10 @@ defmodule TestServer.TCPTest do
           assert TestServer.TCP.send(connection) == :ok
           assert TCPClient.receive_data(socket) == {:ok, "ping"}
 
-          assert [%{owner: owner, socket: {:tcp, raw_socket}}] =
+          assert [%{owner: owner_pid, socket: {:tcp, raw_socket}}] =
                    TestServer.TCP.Instance.connections(instance)
 
-          send(owner, {:tcp_error, raw_socket, :test})
+          send(owner_pid, {:tcp_error, raw_socket, :test})
           assert {:ok, data} = TCPClient.receive_data(socket)
 
           send(__MODULE__, {:data, data})
@@ -718,10 +766,10 @@ defmodule TestServer.TCPTest do
           assert TestServer.TCP.send(connection) == :ok
           assert TLSClient.receive_data(socket) == {:ok, "ping"}
 
-          assert [%{owner: owner, socket: {:tls, raw_socket}}] =
+          assert [%{owner: owner_pid, socket: {:tls, raw_socket}}] =
                    TestServer.TCP.Instance.connections(instance)
 
-          send(owner, {:ssl_error, raw_socket, :test})
+          send(owner_pid, {:ssl_error, raw_socket, :test})
           assert {:ok, data} = TLSClient.receive_data(socket)
 
           send(__MODULE__, {:data, data})
@@ -963,10 +1011,10 @@ defmodule TestServer.TCPTest do
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
           assert TCPClient.send(socket, "upgrade") == :ok
           assert TCPClient.receive_data(socket) == {:ok, "upgrade"}
-          assert [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-          assert monitor = Process.monitor(owner)
+          assert [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+          assert monitor = Process.monitor(owner_pid)
           assert TCPClient.close(socket) == :ok
-          assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+          assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
         end
       end
 
@@ -1130,10 +1178,10 @@ defmodule TestServer.TCPTest do
       assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
       assert TCPClient.send(socket, "ping") == :ok
       assert TCPClient.receive_data(socket) == {:ok, "ping"}
-      assert [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      assert monitor = Process.monitor(owner)
+      assert [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      assert monitor = Process.monitor(owner_pid)
       assert TCPClient.close(socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
 
       assert_raise RuntimeError,
                    ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,
@@ -1148,10 +1196,10 @@ defmodule TestServer.TCPTest do
       assert {:ok, socket} = TLSClient.connect(TestServer.TCP.address(), tls_options())
       assert TLSClient.send(socket, "ping") == :ok
       assert TLSClient.receive_data(socket) == {:ok, "ping"}
-      assert [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      assert monitor = Process.monitor(owner)
+      assert [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      assert monitor = Process.monitor(owner_pid)
       assert TLSClient.close(socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
 
       assert_raise RuntimeError,
                    ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,

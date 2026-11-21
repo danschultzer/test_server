@@ -115,30 +115,6 @@ defmodule TestServer.UDPTest do
       assert {:udp, ^listener_socket, {0, 0, 0, 0, 0, 0, 0, 1}, ^client_port} = socket
     end
 
-    test "when listener socket is closed" do
-      instance = TestServer.UDP.start!()
-      options = TestServer.UDP.Instance.options(instance)
-      receiver_pid = Keyword.fetch!(options, :receiver)
-      listener_socket = Keyword.fetch!(options, :listener)
-      monitor = Process.monitor(receiver_pid)
-
-      # This triggers the {:error, :closed} code path for normal shutdown
-      assert :gen_udp.close(listener_socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^receiver_pid, :normal}
-    end
-
-    test "with `transport: :dtls` option when listener socket is closed" do
-      instance = TestServer.UDP.start!(transport: :dtls)
-      options = TestServer.UDP.Instance.options(instance)
-      receiver_pid = Keyword.fetch!(options, :receiver)
-      listener_socket = Keyword.fetch!(options, :listener)
-      monitor = Process.monitor(receiver_pid)
-
-      # This triggers the {:error, :closed} code path for normal shutdown
-      assert :ssl.close(listener_socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^receiver_pid, :normal}
-    end
-
     test "when test ends" do
       defmodule StartEndTest do
         use ExUnit.Case
@@ -165,9 +141,7 @@ defmodule TestServer.UDPTest do
       assert :ok = :gen_udp.close(socket)
     end
 
-    test "when instance crashes" do
-      Process.register(self(), __MODULE__)
-
+    test "when instance shuts down" do
       defmodule StartInstanceCrashTest do
         use ExUnit.Case
 
@@ -191,6 +165,117 @@ defmodule TestServer.UDPTest do
 
       assert io =~
                ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "when receiver process crashes" do
+      defmodule StartReceiverProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.UDP, instance_pid} = instance = TestServer.UDP.start!()
+
+          receiver_pid =
+            instance
+            |> TestServer.UDP.Instance.options()
+            |> Keyword.fetch!(:receiver)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(receiver_pid, :shutdown)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "with `transport: :dtls` option when receiver process crashes" do
+      defmodule StartDtlsReceiverProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.UDP, instance_pid} = instance = TestServer.UDP.start!(transport: :dtls)
+
+          receiver_pid =
+            instance
+            |> TestServer.UDP.Instance.options()
+            |> Keyword.fetch!(:receiver)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(receiver_pid, :shutdown)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "when peer process crashes" do
+      defmodule StartPeerProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.UDP, instance_pid} = instance = TestServer.UDP.start!()
+          :ok = TestServer.UDP.handle()
+          {:ok, socket} = UDPClient.open()
+          :ok = UDPClient.send(socket, TestServer.UDP.address(), "ping")
+          {:ok, "ping"} = UDPClient.receive_data(socket)
+          [%{owner: owner_pid}] = TestServer.UDP.Instance.peers(instance)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(owner_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "with `transport: :dtls` option when peer process crashes" do
+      defmodule StartWithDTLSPeerProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.UDP, instance_pid} = instance = TestServer.UDP.start!(transport: :dtls)
+          peer = TestServer.UDP.peer()
+          tls_options = unquote(__MODULE__).tls_options()
+          {:ok, socket} = DTLSClient.connect(TestServer.UDP.address(), tls_options)
+          :ok = TestServer.UDP.send(peer)
+          {:ok, "ping"} = DTLSClient.receive_data(socket)
+          [%{owner: owner_pid}] = TestServer.UDP.Instance.peers(instance)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(owner_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
     end
   end
 
@@ -247,13 +332,16 @@ defmodule TestServer.UDPTest do
       :ok = UDPClient.send(socket, address, "ping")
       :ok = TestServer.UDP.send(peer)
       {:ok, "ping"} = UDPClient.receive_data(socket)
-      [%{owner: owner}] = TestServer.UDP.Instance.peers(instance)
-      monitor = Process.monitor(owner)
+      [%{owner: owner_pid}] = TestServer.UDP.Instance.peers(instance)
+      options = TestServer.UDP.Instance.options(instance)
+      receiver_pid = Keyword.fetch!(options, :receiver)
+      monitor = Process.monitor(owner_pid)
 
       assert TestServer.UDP.stop() == :ok
 
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
       refute Process.alive?(instance_pid)
-      assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
+      refute Process.alive?(receiver_pid)
       assert UDPClient.send(socket, address, "ping") == :ok
       assert UDPClient.receive_data(socket, 10) == {:error, :timeout}
     end
@@ -266,13 +354,16 @@ defmodule TestServer.UDPTest do
       {:ok, socket} = DTLSClient.connect(address, tls_options)
       :ok = TestServer.UDP.send(peer)
       {:ok, "ping"} = DTLSClient.receive_data(socket)
-      [%{owner: owner}] = TestServer.UDP.Instance.peers(instance)
-      monitor = Process.monitor(owner)
+      [%{owner: owner_pid}] = TestServer.UDP.Instance.peers(instance)
+      options = TestServer.UDP.Instance.options(instance)
+      receiver_pid = Keyword.fetch!(options, :receiver)
+      monitor = Process.monitor(owner_pid)
 
       assert TestServer.UDP.stop() == :ok
 
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
       refute Process.alive?(instance_pid)
-      assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
+      refute Process.alive?(receiver_pid)
       assert {:error, :timeout} = DTLSClient.connect(address, tls_options, 10)
       assert {:error, :closed} = DTLSClient.receive_data(socket)
     end
@@ -510,9 +601,9 @@ defmodule TestServer.UDPTest do
           assert UDPClient.send(socket, address, "first") == :ok
           assert {:ok, error} = UDPClient.receive_data(socket)
           assert error =~ "(RuntimeError) boom"
-          assert [%{owner: owner}] = TestServer.UDP.Instance.peers(instance)
-          assert monitor = Process.monitor(owner)
-          assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+          assert [%{owner: owner_pid}] = TestServer.UDP.Instance.peers(instance)
+          assert monitor = Process.monitor(owner_pid)
+          assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
           assert UDPClient.send(socket, address, "second") == :ok
           assert {:ok, data} = UDPClient.receive_data(socket)
 
@@ -723,10 +814,10 @@ defmodule TestServer.UDPTest do
           assert TestServer.UDP.send(peer) == :ok
           assert DTLSClient.receive_data(socket) == {:ok, "ping"}
 
-          assert [%{owner: owner, socket: {:dtls, raw_socket}}] =
+          assert [%{owner: owner_pid, socket: {:dtls, raw_socket}}] =
                    TestServer.UDP.Instance.peers(instance)
 
-          send(owner, {:ssl_error, raw_socket, :test})
+          send(owner_pid, {:ssl_error, raw_socket, :test})
           assert {:ok, data} = DTLSClient.receive_data(socket)
 
           send(__MODULE__, {:data, data})
@@ -953,10 +1044,10 @@ defmodule TestServer.UDPTest do
       peer = TestServer.UDP.peer()
 
       assert {:ok, socket} = DTLSClient.connect(TestServer.UDP.address(), tls_options())
-      assert [%{owner: owner}] = TestServer.UDP.Instance.peers(instance)
-      monitor = Process.monitor(owner)
+      assert [%{owner: owner_pid}] = TestServer.UDP.Instance.peers(instance)
+      monitor = Process.monitor(owner_pid)
       assert DTLSClient.close(socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
 
       assert_raise RuntimeError,
                    ~r/cannot send to peer on TestServer\.UDP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,

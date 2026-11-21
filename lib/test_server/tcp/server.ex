@@ -18,7 +18,8 @@ defmodule TestServer.TCP.Server do
 
     case transport_listen(default_transport, port, listen_options) do
       {:ok, socket, port} ->
-        {:ok, acceptor_pid} = Task.start_link(fn -> accept_loop(instance, socket) end)
+        {:ok, acceptor_pid} = Task.start(fn -> accept_loop(instance, socket) end)
+        :ok = TestServer.supervise_server(acceptor_pid, fn _ -> transport_close(socket) end)
         {_transport, listener_socket} = socket
 
         options =
@@ -114,7 +115,7 @@ defmodule TestServer.TCP.Server do
         accept_loop(instance, listener)
 
       {:error, :closed} ->
-        :ok
+        exit(:shutdown)
 
       {:error, reason} ->
         raise "could not accept TCP connection: #{inspect(reason)}"
@@ -134,12 +135,8 @@ defmodule TestServer.TCP.Server do
   end
 
   defp start_socket(instance, socket) do
-    {:ok, owner} =
+    {:ok, owner_pid} =
       Task.start_link(fn ->
-        {TestServer.TCP, instance_pid} = instance
-
-        Process.link(instance_pid)
-
         receive do
           :start -> :ok
         end
@@ -154,11 +151,11 @@ defmodule TestServer.TCP.Server do
         transport_close(socket)
       end)
 
-    :ok = transport_controlling_process(socket, owner)
+    :ok = transport_controlling_process(socket, owner_pid)
 
-    send(owner, :start)
+    send(owner_pid, :start)
 
-    owner
+    :ok
   end
 
   defp transport_handshake({transport, raw_socket}, options \\ []) do
@@ -196,7 +193,7 @@ defmodule TestServer.TCP.Server do
           "#{TestServer.format_instance(instance)} received an unexpected TCP connection attempt"
           |> append_formatted_connections(instance)
 
-        send_error(socket, RuntimeError.exception(message), instance)
+        send_error(socket, instance, RuntimeError.exception(message))
 
         socket
     end
@@ -249,7 +246,7 @@ defmodule TestServer.TCP.Server do
         socket_loop(instance, socket, state)
 
       {:error, reason} ->
-        send_error(socket, reason, instance)
+        send_error(socket, instance, reason)
         socket
     end
   end
@@ -378,15 +375,15 @@ defmodule TestServer.TCP.Server do
     end
   end
 
-  defp send_error(socket, {exception, stacktrace}, instance) do
-    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
-
+  defp send_error(socket, instance, {exception, stacktrace}) do
+    options = Instance.options(instance)
+    :ok = TestServer.report_error(instance, {exception, stacktrace}, options)
     message = Exception.format(:error, exception, stacktrace)
 
     transport_send(socket, message)
   end
 
-  defp send_error(socket, reason, instance), do: send_error(socket, {reason, []}, instance)
+  defp send_error(socket, instance, reason), do: send_error(socket, instance, {reason, []})
 
   defp transport_close({transport, raw_socket}) do
     case transport do
@@ -395,10 +392,10 @@ defmodule TestServer.TCP.Server do
     end
   end
 
-  defp transport_controlling_process({transport, raw_socket}, owner) do
+  defp transport_controlling_process({transport, raw_socket}, owner_pid) do
     case transport do
-      :tcp -> :gen_tcp.controlling_process(raw_socket, owner)
-      :tls -> :ssl.controlling_process(raw_socket, owner)
+      :tcp -> :gen_tcp.controlling_process(raw_socket, owner_pid)
+      :tls -> :ssl.controlling_process(raw_socket, owner_pid)
     end
   end
 

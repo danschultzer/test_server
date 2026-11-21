@@ -31,7 +31,7 @@ defmodule TestServer.SSH.Channel do
             state.instance
           )
 
-        send_error(connection, channel_id, {RuntimeError.exception(message), []}, state)
+        send_error(connection, channel_id, state.instance, {RuntimeError.exception(message), []})
 
         {:stop, channel_id, state}
     end
@@ -55,9 +55,9 @@ defmodule TestServer.SSH.Channel do
     """
   end
 
-  defp send_error(connection, channel_id, {exception, stacktrace}, state) do
-    TestServer.report_error(Instance.options(state.instance), {exception, stacktrace})
-
+  defp send_error(connection, channel_id, instance, {exception, stacktrace}) do
+    options = Instance.options(instance)
+    :ok = TestServer.report_error(instance, {exception, stacktrace}, options)
     message = Exception.format(:error, exception, stacktrace)
 
     :ssh_connection.send(connection, channel_id, message)
@@ -174,7 +174,7 @@ defmodule TestServer.SSH.Channel do
       |> append_formatted_frame(frame)
       |> append_formatted_handlers(state.instance)
 
-    send_error(connection, channel_id, {RuntimeError.exception(message), []}, state)
+    send_error(connection, channel_id, state.instance, {RuntimeError.exception(message), []})
 
     reply
   end
@@ -187,7 +187,7 @@ defmodule TestServer.SSH.Channel do
          } = reply,
          {:error, {exception, stacktrace}}
        ) do
-    send_error(connection, channel_id, {exception, stacktrace}, state)
+    send_error(connection, channel_id, state.instance, {exception, stacktrace})
 
     reply
   end

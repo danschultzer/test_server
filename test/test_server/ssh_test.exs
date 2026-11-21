@@ -358,9 +358,7 @@ defmodule TestServer.SSHTest do
       assert :ok = :gen_tcp.close(socket)
     end
 
-    test "when instance crashes" do
-      Process.register(self(), __MODULE__)
-
+    test "when instance shuts down" do
       defmodule StartInstanceCrashTest do
         use ExUnit.Case
 
@@ -384,6 +382,35 @@ defmodule TestServer.SSHTest do
 
       assert io =~
                ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "when daemon crashes" do
+      defmodule StartDaemonCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.SSH, instance_pid} = instance = TestServer.SSH.start!()
+          daemon_pid = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(daemon_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io =
+               capture_io(fn ->
+                 capture_log(fn ->
+                   assert %{failures: 1} = ExUnit.run()
+                 end)
+               end)
+
+      assert io =~
+               ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown: :killed"
     end
   end
 

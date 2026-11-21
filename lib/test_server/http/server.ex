@@ -17,13 +17,13 @@ defmodule TestServer.HTTP.Server do
             |> Keyword.put_new(:ipfamily, options[:ipfamily])
 
           case MyHTTPServer.start(my_http_server_options) do
-            {:ok, server_pid} -> {:ok, server_pid, my_http_server_options}
-            {:error, error} -> {:error, error}
+            {:ok, server_pid} ->
+              {:ok, server_pid, my_http_server_options, &MyHTTPServer.stop/1}
+
+            {:error, error} ->
+              {:error, error}
           end
         end
-
-        @impl TestServer.HTTP.Server
-        def stop(server_pid, server_options), do: MyHTTPServer.stop(server_pid)
 
         @impl TestServer.HTTP.Server
         def socket_pid(%{adapter: {_, data}}), do: data.pid # Or however your adapter provides the pid
@@ -33,10 +33,10 @@ defmodule TestServer.HTTP.Server do
   @type port_number :: :inet.port_number()
   @type options :: [tls: keyword(), ipfamily: :inet | :inet6]
   @type server_options :: keyword()
+  @type on_exit :: (server_pid :: pid() -> :ok)
 
   @callback start(TestServer.instance(), port_number(), scheme(), options(), server_options()) ::
-              {:ok, term(), server_options()} | {:error, term()}
-  @callback stop(term(), server_options()) :: :ok | {:error, term()}
+              {:ok, term(), server_options(), on_exit()} | {:error, term()}
   @callback socket_pid(Plug.Conn.t()) :: pid()
 
   @doc false
@@ -49,8 +49,10 @@ defmodule TestServer.HTTP.Server do
     {mod, server_options} = http_server(options)
 
     with {:ok, port} <- TestServer.open_port(options),
-         {:ok, server_pid, server_options} <-
+         {:ok, server_pid, server_options, on_exit_fn} <-
            mod.start(instance, port, scheme, test_server_options, server_options) do
+      :ok = TestServer.supervise_server(server_pid, on_exit_fn)
+
       options =
         options
         |> Keyword.put(:scheme, scheme)
@@ -100,14 +102,5 @@ defmodule TestServer.HTTP.Server do
       true ->
         {TestServer.HTTP.Server.Httpd, []}
     end
-  end
-
-  @doc false
-  @spec stop(keyword()) :: :ok | {:error, term()}
-  def stop(options) do
-    {mod, server_options} = Keyword.fetch!(options, :http_server)
-    server_pid = Keyword.fetch!(options, :server)
-
-    mod.stop(server_pid, server_options)
   end
 end

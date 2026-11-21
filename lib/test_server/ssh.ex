@@ -6,7 +6,7 @@ defmodule TestServer.SSH do
              |> Enum.fetch!(1)
              |> String.trim()
 
-  alias TestServer.SSH.{Instance, Server}
+  alias TestServer.SSH.Instance
 
   @type channel :: {TestServer.instance(), channel_ref()}
   @type channel_ref :: reference()
@@ -218,7 +218,7 @@ defmodule TestServer.SSH do
       assert {:error, reason} = SSHClient.connect(address)
       assert reason in [:econnrefused, :econnreset]
   """
-  @spec stop() :: :ok | {:error, term()}
+  @spec stop() :: :ok
   def stop, do: stop(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
@@ -226,13 +226,19 @@ defmodule TestServer.SSH do
 
   See `stop/0` for more.
   """
-  @spec stop(TestServer.instance()) :: :ok | {:error, term()}
+  @spec stop(TestServer.instance()) :: :ok
   def stop({__MODULE__, _instance_pid} = instance) do
-    TestServer.assert_instance_alive!(instance)
-
-    :ok = Server.stop(Instance.options(instance))
+    :ok = TestServer.assert_instance_alive!(instance)
+    daemon_pid = instance |> Instance.options() |> Keyword.fetch!(:daemon)
+    monitor = Process.monitor(daemon_pid)
 
     TestServer.stop_instance(instance)
+
+    receive do
+      {:DOWN, ^monitor, :process, ^daemon_pid, _reason} -> :ok
+    after
+      5_000 -> raise "expected SSH daemon #{inspect(daemon_pid)} to shut down"
+    end
   end
 
   @spec address() :: {binary(), :inet.port_number()}

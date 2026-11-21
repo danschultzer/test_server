@@ -47,9 +47,7 @@ if Code.ensure_loaded?(Plug.Cowboy) do
              cowboy_options
            ]) do
         {:ok, server_pid} ->
-          stop_on_exit(server_pid, cowboy_options)
-
-          {:ok, server_pid, cowboy_options}
+          {:ok, server_pid, cowboy_options, fn _ -> Cowboy.shutdown(instance) end}
 
         {:error, error} ->
           {:error, error}
@@ -68,27 +66,8 @@ if Code.ensure_loaded?(Plug.Cowboy) do
       Keyword.merge(cowboy_options, Keyword.put_new(tls_options, :log_level, :warning))
     end
 
-    @impl TestServer.HTTP.Server
-    def stop(_server_pid, cowboy_options) do
-      port = Keyword.fetch!(cowboy_options, :port)
-
-      Cowboy.shutdown(cowboy_ref(port))
-    end
-
     defp cowboy_ref(port) when is_integer(port) do
       {__MODULE__, port}
-    end
-
-    # `Plug.Cowboy` traps exits so we must ensure we stop it explicitly when
-    # the instance dies.
-    defp stop_on_exit(server_pid, cowboy_options) do
-      spawn_link(fn ->
-        Process.flag(:trap_exit, true)
-
-        receive do
-          {:EXIT, _pid, _reason} -> stop(server_pid, cowboy_options)
-        end
-      end)
     end
 
     @impl TestServer.HTTP.Server

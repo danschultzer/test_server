@@ -129,7 +129,7 @@ defmodule TestServer.UDP do
       assert UDPClient.send(socket, address, "ping") == :ok
       assert {:error, _reason} = UDPClient.receive_data(socket)
   """
-  @spec stop() :: :ok | {:error, term()}
+  @spec stop() :: :ok
   def stop, do: stop(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
@@ -137,10 +137,19 @@ defmodule TestServer.UDP do
 
   See `stop/0` for more.
   """
-  @spec stop(TestServer.instance()) :: :ok | {:error, term()}
+  @spec stop(TestServer.instance()) :: :ok
   def stop({__MODULE__, _instance_pid} = instance) do
-    TestServer.assert_instance_alive!(instance)
+    :ok = TestServer.assert_instance_alive!(instance)
+    receiver_pid = instance |> Instance.options() |> Keyword.fetch!(:receiver)
+    monitor = Process.monitor(receiver_pid)
+
     TestServer.stop_instance(instance)
+
+    receive do
+      {:DOWN, ^monitor, :process, ^receiver_pid, _reason} -> :ok
+    after
+      5_000 -> raise "expected UDP receiver #{inspect(receiver_pid)} to shut down"
+    end
   end
 
   @spec address() :: {binary(), :inet.port_number()}
@@ -385,8 +394,8 @@ defmodule TestServer.UDP do
     options = Keyword.put_new(options, :to, &default_send/1)
 
     case Instance.register(instance, {:send, peer_ref, options}) do
-      {:ok, pid} ->
-        Kernel.send(pid, {:send, {options, stacktrace}})
+      {:ok, owner_pid} ->
+        Kernel.send(owner_pid, {:send, {options, stacktrace}})
 
         :ok
 

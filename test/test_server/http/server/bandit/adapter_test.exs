@@ -2,12 +2,49 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
   use ExUnit.Case
   doctest TestServer.HTTP.Server.Bandit.Adapter
 
+  import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
+
+  @options [scheme: :https, http_server: {TestServer.HTTP.Server.Bandit, []}]
+
   setup do
     {:ok, _} = Application.ensure_all_started(:bandit)
 
-    TestServer.HTTP.start!(scheme: :https, http_server: {TestServer.HTTP.Server.Bandit, []})
+    instance = TestServer.HTTP.start!(@options)
 
-    :ok
+    {:ok, instance: instance}
+  end
+
+  test "when adapter plug process crashes" do
+    defmodule PlugProcessCrashTest do
+      use ExUnit.Case
+
+      test "fails" do
+        TestServer.HTTP.start!(unquote(@options))
+
+        TestServer.HTTP.handle(
+          to: fn conn ->
+            {TestServer.HTTP.Server.Bandit.Adapter, {plug_pid, _adapter}} = conn.adapter
+
+            conn = Plug.Conn.send_chunked(conn, 200)
+            Process.exit(plug_pid, :boom)
+            Plug.Conn.chunk(conn, "OK")
+
+            flunk("Instance did not crash")
+          end
+        )
+
+        assert {:error, _} = unquote(__MODULE__).http2_request(TestServer.HTTP.url())
+      end
+    end
+
+    assert {log, io} =
+             with_io(fn ->
+               capture_log(fn -> assert %{failures: 1} = ExUnit.run() end)
+             end)
+
+    assert io =~ ~r/\*\* \(EXIT.*\) {:plug, :noproc}/
+    assert log =~ "** (stop) {:plug, :noproc}"
   end
 
   test "Plug.Conn.send_resp/3" do
@@ -94,7 +131,7 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
     assert http2_request(TestServer.HTTP.url(), method: :post, body: "test") == {:ok, "test"}
   end
 
-  defp http2_request(url, options \\ []) do
+  def http2_request(url, options \\ []) do
     pools = %{
       default: [
         protocols: [:http2],

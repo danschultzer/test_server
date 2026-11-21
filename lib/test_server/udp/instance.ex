@@ -81,8 +81,8 @@ defmodule TestServer.UDP.Instance do
            | {:dtls, :ssl.sslsocket()}}
         ) ::
           {:ok, map(), TestServer.UDP.state()} | {:error, :not_found}
-  def dispatch({TestServer.UDP, instance_pid}, {:peer, owner, socket}) do
-    GenServer.call(instance_pid, {:dispatch, {:peer, owner, socket}})
+  def dispatch({TestServer.UDP, instance_pid}, {:peer, owner_pid, socket}) do
+    GenServer.call(instance_pid, {:dispatch, {:peer, owner_pid, socket}})
   end
 
   @spec dispatch(
@@ -93,8 +93,8 @@ defmodule TestServer.UDP.Instance do
           | {:ok, TestServer.UDP.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch({TestServer.UDP, instance_pid}, {:handle, owner, data, peer_state}) do
-    GenServer.call(instance_pid, {:dispatch, {:handle, owner, data, peer_state}})
+  def dispatch({TestServer.UDP, instance_pid}, {:handle, owner_pid, data, peer_state}) do
+    GenServer.call(instance_pid, {:dispatch, {:handle, owner_pid, data, peer_state}})
   end
 
   @spec dispatch(
@@ -207,17 +207,17 @@ defmodule TestServer.UDP.Instance do
 
         {:noreply, state}
 
-      {%{owner: _owner}, false} ->
+      {%{owner: _owner_pid}, false} ->
         {:reply, {:error, :closed}, state}
 
-      {%{owner: owner}, true} ->
-        {:reply, {:ok, owner}, state}
+      {%{owner: owner_pid}, true} ->
+        {:reply, {:ok, owner_pid}, state}
     end
   end
 
-  def handle_call({:dispatch, {:peer, owner, socket}}, _from, state) do
+  def handle_call({:dispatch, {:peer, owner_pid, socket}}, _from, state) do
     peer =
-      Enum.find_index(state.peers, &(&1.owner == owner)) ||
+      Enum.find_index(state.peers, &(&1.owner == owner_pid)) ||
         Enum.find_index(state.peers, &is_nil(&1.owner))
 
     case peer do
@@ -225,8 +225,8 @@ defmodule TestServer.UDP.Instance do
         {:reply, {:error, :not_found}, state}
 
       index ->
-        peer = %{Enum.at(state.peers, index) | owner: owner, socket: socket}
-        peer = notify_peer_subscribers(peer, owner)
+        peer = %{Enum.at(state.peers, index) | owner: owner_pid, socket: socket}
+        peer = notify_peer_subscribers(peer, owner_pid)
         peers = List.replace_at(state.peers, index, peer)
         state = %{state | peers: peers}
 
@@ -234,8 +234,8 @@ defmodule TestServer.UDP.Instance do
     end
   end
 
-  def handle_call({:dispatch, {:handle, owner, data, peer_state}}, _from, state) do
-    case Enum.find(state.peers, &(&1.owner == owner)) do
+  def handle_call({:dispatch, {:handle, owner_pid, data, peer_state}}, _from, state) do
+    case Enum.find(state.peers, &(&1.owner == owner_pid)) do
       nil ->
         {:reply, {:error, :not_found}, state}
 
@@ -283,10 +283,10 @@ defmodule TestServer.UDP.Instance do
     end
   end
 
-  defp notify_peer_subscribers(peer, owner) do
+  defp notify_peer_subscribers(peer, owner_pid) do
     Enum.each(peer.subscribers, fn {from, timer} ->
       Process.cancel_timer(timer)
-      GenServer.reply(from, {:ok, owner})
+      GenServer.reply(from, {:ok, owner_pid})
     end)
 
     %{peer | subscribers: []}

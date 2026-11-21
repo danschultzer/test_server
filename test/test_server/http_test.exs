@@ -3,6 +3,7 @@ defmodule TestServer.HTTPTest do
   doctest TestServer.HTTP
 
   import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
 
   alias __MODULE__.{HTTPClient, WebSocketClient}
 
@@ -134,9 +135,7 @@ defmodule TestServer.HTTPTest do
       assert :ok = :gen_tcp.close(socket)
     end
 
-    test "when instance crashes" do
-      Process.register(self(), __MODULE__)
-
+    test "when instance shuts down" do
       defmodule StartInstanceCrashTest do
         use ExUnit.Case
 
@@ -160,6 +159,87 @@ defmodule TestServer.HTTPTest do
 
       assert io =~
                ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "when server crashes" do
+      defmodule StartServerCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.HTTP, instance_pid} = instance = TestServer.HTTP.start!()
+
+          options = TestServer.HTTP.Instance.options(instance)
+          server_pid = Keyword.fetch!(options, :server)
+          port = Keyword.fetch!(options, :port)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(server_pid, :kill)
+
+          send(__MODULE__, {:server, server_pid, port})
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      Process.register(self(), StartServerCrashTest)
+
+      {{server_pid, port}, log} =
+        with_log(fn ->
+          assert io =
+                   capture_io(fn ->
+                     assert %{failures: 1} = ExUnit.run()
+                   end)
+
+          assert io =~
+                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+          assert io =~ "     shutdown: :killed"
+
+          assert_receive {:server, server_pid, port}
+
+          # Inets crash crashes the supervisor which can leak to other tests
+          wait_till_httpd_process_removed(server_pid)
+
+          {server_pid, port}
+        end)
+
+      case Application.fetch_env!(:test_server, :http_server) do
+        {TestServer.HTTP.Server.Bandit, []} ->
+          assert log =~ ~r/GenServer \#PID\<[0-9.]+\> terminating/
+
+        {TestServer.HTTP.Server.Plug.Cowboy, []} ->
+          assert log =~ ~r/GenServer \#PID\<[0-9.]+\> terminating/
+
+        {TestServer.HTTP.Server.Httpd, []} ->
+          assert log =~ ~r/GenServer :httpd__127_0_0_1__#{port}default terminating/
+          assert log =~ inspect(server_pid)
+      end
+    end
+  end
+
+  defp wait_till_httpd_process_removed(server_pid, attempts \\ 10)
+
+  defp wait_till_httpd_process_removed(server_pid, 0) do
+    flunk("expected httpd process #{inspect(server_pid)} to be removed")
+  end
+
+  defp wait_till_httpd_process_removed(server_pid, attempts) do
+    :inets.services()
+    |> Enum.filter(fn
+      {:httpd, ^server_pid} -> true
+      {:httpd, :restarting} -> true
+      _ -> false
+    end)
+    |> Enum.map(fn {:httpd, pid} -> pid end)
+    |> case do
+      [] ->
+        :ok
+
+      _processes ->
+        :timer.sleep(10)
+        wait_till_httpd_process_removed(server_pid, attempts - 1)
     end
   end
 
@@ -1371,10 +1451,10 @@ defmodule TestServer.HTTPTest do
         websocket = TestServer.HTTP.websocket("/ws")
 
         assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
-        assert [%{owner: pid}] = TestServer.HTTP.Instance.websockets(instance)
-        assert monitor = Process.monitor(pid)
+        assert [%{owner: owner_pid}] = TestServer.HTTP.Instance.websockets(instance)
+        assert monitor = Process.monitor(owner_pid)
         assert WebSocketClient.close(client) == :ok
-        assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}
+        assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
 
         assert_raise RuntimeError,
                      ~r/cannot send to websocket on TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,

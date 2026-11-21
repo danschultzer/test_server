@@ -36,7 +36,7 @@ if Code.ensure_loaded?(Bandit) do
         |> Keyword.get(:thousand_island_options, [])
         # For tests it is not necessary to open the default 100 acceptor
         # processes
-        |> Keyword.put(:num_acceptors, 1)
+        |> Keyword.put_new(:num_acceptors, 1)
         |> Keyword.put(:port, port)
         |> Keyword.put(:transport_options, ipfamily_options ++ transport_options)
 
@@ -48,8 +48,13 @@ if Code.ensure_loaded?(Bandit) do
         |> Keyword.put_new(:startup_log, false)
 
       case Bandit.start_link(bandit_options) do
-        {:ok, server_pid} -> {:ok, server_pid, bandit_options}
-        {:error, error} -> {:error, error}
+        {:ok, server_pid} ->
+          true = Process.unlink(server_pid)
+
+          {:ok, server_pid, bandit_options, &ThousandIsland.stop/1}
+
+        {:error, error} ->
+          {:error, error}
       end
     end
 
@@ -57,11 +62,6 @@ if Code.ensure_loaded?(Bandit) do
 
     defp put_tls_options(transport_options, :https, tls_options) do
       Keyword.merge(transport_options, Keyword.put_new(tls_options, :log_level, :warning))
-    end
-
-    @impl TestServer.HTTP.Server
-    def stop(server_pid, _bandit_options) do
-      ThousandIsland.stop(server_pid)
     end
 
     @impl TestServer.HTTP.Server

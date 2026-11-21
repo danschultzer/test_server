@@ -15,7 +15,7 @@ defmodule TestServer.SSH.Server do
         |> Keyword.put(:port, port)
         |> Keyword.put(:daemon, daemon_pid)
 
-      stop_on_exit(options)
+      TestServer.supervise_server(daemon_pid, &:ssh.stop_daemon/1)
       install_ssh_log_filter()
 
       {:ok, options}
@@ -232,18 +232,6 @@ defmodule TestServer.SSH.Server do
     raise ArgumentError, "expected :subsystems to be a list, got: #{inspect(subsystems)}"
   end
 
-  # SSH traps exits so we must ensure we stop it explicitly when the instance
-  # dies.
-  defp stop_on_exit(options) do
-    spawn_link(fn ->
-      Process.flag(:trap_exit, true)
-
-      receive do
-        {:EXIT, _pid, _reason} -> stop(options)
-      end
-    end)
-  end
-
   @ssh_log_filter __MODULE__
 
   # This installs a global filter to control SSH log messages, as there is no
@@ -275,13 +263,5 @@ defmodule TestServer.SSH.Server do
           }
         )
     end
-  end
-
-  @doc false
-  @spec stop(keyword()) :: :ok
-  def stop(options) do
-    daemon_pid = Keyword.fetch!(options, :daemon)
-
-    :ssh.stop_daemon(daemon_pid)
   end
 end

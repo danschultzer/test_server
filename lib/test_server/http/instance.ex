@@ -296,9 +296,14 @@ defmodule TestServer.HTTP.Instance do
   def handle_call({:register, {:websocket, {:send, websocket_ref, _options}}}, _from, state) do
     result =
       case Enum.find(state.websockets, &(&1.ref == websocket_ref)) do
-        nil -> {:error, :einval}
-        %{owner: nil} -> {:error, :enotconn}
-        %{owner: pid} -> (Process.alive?(pid) && {:ok, pid}) || {:error, :closed}
+        nil ->
+          {:error, :einval}
+
+        %{owner: nil} ->
+          {:error, :enotconn}
+
+        %{owner: owner_pid} ->
+          (Process.alive?(owner_pid) && {:ok, owner_pid}) || {:error, :closed}
       end
 
     {:reply, result, state}

@@ -25,7 +25,8 @@ defmodule TestServer.HTTP.WebSocket do
   end
 
   defp handle_error_reply({instance, _websocket_ref, state}, {exception, stacktrace}) do
-    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
+    options = Instance.options(instance)
+    :ok = TestServer.report_error(instance, {exception, stacktrace}, options)
 
     {:reply, :ok, {:text, Exception.format(:error, exception, stacktrace)}, state}
   end

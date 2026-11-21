@@ -69,64 +69,122 @@ defmodule TestServer do
   defp put_ex_unit_on_exit_callback(instance, verify_instance_fn) do
     {protocol_module, _instance_pid} = instance
 
-    Process.put({:test_process, __MODULE__}, true)
-
     ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
-      try do
-        assert_instance_alive!(instance)
+      errors = run_verify_instance(instance, protocol_module, verify_instance_fn)
+      :ok = InstanceManager.delete_instance_entry(instance)
+      :ok = raise_on_exit!(errors)
+      :ok = raise_errors!(errors)
+    end)
+  end
 
-        try do
-          verify_instance_fn.(instance)
-        after
-          protocol_module.stop(instance)
-        end
-      after
-        InstanceManager.delete_instance_entry(instance)
+  defp run_verify_instance(instance, protocol_module, verify_instance_fn) do
+    verify_errors =
+      case InstanceManager.fetch_instance_entry(instance) do
+        {:ok, %{status: :running}} ->
+          capture_exceptions(instance, [verify_instance_fn, &protocol_module.stop(&1)])
+
+        {:ok, %{status: {:stopped, _stacktrace}}} ->
+          capture_exceptions(instance, [])
+
+        {:ok, %{status: {:exited, reason}}} ->
+          capture_exceptions([instance, reason], &raise_instance_exited!/2)
+
+        {:error, :not_found} ->
+          capture_exceptions(instance, &raise_instance_not_found!/1)
+      end
+
+    recorded_errors =
+      case InstanceManager.fetch_instance_entry(instance) do
+        {:ok, %{errors: errors}} -> errors
+        {:error, :not_found} -> []
+      end
+
+    recorded_errors ++ verify_errors
+  end
+
+  defp capture_exceptions(args, funs) do
+    funs
+    |> List.wrap()
+    |> Enum.reduce([], fn fun, acc ->
+      case capture_exception(args, fun) do
+        :ok -> acc
+        {:error, error} -> acc ++ [error]
       end
     end)
   end
 
-  @doc false
-  def stop_instance(instance) do
-    assert_instance_alive!(instance)
+  defp capture_exception(args, fun) do
+    apply(fun, List.wrap(args))
 
-    case InstanceManager.stop_instance(instance) do
-      :ok ->
-        Process.get({:test_process, __MODULE__}) &&
-          ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
-            InstanceManager.delete_instance_entry(instance)
-          end)
+    :ok
+  rescue
+    exception -> {:error, {exception, __STACKTRACE__}}
+  catch
+    :exit, reason -> {:error, {:exit, reason}}
+  end
 
-        :ok
+  defp raise_instance_exited!(instance, reason) do
+    raise RuntimeError, """
+    expected #{format_instance(instance)} to be running, but it exited with reason:
 
-      {:error, reason} ->
-        {:error, reason}
-    end
+    #{Exception.format_exit(reason)}
+    """
+  end
+
+  defp raise_instance_not_found!(instance) do
+    raise RuntimeError,
+          "expected #{format_instance(instance)} to be a TestServer-managed instance"
+  end
+
+  defp raise_on_exit!(errors) do
+    Enum.each(errors, fn
+      {:exit, reason} -> exit(reason)
+      {_exception, _stacktrace} -> :ok
+    end)
+  end
+
+  defp raise_errors!([]), do: :ok
+
+  defp raise_errors!([{exception, stacktrace}]) do
+    reraise(exception, stacktrace)
+  end
+
+  defp raise_errors!(errors) do
+    message =
+      Enum.map_join(errors, "\n\n", fn {exception, stacktrace} ->
+        Exception.format(:error, exception, stacktrace)
+      end)
+
+    raise RuntimeError, "expected no errors, got:\n\n#{message}"
   end
 
   @doc false
   def assert_instance_alive!(instance) do
     case InstanceManager.fetch_instance_entry(instance) do
-      {:error, :not_found} ->
-        raise "expected #{format_instance(instance)} to be a TestServer-managed instance"
+      {:ok, %{status: :running}} -> instance
+      {:ok, %{status: {:stopped, stacktrace}}} -> raise_instance_stopped!(instance, stacktrace)
+      {:ok, %{status: {:exited, reason}}} -> raise_instance_exited!(instance, reason)
+      {:error, :not_found} -> raise_instance_not_found!(instance)
+    end
 
-      {:ok, %{exit: nil}} ->
-        :ok
+    :ok
+  end
 
-      {:ok, %{exit: %{reason: nil, stacktrace: stacktrace}}}
-      when is_list(stacktrace) ->
-        raise """
-        expected #{format_instance(instance)} to be running, but it was stopped at:
+  defp raise_instance_stopped!(instance, stacktrace) do
+    raise RuntimeError, """
+    expected #{format_instance(instance)} to be running, but it was stopped at:
 
-        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
-        """
+    #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+    """
+  end
 
-      {:ok, %{exit: %{reason: reason, stacktrace: nil}}} ->
-        raise """
-        expected #{format_instance(instance)} to be running, but it exited with reason:
-
-        #{Exception.format_exit(reason)}
-        """
+  @doc false
+  def stop_instance(instance) do
+    case InstanceManager.stop_instance(instance) do
+      {:ok, {:stopped, _stacktrace}} -> :ok
+      {:error, :not_found} -> raise_instance_not_found!(instance)
+      {:error, {:stopped, stacktrace}} -> raise_instance_stopped!(instance, stacktrace)
+      {:error, {:exited, reason}} -> raise_instance_exited!(instance, reason)
     end
   end
 
@@ -147,6 +205,21 @@ defmodule TestServer do
       port when is_integer(port) -> " on port #{port}"
       _no_port -> ""
     end
+  end
+
+  @doc false
+  def supervise_server(server_pid, shutdown_fn) do
+    spawn_link(fn ->
+      false = Process.flag(:trap_exit, true)
+      monitor = Process.monitor(server_pid)
+
+      receive do
+        {:DOWN, ^monitor, :process, ^server_pid, reason} -> exit({:shutdown, reason})
+        {:EXIT, _pid, _reason} -> shutdown_fn.(server_pid)
+      end
+    end)
+
+    :ok
   end
 
   @doc false
@@ -223,16 +296,11 @@ defmodule TestServer do
   end
 
   @doc false
-  @spec report_error(keyword(), {struct(), TestServer.stacktrace()}) :: :ok
-  def report_error(options, {exception, stacktrace}) do
-    caller = Keyword.fetch!(options, :caller)
-
+  def report_error(instance, {exception, stacktrace}, options) do
     unless Keyword.get(options, :suppress_warning, false),
       do: IO.warn(Exception.format(:error, exception, stacktrace))
 
-    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      reraise exception, stacktrace
-    end)
+    InstanceManager.add_error(instance, {exception, stacktrace})
 
     :ok
   end

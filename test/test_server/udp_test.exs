@@ -30,15 +30,22 @@ defmodule TestServer.UDPTest do
                    end
     end
 
+    test "with invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :ip to be an IP tuple, :any, or :loopback, got: :invalid/,
+                   fn ->
+                     TestServer.UDP.start(ip: :invalid)
+                   end
+    end
+
     test "when port is in use" do
       instance = TestServer.UDP.start!()
       {_, port} = TestServer.UDP.address(instance)
 
-      assert {:error, %RuntimeError{message: message}} = TestServer.UDP.start(port: port)
-      assert message == "could not listen on port #{port}: :eaddrinuse"
+      assert TestServer.UDP.start(port: port) == {:error, :eaddrinuse}
     end
 
-    test "with multiple instances" do
+    test "with start error" do
       {:ok, instance_1} = TestServer.UDP.start()
       {:ok, instance_2} = TestServer.UDP.start()
 
@@ -48,6 +55,38 @@ defmodule TestServer.UDPTest do
       {_, port_2} = TestServer.UDP.address(instance_2)
 
       refute port_1 == port_2
+    end
+
+    test "with `ipfamily: :inet6` option" do
+      instance = TestServer.UDP.start!(ipfamily: :inet6)
+      :ok = TestServer.UDP.handle()
+      options = TestServer.UDP.Instance.options(instance)
+      listener_socket = Keyword.fetch!(options, :listener)
+
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.sockname(listener_socket)
+      assert {:ok, socket} = UDPClient.open(:inet6)
+      assert UDPClient.send(socket, TestServer.UDP.address(), "ping") == :ok
+      assert {:ok, data} = UDPClient.receive_data(socket, :raw)
+      assert {{0, 0, 0, 0, 0, 0, 0, 1}, _server_port, "ping"} = data
+      assert {:ok, {_client_address, client_port}} = :inet.sockname(socket)
+      assert [%{socket: socket}] = TestServer.UDP.Instance.peers(instance)
+      assert {:udp, ^listener_socket, {0, 0, 0, 0, 0, 0, 0, 1}, ^client_port} = socket
+    end
+
+    test "with `:ip` option" do
+      instance = TestServer.UDP.start!(ip: {0, 0, 0, 0})
+      :ok = TestServer.UDP.handle()
+      options = TestServer.UDP.Instance.options(instance)
+      listener_socket = Keyword.fetch!(options, :listener)
+
+      assert {:ok, {{0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
+      assert {:ok, socket} = UDPClient.open()
+      assert UDPClient.send(socket, TestServer.UDP.address(), "ping") == :ok
+      assert {:ok, data} = UDPClient.receive_data(socket, :raw)
+      assert {{127, 0, 0, 1}, _server_port, "ping"} = data
+      assert {:ok, {_client_address, client_port}} = :inet.sockname(socket)
+      assert [%{socket: socket}] = TestServer.UDP.Instance.peers(instance)
+      assert {:udp, ^listener_socket, {127, 0, 0, 1}, ^client_port} = socket
     end
 
     test "with `transport: :dtls` option" do
@@ -99,20 +138,12 @@ defmodule TestServer.UDPTest do
       assert DTLSClient.receive_data(socket) == {:ok, "ping"}
     end
 
-    test "with `ipfamily: :inet6` option" do
-      instance = TestServer.UDP.start!(ipfamily: :inet6)
-      :ok = TestServer.UDP.handle()
+    test "with `:listen` option" do
+      instance = TestServer.UDP.start!(listen: [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 0}])
       options = TestServer.UDP.Instance.options(instance)
       listener_socket = Keyword.fetch!(options, :listener)
 
       assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
-      assert {:ok, socket} = UDPClient.open(:inet6)
-      assert UDPClient.send(socket, TestServer.UDP.address(), "ping", :inet6) == :ok
-      assert {:ok, data} = UDPClient.receive_data(socket, :raw)
-      assert {{0, 0, 0, 0, 0, 0, 0, 1}, _server_port, "ping"} = data
-      assert {:ok, {_client_address, client_port}} = :inet.sockname(socket)
-      assert [%{socket: socket}] = TestServer.UDP.Instance.peers(instance)
-      assert {:udp, ^listener_socket, {0, 0, 0, 0, 0, 0, 0, 1}, ^client_port} = socket
     end
 
     test "when test ends" do
@@ -285,13 +316,34 @@ defmodule TestServer.UDPTest do
       assert is_pid(instance_pid)
     end
 
-    test "when start fails" do
-      instance = TestServer.UDP.start!()
-      port = instance |> TestServer.UDP.Instance.options() |> Keyword.fetch!(:port)
+    for {ip, text, text_port} <- [
+          {:any, "", " on port "},
+          {:loopback, " on localhost", " on localhost:"},
+          {{127, 0, 0, 1}, " on 127.0.0.1", " on 127.0.0.1:"},
+          {{0, 0, 0, 0, 0, 0, 0, 1}, " on [::1]", " on [::1]:"}
+        ] do
+      test "when start fails with `ip: #{inspect(ip)}`" do
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.UDP.start!(ip: unquote(Macro.escape(ip)), listen: [invalid: 1])
+          end
 
-      assert_raise RuntimeError,
-                   ~r/could not start TestServer.UDP instance on port #{port}:/,
-                   fn -> TestServer.UDP.start!(port: port) end
+        assert Exception.message(error) =~
+                 "could not start TestServer.UDP instance#{unquote(text)}:\n\n:badarg"
+      end
+
+      test "when start fails with `ip: #{inspect(ip)}` and `:port` set" do
+        instance = TestServer.UDP.start!(ip: unquote(Macro.escape(ip)))
+        port = instance |> TestServer.UDP.Instance.options() |> Keyword.fetch!(:port)
+
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.UDP.start!(port: port, ip: unquote(Macro.escape(ip)))
+          end
+
+        assert Exception.message(error) =~
+                 "could not start TestServer.UDP instance#{unquote(text_port)}#{port}:"
+      end
     end
   end
 
@@ -415,28 +467,39 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!()
 
       assert_raise ArgumentError,
-                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   ~r/expected :host to be a binary, got: :invalid/,
                    fn ->
                      TestServer.UDP.address(host: :invalid)
                    end
     end
 
-    test "with `:host` option" do
-      TestServer.UDP.start!()
+    private_inet_ip = Application.compile_env(:test_server, :private_inet_ip)
+    private_inet6_ip = Application.compile_env(:test_server, :private_inet6_ip)
 
-      assert {"custom-host", _port} = TestServer.UDP.address(host: "custom-host")
-    end
+    for {ip, bind_ip, host_ip, ipfamily} <- [
+          {:loopback, {127, 0, 0, 1}, {127, 0, 0, 1}, :inet},
+          {:any, {0, 0, 0, 0}, {127, 0, 0, 1}, :inet},
+          {private_inet_ip, private_inet_ip, private_inet_ip, :inet},
+          {private_inet6_ip, private_inet6_ip, private_inet6_ip, :inet6}
+        ] do
+      test "with `:host` option when started with `ip: #{inspect(ip)}` option when started with `ipfamily: #{inspect(ipfamily)}`" do
+        options = [ip: unquote(Macro.escape(ip)), ipfamily: unquote(ipfamily)]
+        instance = TestServer.UDP.start!(options)
+        ip = instance |> TestServer.UDP.Instance.options() |> Keyword.fetch!(:ip)
+        :ok = TestServer.UDP.handle()
 
-    test "with `:host` option when started with `ipfamily: :inet6` option" do
-      TestServer.UDP.start!(ipfamily: :inet6)
-      TestServer.UDP.handle()
+        assert address = TestServer.UDP.address(host: "myhost.test")
 
-      assert address = TestServer.UDP.address(host: "custom-host")
-      assert {:ok, socket} = UDPClient.open(:inet6)
-      assert UDPClient.send(socket, address, "ping", :inet6) == :ok
-
-      assert {:ok, data} = UDPClient.receive_data(socket, :raw)
-      assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port, "ping"} = data
+        assert ip == unquote(Macro.escape(bind_ip))
+        assert {host, port} = address
+        assert host == "myhost.test"
+        assert host = to_charlist(host)
+        assert :inet.getaddr(host, unquote(ipfamily)) == {:ok, unquote(Macro.escape(host_ip))}
+        assert {:ok, socket} = UDPClient.open(unquote(ipfamily))
+        assert UDPClient.send(socket, address, "ping") == :ok
+        assert {:ok, data} = UDPClient.receive_data(socket, :raw)
+        assert data == {unquote(Macro.escape(host_ip)), port, "ping"}
+      end
     end
   end
 
@@ -1254,10 +1317,8 @@ defmodule TestServer.UDPTest do
       :gen_udp.open(0, [ipfamily, :binary, active: false])
     end
 
-    def send(socket, {host, port}, data, ipfamily \\ :inet) do
-      {:ok, address} = :inet.getaddr(String.to_charlist(host), ipfamily)
-
-      :gen_udp.send(socket, address, port, data)
+    def send(socket, {host, port}, data) do
+      :gen_udp.send(socket, String.to_charlist(host), port, data)
     end
 
     def receive_data(socket), do: receive_data(socket, :normal)

@@ -42,12 +42,19 @@ defmodule TestServer.TCPTest do
                    end
     end
 
-    test "when port is in use" do
+    test "with invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :ip to be an IP tuple, :any, or :loopback, got: :invalid/,
+                   fn ->
+                     TestServer.TCP.start(ip: :invalid)
+                   end
+    end
+
+    test "with start error" do
       instance = TestServer.TCP.start!()
       {_, port} = TestServer.TCP.address(instance)
 
-      assert {:error, %RuntimeError{message: message}} = TestServer.TCP.start(port: port)
-      assert message == "could not listen on port #{port}: :eaddrinuse"
+      assert TestServer.TCP.start(port: port) == {:error, :eaddrinuse}
     end
 
     test "with multiple instances" do
@@ -60,6 +67,32 @@ defmodule TestServer.TCPTest do
       {_, port_2} = TestServer.TCP.address(instance_2)
 
       refute port_1 == port_2
+    end
+
+    test "with `ipfamily: :inet6` option" do
+      instance = TestServer.TCP.start!(ipfamily: :inet6)
+      :ok = TestServer.TCP.handle()
+      options = TestServer.TCP.Instance.options(instance)
+      listener_socket = Keyword.fetch!(options, :listener)
+
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.sockname(listener_socket)
+      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
+      assert TCPClient.send(socket, "ping") == :ok
+      assert TCPClient.receive_data(socket) == {:ok, "ping"}
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
+    end
+
+    test "with `:ip` option" do
+      instance = TestServer.TCP.start!(ip: {0, 0, 0, 0})
+      :ok = TestServer.TCP.handle()
+      options = TestServer.TCP.Instance.options(instance)
+      listener_socket = Keyword.fetch!(options, :listener)
+
+      assert {:ok, {{0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
+      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+      assert TCPClient.send(socket, "ping") == :ok
+      assert TCPClient.receive_data(socket) == {:ok, "ping"}
+      assert {:ok, {{127, 0, 0, 1}, _port}} = :inet.peername(socket)
     end
 
     test "with `transport: :tls` option" do
@@ -117,17 +150,12 @@ defmodule TestServer.TCPTest do
       assert TLSClient.receive_data(socket) == {:ok, "ping"}
     end
 
-    test "with `ipfamily: :inet6` option" do
-      instance = TestServer.TCP.start!(ipfamily: :inet6)
-      :ok = TestServer.TCP.handle()
+    test "with `:listen` option" do
+      instance = TestServer.TCP.start!(listen: [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 0}])
       options = TestServer.TCP.Instance.options(instance)
       listener_socket = Keyword.fetch!(options, :listener)
 
       assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
-      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
-      assert TCPClient.send(socket, "ping") == :ok
-      assert TCPClient.receive_data(socket) == {:ok, "ping"}
-      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
     end
 
     test "when test ends" do
@@ -243,13 +271,34 @@ defmodule TestServer.TCPTest do
       assert is_pid(instance_pid)
     end
 
-    test "when start fails" do
-      instance = TestServer.TCP.start!()
-      port = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:port)
+    for {ip, text, text_port} <- [
+          {:any, "", " on port "},
+          {:loopback, " on localhost", " on localhost:"},
+          {{127, 0, 0, 1}, " on 127.0.0.1", " on 127.0.0.1:"},
+          {{0, 0, 0, 0, 0, 0, 0, 1}, " on [::1]", " on [::1]:"}
+        ] do
+      test "when start fails with `ip: #{inspect(ip)}`" do
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.TCP.start!(ip: unquote(Macro.escape(ip)), listen: [invalid: 1])
+          end
 
-      assert_raise RuntimeError,
-                   ~r/could not start TestServer.TCP instance on port #{port}:/,
-                   fn -> TestServer.TCP.start!(port: port) end
+        assert Exception.message(error) =~
+                 "could not start TestServer.TCP instance#{unquote(text)}:\n\n:badarg"
+      end
+
+      test "when start fails with `ip: #{inspect(ip)}` and `:port` set" do
+        instance = TestServer.TCP.start!(ip: unquote(Macro.escape(ip)))
+        port = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:port)
+
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.TCP.start!(port: port, ip: unquote(Macro.escape(ip)))
+          end
+
+        assert Exception.message(error) =~
+                 "could not start TestServer.TCP instance#{unquote(text_port)}#{port}:"
+      end
     end
   end
 
@@ -373,28 +422,40 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!()
 
       assert_raise ArgumentError,
-                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   ~r/expected :host to be a binary, got: :invalid/,
                    fn ->
                      TestServer.TCP.address(host: :invalid)
                    end
     end
 
-    test "with `:host` option" do
-      TestServer.TCP.start!()
+    private_inet_ip = Application.compile_env(:test_server, :private_inet_ip)
+    private_inet6_ip = Application.compile_env(:test_server, :private_inet6_ip)
 
-      assert {"custom-host", _port} = TestServer.TCP.address(host: "custom-host")
-    end
+    for {ip, bind_ip, host_ip, ipfamily} <- [
+          {:loopback, {127, 0, 0, 1}, {127, 0, 0, 1}, :inet},
+          {:any, {0, 0, 0, 0}, {127, 0, 0, 1}, :inet},
+          {private_inet_ip, private_inet_ip, private_inet_ip, :inet},
+          {private_inet6_ip, private_inet6_ip, private_inet6_ip, :inet6}
+        ] do
+      test "with `:host` option when started with `ip: #{inspect(ip)}` option when started with `ipfamily: #{inspect(ipfamily)}`" do
+        options = [ip: unquote(Macro.escape(ip)), ipfamily: unquote(ipfamily)]
+        instance = TestServer.TCP.start!(options)
+        :ok = TestServer.TCP.handle()
+        ip = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:ip)
 
-    test "with `:host` option when started with `ipfamily: :inet6` option" do
-      TestServer.TCP.start!(ipfamily: :inet6)
-      TestServer.TCP.handle()
+        assert address = TestServer.TCP.address(host: "myhost.test")
 
-      assert address = TestServer.TCP.address(host: "custom-host")
-      assert {:ok, socket} = TCPClient.connect(address, [:inet6])
-
-      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
-      assert TCPClient.send(socket, "ping") == :ok
-      assert TCPClient.receive_data(socket) == {:ok, "ping"}
+        assert ip == unquote(Macro.escape(bind_ip))
+        assert {host, port} = address
+        assert host == "myhost.test"
+        assert host = to_charlist(host)
+        assert :inet.getaddr(host, unquote(ipfamily)) == {:ok, unquote(Macro.escape(host_ip))}
+        assert {:ok, socket} = TCPClient.connect(address, [unquote(ipfamily)])
+        assert TCPClient.send(socket, "ping") == :ok
+        assert TCPClient.receive_data(socket) == {:ok, "ping"}
+        assert {:ok, peer_address} = :inet.peername(socket)
+        assert peer_address == {unquote(Macro.escape(host_ip)), port}
+      end
     end
   end
 

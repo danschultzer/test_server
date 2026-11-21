@@ -77,7 +77,7 @@ defmodule TestServer.UDP.Instance do
   @spec dispatch(
           TestServer.instance(),
           {:peer, pid(),
-           {:udp, :gen_udp.socket(), :inet.ip_address(), :inet.port_number()}
+           {:udp, :gen_udp.socket(), :inet.ip_address(), TestServer.port_number()}
            | {:dtls, :ssl.sslsocket()}}
         ) ::
           {:ok, map(), TestServer.UDP.state()} | {:error, :not_found}

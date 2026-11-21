@@ -3,11 +3,15 @@ defmodule TestServer.HTTP.Server.HttpdTest do
   doctest TestServer.HTTP.Server.Httpd
 
   setup context do
+    ipfamily = Map.get(context, :ipfamily, :inet)
+
     TestServer.HTTP.start!(
       scheme: Map.get(context, :scheme, :http),
       http_server: {TestServer.HTTP.Server.Httpd, Map.get(context, :http_server_options, [])},
       ipfamily: Map.get(context, :ipfamily, :inet)
     )
+
+    :httpc.set_options(ipfamily: ipfamily)
 
     :ok
   end
@@ -19,6 +23,7 @@ defmodule TestServer.HTTP.Server.HttpdTest do
           refute List.keyfind(conn.req_headers, "host", 0)
           assert conn.host == ""
           assert conn.port == 80
+          assert Plug.Conn.get_http_protocol(conn) == :"HTTP/1.0"
 
           Plug.Conn.resp(conn, 200, "OK")
         end

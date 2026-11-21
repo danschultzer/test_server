@@ -56,8 +56,15 @@ defmodule TestServer.HTTP do
 
   ## Options
 
-    * `:port`             - integer of port number, defaults to random port
-      that can be opened;
+    * `:port`             - integer of port number. Defaults to `0` which
+      selects a random port;
+
+    * `:ip`               - a `t:TestServer.ip_address/0` the server will bind
+      to. Defaults to `:loopback`;
+
+    * `:ipfamily`         - the IP address type to use, either `:inet` or
+      `:inet6`. Defaults to `:inet6` if `:ip` is IPv6 format, otherwise
+      `:inet`;
 
     * `:scheme`           - an atom for the http scheme. Defaults to `:http`;
 
@@ -72,9 +79,6 @@ defmodule TestServer.HTTP do
       neither `:key` nor `:keyfile` is set and `:scheme` is `:https`. The CA
       certificates can be fetched from `cacerts/1`;
 
-    * `:ipfamily`         - the IP address type to use, either `:inet` or
-      `:inet6`. Defaults to `:inet`;
-
     * `:suppress_warning` - suppresses IO warnings on expectation failures
       related to this instance. Defaults to `false`;
 
@@ -83,12 +87,12 @@ defmodule TestServer.HTTP do
       TestServer.HTTP.start!(
         scheme: :https,
         ipfamily: :inet6,
-        http_server: {TestServer.HTTP.Server.Bandit, [ip: :any]}
+        http_server: {TestServer.HTTP.Server.Bandit, [http_options: [compress: false]]}
       )
 
       TestServer.HTTP.handle(
         to: fn conn ->
-          assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+          assert conn.remote_ip == {0, 0, 0, 0, 0, 0, 0, 1}
 
           Plug.Conn.resp(conn, 200, to_string(Plug.Conn.get_http_protocol(conn)))
         end
@@ -106,7 +110,16 @@ defmodule TestServer.HTTP do
   """
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
-    Keyword.validate!(options, [:port, :scheme, :http_server, :tls, :ipfamily, :suppress_warning])
+    Keyword.validate!(options, [
+      :port,
+      :ip,
+      :scheme,
+      :http_server,
+      :tls,
+      :ipfamily,
+      :suppress_warning
+    ])
+
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
   end
 
@@ -194,8 +207,8 @@ defmodule TestServer.HTTP do
 
   ## Options
 
-    * `:host` - binary host value, it'll be added to inet for IP `127.0.0.1`
-      and `::1`, defaults to `"localhost"`;
+    * `:host` - binary host value, it'll be registered in the `m::inet` DNS
+      file for the instance's IP. Defaults to `"localhost"`;
 
   ## Examples
 
@@ -203,7 +216,7 @@ defmodule TestServer.HTTP do
 
       assert TestServer.HTTP.url() == "http://localhost:4444"
       assert TestServer.HTTP.url("/test") == "http://localhost:4444/test"
-      assert TestServer.HTTP.url(host: "example.com") == "http://example.com:4444"
+      assert TestServer.HTTP.url(host: "myhost.test") == "http://myhost.test:4444"
   """
   @spec url(uri_path :: binary() | keyword() | TestServer.instance()) :: binary()
   def url(path) when is_binary(path), do: url(path, [])
@@ -226,13 +239,19 @@ defmodule TestServer.HTTP do
   @spec url(TestServer.instance(), uri_path :: binary(), keyword()) :: binary()
   def url({__MODULE__, _instance_pid} = instance, path, options)
       when is_binary(path) and is_list(options) do
-    Keyword.validate!(options, [:host])
     TestServer.assert_instance_alive!(instance)
 
-    domain = TestServer.host(options)
-    options = Instance.options(instance)
+    options =
+      instance
+      |> Instance.options()
+      |> Keyword.take(~w(scheme port ip ipfamily)a)
+      |> Keyword.merge(options)
 
-    "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{path}"
+    {scheme, options} = Keyword.pop(options, :scheme)
+    port = Keyword.fetch!(options, :port)
+    host = TestServer.add_host(options)
+
+    "#{scheme}://#{host}:#{port}#{path}"
   end
 
   def handle, do: handle([])

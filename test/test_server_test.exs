@@ -558,7 +558,7 @@ defmodule TestServerTest do
       defmodule StopInstanceTestEndsTest do
         use ExUnit.Case
 
-        test "fails" do
+        test "succeeds" do
           {:ok, instance} =
             TestServer.start_instance(
               unquote(__MODULE__).FakeProtocol,
@@ -611,24 +611,143 @@ defmodule TestServerTest do
     end
   end
 
-  describe "open_port/1" do
-    test "when port in use" do
-      assert {:ok, socket} = :gen_tcp.listen(0, [])
-      assert {:ok, port} = :inet.port(socket)
-
-      assert {:error, %RuntimeError{message: message}} = TestServer.open_port(port: port)
-      assert message == "could not listen on port #{port}: :eaddrinuse"
+  describe "validate_ip!/1" do
+    test "with invalid `:ipfamily` option" do
+      assert_raise ArgumentError,
+                   "expected :ipfamily to be one of :inet or :inet6, got: :invalid",
+                   fn ->
+                     TestServer.validate_ip!(ipfamily: :invalid)
+                   end
     end
 
-    test "with missing `:port` option" do
-      assert {:ok, port} = TestServer.open_port([])
-      assert is_integer(port)
-      refute port_in_use?(port)
+    test "with `ipfamily: :inet6` and invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   "expected :ip to be an IPv6 tuple, got: {127, 0, 0, 1}",
+                   fn ->
+                     TestServer.validate_ip!(ip: {127, 0, 0, 1}, ipfamily: :inet6)
+                   end
     end
 
-    test "with `:port` option" do
-      assert {:ok, port} = TestServer.open_port(port: {0, ip: {127, 0, 0, 1}})
-      refute port_in_use?(port)
+    test "with `ipfamily: :inet` and invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   "expected :ip to be an IPv4 tuple, got: {0, 0, 0, 0, 0, 0, 0, 1}",
+                   fn ->
+                     TestServer.validate_ip!(
+                       ip: {0, 0, 0, 0, 0, 0, 0, 1},
+                       ipfamily: :inet
+                     )
+                   end
+    end
+
+    test "with invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   "expected :ip to be an IP tuple, :any, or :loopback, got: :invalid",
+                   fn ->
+                     TestServer.validate_ip!(ip: :invalid)
+                   end
+    end
+
+    test "with no options" do
+      assert TestServer.validate_ip!([]) == {:inet, :loopback}
+    end
+
+    test "with `:ipfamily` option" do
+      assert TestServer.validate_ip!(ipfamily: :inet6) == {:inet6, :loopback}
+      assert TestServer.validate_ip!(ipfamily: :inet) == {:inet, :loopback}
+
+      assert TestServer.validate_ip!(ipfamily: :inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}) ==
+               {:inet6, {0, 0, 0, 0, 0, 0, 0, 1}}
+
+      assert TestServer.validate_ip!(ipfamily: :inet, ip: {127, 0, 0, 1}) ==
+               {:inet, {127, 0, 0, 1}}
+    end
+
+    test "with `:ip` option" do
+      assert TestServer.validate_ip!(ip: {127, 0, 0, 1}) == {:inet, {127, 0, 0, 1}}
+    end
+  end
+
+  describe "add_host/2" do
+    test "with invalid options" do
+      assert_raise ArgumentError, ~r/unknown keys/, fn ->
+        TestServer.add_host(invalid: :option)
+      end
+    end
+
+    test "with invalid `:host` option" do
+      assert_raise ArgumentError, "expected :host to be a binary, got: :invalid", fn ->
+        TestServer.add_host(host: :invalid)
+      end
+    end
+
+    test "with no `:host` option" do
+      assert TestServer.add_host([]) == "localhost"
+    end
+
+    test "with `:host` option" do
+      assert TestServer.add_host(host: "myhost.test") == "myhost.test"
+
+      assert {:ok, {_, _, _, _, _, [{127, 0, 0, 1}]}} =
+               :inet.gethostbyname(~c"myhost.test", :inet)
+
+      assert :inet.gethostbyname(~c"myhost.test", :inet6) == {:error, :nxdomain}
+    end
+
+    test "with `:host` option and `ipfamily: :inet6`" do
+      assert TestServer.add_host(host: "myhost.test", ipfamily: :inet6) == "myhost.test"
+      assert :inet.gethostbyname(~c"myhost.test", :inet) == {:error, :nxdomain}
+
+      assert {:ok, {_, _, _, _, _, [{0, 0, 0, 0, 0, 0, 0, 1}]}} =
+               :inet.gethostbyname(~c"myhost.test", :inet6)
+    end
+
+    test "with `:host` option with existing DNS entry" do
+      assert TestServer.add_host(host: "myhost.test") == "myhost.test"
+
+      assert_raise ArgumentError,
+                   ~r/expected :host not to resolve to an IP address, got: \[{127, 0, 0, 1}\]/,
+                   fn ->
+                     TestServer.add_host(host: "myhost.test")
+                   end
+    end
+
+    test "with `:host` option and `:ip` option" do
+      private_inet_ip = Application.fetch_env!(:test_server, :private_inet_ip)
+
+      assert TestServer.add_host(host: "myhost.test", ip: private_inet_ip) == "myhost.test"
+
+      assert {:ok, {_, _, _, _, _, [^private_inet_ip]}} =
+               :inet.gethostbyname(~c"myhost.test", :inet)
+    end
+
+    test "with `:host` option when test ends" do
+      defmodule AddHostWithHostOptionTestEndsTest do
+        use ExUnit.Case
+
+        test "succeeds" do
+          TestServer.start_instance(
+            unquote(__MODULE__).FakeProtocol,
+            [],
+            fn _instance -> :ok end
+          )
+
+          TestServer.add_host(ip: :loopback, host: "myhost.test")
+
+          assert {:ok, _} = :inet.gethostbyname(~c"myhost.test", :inet)
+          assert {:ok, _} = :inet.gethostbyname(~c"otherhost-1.test", :inet)
+          assert {:ok, _} = :inet.gethostbyname(~c"otherhost-2.test", :inet)
+        end
+      end
+
+      :inet_db.add_host({127, 0, 0, 1}, [~c"otherhost-1.test", ~c"otherhost-2.test"])
+
+      capture_io(fn ->
+        assert %{failures: 0} = ExUnit.run()
+      end)
+
+      assert :inet.gethostbyname(~c"myhost.test", :inet) == {:error, :nxdomain}
+      assert {:ok, _} = :inet.gethostbyname(~c"otherhost-1.test", :inet)
+      assert {:ok, _} = :inet.gethostbyname(~c"otherhost-2.test", :inet)
     end
   end
 
@@ -678,18 +797,6 @@ defmodule TestServerTest do
 
       false ->
         exit(:normal)
-    end
-  end
-
-  defp port_in_use?(port) do
-    case :gen_tcp.listen(port, []) do
-      {:ok, socket} ->
-        :ok = :gen_tcp.close(socket)
-
-        false
-
-      {:error, _reason} ->
-        true
     end
   end
 end

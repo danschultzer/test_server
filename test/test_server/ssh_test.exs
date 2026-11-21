@@ -22,6 +22,14 @@ defmodule TestServer.SSHTest do
                    end
     end
 
+    test "with invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :ip to be an IP tuple, :any, or :loopback, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.start(ip: :invalid)
+                   end
+    end
+
     test "with invalid `:subsystems` option" do
       assert_raise ArgumentError,
                    ~r/expected :subsystems to be a list, got: :invalid/,
@@ -40,6 +48,16 @@ defmodule TestServer.SSHTest do
                    end
     end
 
+    test "with start error" do
+      instance = TestServer.SSH.start!()
+      {_ip, port} = TestServer.SSH.address(instance)
+
+      # When OTP 29+ is required this can be replaced with
+      # `assert TestServer.SSH.start(port: port) == {:error, :eaddrinuse}`
+      assert {:error, error} = TestServer.SSH.start(port: port)
+      assert inspect(error) =~ ":eaddrinuse"
+    end
+
     test "with multiple instances" do
       instance_1 = TestServer.SSH.start!()
       instance_2 = TestServer.SSH.start!()
@@ -50,6 +68,28 @@ defmodule TestServer.SSHTest do
       {_, port_2} = TestServer.SSH.address(instance_2)
 
       refute port_1 == port_2
+    end
+
+    test "with `:ip` option" do
+      instance = TestServer.SSH.start!(ip: {0, 0, 0, 0})
+
+      {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+      assert daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+      assert {:ok, info} = :ssh.daemon_info(daemon)
+      assert info[:ip] == {0, 0, 0, 0}
+      assert {ip, _port} = SSHClient.sockname(conn)
+      assert ip == {127, 0, 0, 1}
+    end
+
+    test "with `ipfamily: :inet6` option" do
+      instance = TestServer.SSH.start!(ipfamily: :inet6)
+
+      {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+      assert daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+      assert {:ok, info} = :ssh.daemon_info(daemon)
+      assert info[:ip] == {0, 0, 0, 0, 0, 0, 0, 1}
+      assert {ip, _port} = SSHClient.sockname(conn)
+      assert ip == {0, 0, 0, 0, 0, 0, 0, 1}
     end
 
     test "with `:host_keys` option list" do
@@ -272,22 +312,6 @@ defmodule TestServer.SSHTest do
       assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
     end
 
-    test "with `ipfamily: :inet6` option" do
-      TestServer.SSH.start!(ipfamily: :inet6)
-
-      {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
-      assert {ip, _port} = SSHClient.sockname(conn)
-      assert ip == {0, 0, 0, 0, 0, 0, 0, 1}
-    end
-
-    test "with `:daemon` option" do
-      TestServer.SSH.start!(daemon: [max_sessions: 2])
-
-      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
-      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
-      assert {:error, "Connection closed"} = SSHClient.connect(TestServer.SSH.address())
-    end
-
     test "with `:subsystems` option" do
       TestServer.SSH.start!(subsystems: ["example"])
       TestServer.SSH.handle(to: fn _frame, state -> {:reply, state.subsystem, state} end)
@@ -298,6 +322,20 @@ defmodule TestServer.SSHTest do
       assert SSHClient.send(conn, channel_id, "ping") == :ok
       assert SSHClient.receive_data(conn, channel_id) == {:ok, "example"}
       assert SSHClient.close(conn, channel_id) == :ok
+    end
+
+    test "with `:daemon` option" do
+      instance =
+        TestServer.SSH.start!(daemon: [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, max_sessions: 2])
+
+      assert daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+      assert {:ok, info} = :ssh.daemon_info(daemon)
+      assert info[:ip] == {0, 0, 0, 0, 0, 0, 0, 1}
+      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+
+      assert {:error, "Connection closed"} =
+               SSHClient.connect(TestServer.SSH.address(), inet6: true)
     end
 
     test "with `daemon: [log_level: :none]` option" do
@@ -344,7 +382,9 @@ defmodule TestServer.SSHTest do
 
           send(__MODULE__, {:server, daemon_pid, port})
 
-          assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+          assert {:error, error} = :gen_tcp.listen(port, [])
+
+          send(__MODULE__, {:error, error})
         end
       end
 
@@ -356,6 +396,10 @@ defmodule TestServer.SSHTest do
       assert_receive {:DOWN, ^monitor, :process, ^daemon_pid, _reason}
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
+      assert_receive {:error, error}
+      # When OTP 29+ is required this can be replaced with
+      # `assert error == :eaddrinuse`
+      assert inspect(error) =~ ":eaddrinuse"
     end
 
     test "when instance shuts down" do
@@ -440,13 +484,35 @@ defmodule TestServer.SSHTest do
       assert is_pid(instance_pid)
     end
 
-    test "when start fails" do
-      instance = TestServer.SSH.start!()
-      port = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:port)
+    for {ip, text, text_port} <- [
+          {:any, "", " on port "},
+          {:loopback, " on localhost", " on localhost:"},
+          {{127, 0, 0, 1}, " on 127.0.0.1", " on 127.0.0.1:"},
+          {{0, 0, 0, 0, 0, 0, 0, 1}, " on [::1]", " on [::1]:"}
+        ] do
+      test "when start fails with `ip: #{inspect(ip)}`" do
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.SSH.start!(ip: unquote(Macro.escape(ip)), daemon: [invalid: 1])
+          end
 
-      assert_raise RuntimeError,
-                   ~r/could not start TestServer.SSH instance on port #{port}:/,
-                   fn -> TestServer.SSH.start!(port: port) end
+        assert message = Exception.message(error)
+        assert message =~ "could not start TestServer.SSH instance#{unquote(text)}:\n"
+        assert message =~ ":badarg"
+      end
+
+      test "when start fails with `ip: #{inspect(ip)}` and `:port` set" do
+        instance = TestServer.SSH.start!(ip: unquote(Macro.escape(ip)))
+        port = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:port)
+
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.SSH.start!(port: port, ip: unquote(Macro.escape(ip)))
+          end
+
+        assert Exception.message(error) =~
+                 "could not start TestServer.SSH instance#{unquote(text_port)}#{port}:"
+      end
     end
   end
 
@@ -535,24 +601,41 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.start!()
 
       assert_raise ArgumentError,
-                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   ~r/expected :host to be a binary, got: :invalid/,
                    fn ->
                      TestServer.SSH.address(host: :invalid)
                    end
     end
 
-    test "with `:host` option" do
-      TestServer.SSH.start!()
+    private_inet_ip = Application.compile_env(:test_server, :private_inet_ip)
+    private_inet6_ip = Application.compile_env(:test_server, :private_inet6_ip)
 
-      assert {"myserver.test", _port} = address = TestServer.SSH.address(host: "myserver.test")
+    for {ip, bind_ip, host_ip, ipfamily} <- [
+          {:loopback, {127, 0, 0, 1}, {127, 0, 0, 1}, :inet},
+          {:any, {0, 0, 0, 0}, {127, 0, 0, 1}, :inet},
+          {private_inet_ip, private_inet_ip, private_inet_ip, :inet},
+          {private_inet6_ip, private_inet6_ip, private_inet6_ip, :inet6}
+        ] do
+      test "with `:host` option when started with `ip: #{inspect(ip)}` option when started with `ipfamily: #{inspect(ipfamily)}`" do
+        options = [ip: unquote(Macro.escape(ip)), ipfamily: unquote(ipfamily)]
+        instance = TestServer.SSH.start!(options)
+        :ok = TestServer.SSH.handle()
+        ip = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:ip)
 
-      assert {:ok, _conn} = SSHClient.connect(address)
-    end
+        assert address = TestServer.SSH.address(host: "myhost.test")
 
-    test "with `:host` option when started with `ipfamily: :inet6` option" do
-      TestServer.SSH.start!(ipfamily: :inet6)
-
-      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+        assert ip == unquote(Macro.escape(bind_ip))
+        assert {host, port} = address
+        assert host == "myhost.test"
+        assert host = to_charlist(host)
+        assert :inet.getaddr(host, unquote(ipfamily)) == {:ok, unquote(Macro.escape(host_ip))}
+        assert {:ok, conn} = SSHClient.connect(address, inet6: unquote(ipfamily) == :inet6)
+        assert {:ok, channel_id} = SSHClient.session_channel(conn)
+        assert SSHClient.exec(conn, channel_id, "ping") == :ok
+        assert {:ok, %{data: "ping"}} = SSHClient.receive_until_closed(conn, channel_id)
+        assert {_, peer_address} = SSHClient.peer(conn)
+        assert peer_address == {unquote(Macro.escape(host_ip)), port}
+      end
     end
   end
 
@@ -1416,6 +1499,12 @@ defmodule TestServer.SSHTest do
 
     def sockname(conn) do
       {:sockname, res} = :ssh.connection_info(conn, :sockname)
+
+      res
+    end
+
+    def peer(conn) do
+      {:peer, res} = :ssh.connection_info(conn, :peer)
 
       res
     end

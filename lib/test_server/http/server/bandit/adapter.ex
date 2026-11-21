@@ -105,5 +105,10 @@ if Code.ensure_loaded?(Bandit) do
     def get_http_protocol({plug_pid, payload}) do
       send_and_receive(plug_pid, :get_http_protocol, [payload])
     end
+
+    @impl Plug.Conn.Adapter
+    def get_sock_data({plug_pid, payload}) do
+      send_and_receive(plug_pid, :get_sock_data, [payload])
+    end
   end
 end

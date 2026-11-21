@@ -10,6 +10,9 @@ defmodule TestServer do
   @type instance :: {module(), pid()}
   @type stacktrace :: list()
   @type cacerts :: [binary()]
+  @type ip_address :: :inet.ip_address() | :any | :loopback
+  @type ipfamily :: :inet | :inet6
+  @type port_number :: :inet.port_number()
 
   alias TestServer.InstanceManager
 
@@ -197,15 +200,21 @@ defmodule TestServer do
 
   @doc false
   def raise_start_failure!(protocol_module, options, reason) do
-    raise "could not start #{inspect(protocol_module)} instance#{format_port(options)}:\n\n#{Exception.format_exit(reason)}"
+    raise "could not start #{inspect(protocol_module)} instance#{format_address(options)}:\n\n#{Exception.format_exit(reason)}"
   end
 
-  defp format_port(options) do
-    case Keyword.get(options, :port) do
-      port when is_integer(port) -> " on port #{port}"
-      _no_port -> ""
+  defp format_address(options) do
+    case {Keyword.get(options, :ip, :any), Keyword.get(options, :port)} do
+      {:any, nil} -> ""
+      {:any, port} -> " on port #{port}"
+      {ip, nil} -> " on #{format_ip(ip)}"
+      {ip, port} -> " on #{format_ip(ip)}:#{port}"
     end
   end
+
+  defp format_ip({_, _, _, _} = ip), do: :inet.ntoa(ip)
+  defp format_ip({_, _, _, _, _, _, _, _} = ip), do: "[#{:inet.ntoa(ip)}]"
+  defp format_ip(:loopback), do: "localhost"
 
   @doc false
   def supervise_server(server_pid, shutdown_fn) do
@@ -245,24 +254,74 @@ defmodule TestServer do
   end
 
   @doc false
-  def open_port(options) do
-    {port, listen_options} =
-      case Keyword.get(options, :port, 0) do
-        {port, options} -> {port, options}
-        port -> {port, []}
+  def validate_ip!(options) do
+    ipfamily = validate_ipfamily!(options)
+    ip = validate_ip!(options, Keyword.get(options, :ipfamily))
+
+    {ipfamily, ip}
+  end
+
+  defp validate_ip!(options, ipfamily) when is_list(options) do
+    ip = Keyword.get(options, :ip, :loopback)
+
+    case {ip, ipfamily} do
+      {{_, _, _, _}, ipfamily} when ipfamily in [:inet, nil] ->
+        ip
+
+      {{_, _, _, _, _, _, _, _}, ipfamily} when ipfamily in [:inet6, nil] ->
+        ip
+
+      {ip, _} when ip in [:loopback, :any] ->
+        ip
+
+      {_ip, :inet} ->
+        raise ArgumentError, "expected :ip to be an IPv4 tuple, got: #{inspect(ip)}"
+
+      {_ip, :inet6} ->
+        raise ArgumentError, "expected :ip to be an IPv6 tuple, got: #{inspect(ip)}"
+
+      {_ip, nil} ->
+        raise ArgumentError,
+              "expected :ip to be an IP tuple, :any, or :loopback, got: #{inspect(ip)}"
+    end
+  end
+
+  defp validate_ipfamily!(options) do
+    ip = Keyword.get(options, :ip)
+    ipfamily = Keyword.get(options, :ipfamily, ipfamily(ip))
+
+    case ipfamily do
+      :inet ->
+        :inet
+
+      :inet6 ->
+        :inet6
+
+      other ->
+        raise(
+          ArgumentError,
+          "expected :ipfamily to be one of :inet or :inet6, got: #{inspect(other)}"
+        )
+    end
+  end
+
+  defp ipfamily({_, _, _, _, _, _, _, _}), do: :inet6
+  defp ipfamily(_other), do: :inet
+
+  @doc false
+  def split_atom_options_with_ipfamily(options, ipfamily_options) do
+    {atoms, options} = Enum.split_with(options, &is_atom/1)
+
+    atoms =
+      case atoms -- ~w(inet inet6)a do
+        ^atoms ->
+          atoms ++ List.wrap(Keyword.get(ipfamily_options, :ipfamily))
+
+        _atoms ->
+          atoms
       end
 
-    port = validate_port!(port: port)
-
-    with {:ok, socket} <- :gen_tcp.listen(port, listen_options),
-         {:ok, port} <- :inet.port(socket),
-         true <- :erlang.port_close(socket) do
-      {:ok, port}
-    else
-      {:error, reason} ->
-        {:error,
-         RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")}
-    end
+    {atoms, options}
   end
 
   @doc false
@@ -276,22 +335,73 @@ defmodule TestServer do
   end
 
   @doc false
-  def host(options) do
-    host = Keyword.get(options, :host)
+  def add_host(options) do
+    Keyword.validate!(options, [:host, :port, :ip, :ipfamily])
 
-    unless is_nil(host) or is_binary(host),
-      do: raise(ArgumentError, "expected :host to be a binary or nil, got: #{inspect(host)}")
-
-    case host do
-      nil ->
+    case Keyword.has_key?(options, :host) do
+      false ->
         "localhost"
 
-      host ->
-        :inet_db.set_lookup([:file, :dns])
-        :inet_db.add_host({127, 0, 0, 1}, [String.to_charlist(host)])
-        :inet_db.add_host({0, 0, 0, 0, 0, 0, 0, 1}, [String.to_charlist(host)])
+      true ->
+        host = Keyword.fetch!(options, :host)
 
-        host
+        do_add_host(host, options)
+    end
+  end
+
+  defp do_add_host(host, options) when is_binary(host) do
+    ipfamily = Keyword.get(options, :ipfamily, :inet)
+    host_ip = resolve_ip(Keyword.get(options, :ip), ipfamily)
+    name = String.to_charlist(host)
+
+    lookup =
+      case Keyword.fetch!(:inet_db.get_rc(), :lookup) do
+        [:file | methods] -> methods
+        methods -> methods
+      end
+
+    :ok = :inet_db.set_lookup([:file])
+    aliases = list_aliases_for_ip(host_ip)
+    ips = list_ips_for_hostname(name, ipfamily)
+    :ok = :inet_db.set_lookup([:file | lookup])
+
+    ips != [] &&
+      raise ArgumentError, "expected :host not to resolve to an IP address, got: #{inspect(ips)}"
+
+    :inet_db.add_host(host_ip, [name | aliases])
+
+    ExUnit.Callbacks.on_exit(fn ->
+      case aliases do
+        [] -> :inet_db.del_host(host_ip)
+        aliases -> :inet_db.add_host(host_ip, aliases)
+      end
+    end)
+
+    host
+  end
+
+  defp do_add_host(host, _options) do
+    raise(ArgumentError, "expected :host to be a binary, got: #{inspect(host)}")
+  end
+
+  defp resolve_ip({0, 0, 0, 0}, _inet), do: {127, 0, 0, 1}
+  defp resolve_ip({0, 0, 0, 0, 0, 0, 0, 0}, _inet), do: {0, 0, 0, 0, 0, 0, 0, 1}
+  defp resolve_ip({_, _, _, _} = ip, _inet), do: ip
+  defp resolve_ip({_, _, _, _, _, _, _, _} = ip, _inet), do: ip
+  defp resolve_ip(_, :inet6), do: {0, 0, 0, 0, 0, 0, 0, 1}
+  defp resolve_ip(_, :inet), do: {127, 0, 0, 1}
+
+  defp list_aliases_for_ip(ip) do
+    case :inet.gethostbyaddr(ip) do
+      {:ok, {:hostent, name, aliases, _inet, _, _ips}} -> [name | aliases]
+      {:error, :nxdomain} -> []
+    end
+  end
+
+  defp list_ips_for_hostname(name, ipfamily) do
+    case :inet.gethostbyname(name, ipfamily) do
+      {:ok, {:hostent, _name, _aliases, _inet, _, ips}} -> ips
+      {:error, _} -> []
     end
   end
 

@@ -8,21 +8,25 @@ defmodule TestServer.UDP.Server do
   def start(instance, options) do
     transport = validate_transport!(options)
     port = TestServer.validate_port!(options)
+    {ipfamily, ip} = TestServer.validate_ip!(options)
 
     options =
       options
+      |> Keyword.put(:ipfamily, ipfamily)
+      |> Keyword.put(:ip, ip)
       |> put_tls_options(transport)
       |> Keyword.put(:transport, transport)
 
     listen_options = listen_options(options, transport)
 
-    with {:ok, socket, port} <- transport_listen(transport, port, listen_options) do
+    with {:ok, socket, {ip, port}} <- transport_listen(transport, port, listen_options) do
       {:ok, receiver_pid} = start_receiver(instance, socket)
       :ok = TestServer.supervise_server(receiver_pid, fn _ -> transport_close(socket) end)
       {_transport, listener_socket} = socket
 
       {:ok,
        options
+       |> Keyword.put(:ip, ip)
        |> Keyword.put(:port, port)
        |> Keyword.put(:listener, listener_socket)
        |> Keyword.put(:receiver, receiver_pid)}
@@ -52,15 +56,19 @@ defmodule TestServer.UDP.Server do
   defp listen_options(options, transport) do
     tls_options = Keyword.get(options, :tls, [])
 
-    [mode: :binary]
-    |> Keyword.merge(Keyword.get(options, :listen, []))
+    {listen_atoms, listen_options} =
+      options
+      |> Keyword.get(:listen, [])
+      |> TestServer.split_atom_options_with_ipfamily(options)
+
+    options
+    |> Keyword.take([:ip])
+    |> Keyword.put(:mode, :binary)
+    |> Keyword.merge(listen_options)
     |> Keyword.merge((transport == :dtls && tls_options) || [])
     |> Keyword.put(:active, false)
     |> then(fn listen_options ->
-      case Keyword.get(options, :ipfamily, :inet) do
-        :inet -> listen_options
-        ipfamily -> [ipfamily | listen_options]
-      end
+      listen_atoms ++ listen_options
     end)
   end
 
@@ -72,24 +80,21 @@ defmodule TestServer.UDP.Server do
     end
     |> case do
       {:ok, socket} ->
-        {:ok, {transport, socket}, transport_port({transport, socket})}
+        {:ok, {transport, socket}, transport_address({transport, socket})}
 
       {:error, reason} ->
-        exception =
-          RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")
-
-        {:error, exception}
+        {:error, reason}
     end
   end
 
-  defp transport_port({transport, raw_socket}) do
-    {:ok, {_address, port}} =
+  defp transport_address({transport, raw_socket}) do
+    {:ok, address} =
       case transport do
         :udp -> :inet.sockname(raw_socket)
         :dtls -> :ssl.sockname(raw_socket)
       end
 
-    port
+    address
   end
 
   defp start_receiver(instance, {:udp, raw_socket} = listener) do

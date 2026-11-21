@@ -2,7 +2,8 @@ defmodule TestServer.HTTP.Server do
   @moduledoc """
   HTTP server adapter behaviour.
 
-  Defines the behaviour for custom HTTP server adapters used by `TestServer.HTTP`.
+  Defines the behaviour for custom HTTP server adapters used by
+  `TestServer.HTTP`.
 
   ## Usage
 
@@ -11,14 +12,19 @@ defmodule TestServer.HTTP.Server do
 
         @impl TestServer.HTTP.Server
         def start(instance, port, scheme, options, server_options) do
+          {ipfamily, ip} = TestServer.validate_ip!(options)
+
           my_http_server_options =
             server_options
             |> Keyword.put(:port, port)
-            |> Keyword.put_new(:ipfamily, options[:ipfamily])
+            |> Keyword.put(:ip, ip)
+            |> Keyword.put(:ipfamily, ipfamily)
 
           case MyHTTPServer.start(my_http_server_options) do
             {:ok, server_pid} ->
-              {:ok, server_pid, my_http_server_options, &MyHTTPServer.stop/1}
+              {:ok, address} = MyHTTPServer.get_address(server_pid)
+
+              {:ok, server_pid, address, my_http_server_options, &MyHTTPServer.stop/1}
 
             {:error, error} ->
               {:error, error}
@@ -30,37 +36,53 @@ defmodule TestServer.HTTP.Server do
       end
   """
   @type scheme :: :http | :https
-  @type port_number :: :inet.port_number()
-  @type options :: [tls: keyword(), ipfamily: :inet | :inet6]
+  @type options :: [ip: TestServer.ip_address(), ipfamily: TestServer.ipfamily(), tls: keyword()]
   @type server_options :: keyword()
+  @type address :: {TestServer.ip_address(), TestServer.port_number()}
   @type on_exit :: (server_pid :: pid() -> :ok)
 
-  @callback start(TestServer.instance(), port_number(), scheme(), options(), server_options()) ::
-              {:ok, term(), server_options(), on_exit()} | {:error, term()}
+  @callback start(
+              TestServer.instance(),
+              TestServer.port_number(),
+              scheme(),
+              options(),
+              server_options()
+            ) ::
+              {:ok, pid(), address(), server_options(), on_exit()} | {:error, term()}
+
   @callback socket_pid(Plug.Conn.t()) :: pid()
 
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
     scheme = validate_scheme!(options)
+    port = TestServer.validate_port!(options)
+    {ipfamily, ip} = TestServer.validate_ip!(options)
     options = put_tls_options(options, scheme)
-    ip_family = Keyword.get(options, :ipfamily, :inet)
-    test_server_options = [tls: Keyword.get(options, :tls, []), ipfamily: ip_family]
     {mod, server_options} = http_server(options)
 
-    with {:ok, port} <- TestServer.open_port(options),
-         {:ok, server_pid, server_options, on_exit_fn} <-
-           mod.start(instance, port, scheme, test_server_options, server_options) do
-      :ok = TestServer.supervise_server(server_pid, on_exit_fn)
+    test_server_options =
+      options
+      |> Keyword.take([:tls])
+      |> Keyword.put(:ipfamily, ipfamily)
+      |> Keyword.put(:ip, ip)
 
-      options =
-        options
-        |> Keyword.put(:scheme, scheme)
-        |> Keyword.put(:port, port)
-        |> Keyword.put(:http_server, {mod, server_options})
-        |> Keyword.put(:server, server_pid)
+    case mod.start(instance, port, scheme, test_server_options, server_options) do
+      {:ok, server_pid, {ip, port}, server_options, on_exit_fn} ->
+        :ok = TestServer.supervise_server(server_pid, on_exit_fn)
 
-      {:ok, options}
+        options =
+          options
+          |> Keyword.put(:scheme, scheme)
+          |> Keyword.put(:ip, ip)
+          |> Keyword.put(:port, port)
+          |> Keyword.put(:http_server, {mod, server_options})
+          |> Keyword.put(:server, server_pid)
+
+        {:ok, options}
+
+      {:error, error} ->
+        {:error, error}
     end
   end
 

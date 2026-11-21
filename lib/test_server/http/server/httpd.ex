@@ -20,22 +20,61 @@ defmodule TestServer.HTTP.Server.Httpd do
   @impl TestServer.HTTP.Server
   def start(instance, port, scheme, options, httpd_options) do
     httpd_options =
-      httpd_options
+      options
+      |> ipfamily_bind_address()
+      |> Keyword.merge(httpd_options)
       |> Keyword.put(:port, port)
       |> Keyword.put(:modules, [__MODULE__])
       |> Keyword.put_new(:server_name, ~c"Httpd Test Server")
       |> Keyword.put_new(:document_root, ~c"/tmp")
       |> Keyword.put_new(:server_root, ~c"/tmp")
       |> Keyword.put_new(:handler_plug, {TestServer.HTTP.Plug, {__MODULE__, [], instance}})
-      |> Keyword.put_new(:ipfamily, options[:ipfamily])
       |> put_tls_options(scheme, options[:tls])
 
     case :inets.start(:httpd, httpd_options) do
       {:ok, server_pid} ->
-        {:ok, server_pid, httpd_options, &:inets.stop(:httpd, &1)}
+        info = :httpd.info(server_pid)
+        address = {Keyword.fetch!(info, :bind_address), Keyword.fetch!(info, :port)}
+
+        {:ok, server_pid, address, httpd_options, &:inets.stop(:httpd, &1)}
 
       {:error, error} ->
         {:error, error}
+    end
+  end
+
+  # `:httpd` doesn't surface the actual TCP bind port when passing in the
+  # `:any` and `:loopback` addresses so we translate it here. Also
+  # `:bind_address` does not accept `:loopback`.
+  defp ipfamily_bind_address(options) do
+    ipfamily = Keyword.get(options, :ipfamily, :inet)
+    ip = Keyword.get(options, :ip)
+    options = Keyword.take(options, [:ipfamily])
+
+    case ip do
+      nil ->
+        options
+
+      :loopback ->
+        ip =
+          case ipfamily do
+            :inet -> {127, 0, 0, 1}
+            :inet6 -> {0, 0, 0, 0, 0, 0, 0, 1}
+          end
+
+        Keyword.put(options, :bind_address, ip)
+
+      :any ->
+        ip =
+          case ipfamily do
+            :inet -> {0, 0, 0, 0}
+            :inet6 -> {0, 0, 0, 0, 0, 0, 0, 0}
+          end
+
+        Keyword.put(options, :bind_address, ip)
+
+      ip when is_tuple(ip) ->
+        Keyword.put(options, :bind_address, ip)
     end
   end
 
@@ -274,7 +313,11 @@ defmodule TestServer.HTTP.Server.Httpd do
     data
     |> httpd(:http_version)
     |> IO.iodata_to_binary()
-    |> String.to_existing_atom()
+    |> case do
+      "HTTP/1.0" -> :"HTTP/1.0"
+      "HTTP/1.1" -> :"HTTP/1.1"
+      "HTTP/2" -> :"HTTP/2"
+    end
   end
 
   @impl Plug.Conn.Adapter
@@ -292,6 +335,14 @@ defmodule TestServer.HTTP.Server.Httpd do
 
   @impl Plug.Conn.Adapter
   def get_peer_data(data), do: peer_data(data)
+
+  @impl Plug.Conn.Adapter
+  def get_sock_data(data) do
+    {:init_data, _, {port, address}, _} = httpd(data, :init_data)
+    {:ok, address} = :inet.parse_address(address)
+
+    %{address: address, port: port}
+  end
 
   # Unsupported HTTP/2 features
 

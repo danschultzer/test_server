@@ -42,17 +42,21 @@ defmodule TestServer.UDP do
 
   ## Options
 
-    * `:port`             - integer of port number, defaults to random port
-      that can be opened;
+    * `:port`             - integer of port number. Defaults to `0` which
+      selects a random port;
+
+    * `:ip`               - a `t:TestServer.ip_address/0` the server will bind
+      to. Defaults to `:loopback`;
+
+    * `:ipfamily`         - the IP address type to use, either `:inet` or
+      `:inet6`. Defaults to `:inet6` if `:ip` is IPv6 format, otherwise
+      `:inet`;
 
     * `:transport`        - the supported socket transport, either `:udp` or
       `:dtls`. Defaults to `:udp`;
 
     * `:tls`              - passthru options for DTLS configuration handled by
       `:ssl`;
-
-    * `:ipfamily`         - the IP address type to use, either `:inet` or
-      `:inet6`. Defaults to `:inet`;
 
     * `:listen`           - options passed to the transport listener. Defaults
       to `[mode: :binary]`, `:active` can't be set;
@@ -70,7 +74,16 @@ defmodule TestServer.UDP do
   """
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
-    Keyword.validate!(options, [:port, :transport, :tls, :ipfamily, :listen, :suppress_warning])
+    Keyword.validate!(options, [
+      :port,
+      :ip,
+      :transport,
+      :tls,
+      :ipfamily,
+      :listen,
+      :suppress_warning
+    ])
+
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
   end
 
@@ -152,7 +165,7 @@ defmodule TestServer.UDP do
     end
   end
 
-  @spec address() :: {binary(), :inet.port_number()}
+  @spec address() :: {binary(), TestServer.port_number()}
   def address, do: address([])
 
   @doc """
@@ -160,17 +173,17 @@ defmodule TestServer.UDP do
 
   ## Options
 
-    * `:host` - binary host value, it'll be added to inet for IP `127.0.0.1`
-      and `::1`, defaults to `"localhost"`;
+    * `:host` - binary host value, it'll be registered in the `m::inet` DNS
+      file for the instance's IP. Defaults to `"localhost"`;
 
   ## Examples
 
       TestServer.UDP.start!(port: 4040)
 
       assert TestServer.UDP.address() == {"localhost", 4040}
-      assert TestServer.UDP.address(host: "myserver.test") == {"myserver.test", 4040}
+      assert TestServer.UDP.address(host: "myhost.test") == {"myhost.test", 4040}
   """
-  @spec address(keyword() | TestServer.instance()) :: {binary(), :inet.port_number()}
+  @spec address(keyword() | TestServer.instance()) :: {binary(), TestServer.port_number()}
   def address(options) when is_list(options),
     do: address(TestServer.fetch_protocol_instance!(__MODULE__), options)
 
@@ -181,13 +194,18 @@ defmodule TestServer.UDP do
 
   See `address/1` for options.
   """
-  @spec address(TestServer.instance(), keyword()) :: {binary(), :inet.port_number()}
+  @spec address(TestServer.instance(), keyword()) :: {binary(), TestServer.port_number()}
   def address({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
-    Keyword.validate!(options, [:host])
     TestServer.assert_instance_alive!(instance)
 
-    host = TestServer.host(options)
-    port = instance |> Instance.options() |> Keyword.fetch!(:port)
+    options =
+      instance
+      |> Instance.options()
+      |> Keyword.take(~w(port ip ipfamily)a)
+      |> Keyword.merge(options)
+
+    port = Keyword.fetch!(options, :port)
+    host = TestServer.add_host(options)
 
     {host, port}
   end

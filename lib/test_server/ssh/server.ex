@@ -6,29 +6,43 @@ defmodule TestServer.SSH.Server do
   @doc false
   @spec start(TestServer.instance(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def start(instance, options) do
-    with {:ok, port} <- TestServer.open_port(options),
-         {host_keys, daemon_options} = daemon_options(instance, options),
-         {:ok, daemon_pid} <- :ssh.daemon(port, daemon_options) do
-      options =
-        options
-        |> Keyword.put(:host_keys, host_keys)
-        |> Keyword.put(:port, port)
-        |> Keyword.put(:daemon, daemon_pid)
+    port = TestServer.validate_port!(options)
+    {ipfamily, ip} = TestServer.validate_ip!(options)
+    options = Keyword.merge(options, ipfamily: ipfamily, ip: ip)
+    {host_keys, daemon_options} = daemon_options(instance, options)
 
-      TestServer.supervise_server(daemon_pid, &:ssh.stop_daemon/1)
-      install_ssh_log_filter()
+    case :ssh.daemon(port, daemon_options) do
+      {:ok, daemon_pid} ->
+        TestServer.supervise_server(daemon_pid, &:ssh.stop_daemon/1)
+        install_ssh_log_filter()
 
-      {:ok, options}
+        {:ok, info} = :ssh.daemon_info(daemon_pid)
+        ip = Keyword.fetch!(info, :ip)
+        port = Keyword.fetch!(info, :port)
+
+        options =
+          options
+          |> Keyword.put(:host_keys, host_keys)
+          |> Keyword.put(:ip, ip)
+          |> Keyword.put(:port, port)
+          |> Keyword.put(:daemon, daemon_pid)
+
+        {:ok, options}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   defp daemon_options(instance, options) do
     tmp_dir = to_charlist(System.tmp_dir!())
 
-    {log_level, daemon_options} =
+    {daemon_atoms, daemon_options} =
       options
       |> Keyword.get(:daemon, [])
-      |> Keyword.pop(:log_level, :warning)
+      |> TestServer.split_atom_options_with_ipfamily(options)
+
+    {log_level, daemon_options} = Keyword.pop(daemon_options, :log_level, :warning)
 
     validate_log_level!(log_level)
 
@@ -84,10 +98,12 @@ defmodule TestServer.SSH.Server do
       |> put_subsystems(instance, options)
 
     daemon_options =
-      case Keyword.get(options, :ipfamily, :inet) do
-        :inet -> daemon_options
-        ipfamily -> [ipfamily | daemon_options]
-      end
+      options
+      |> Keyword.take([:ip])
+      |> Keyword.merge(daemon_options)
+      |> then(fn daemon_options ->
+        daemon_atoms ++ daemon_options
+      end)
 
     {host_keys, daemon_options}
   end

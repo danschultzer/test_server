@@ -624,6 +624,15 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.stop()
     end
 
+    test "when connection doesn't exist" do
+      instance = TestServer.TCP.start!()
+      connection = {instance, make_ref()}
+
+      assert_raise RuntimeError,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to have a connection registered under \#Reference\<[0-9.]+\>/,
+                   fn -> TestServer.TCP.handle(connection) end
+    end
+
     test "when connection instance not running" do
       connection = TestServer.TCP.connection()
       :ok = TestServer.TCP.stop()
@@ -1215,10 +1224,11 @@ defmodule TestServer.TCPTest do
 
     test "when connection doesn't exist" do
       instance = TestServer.TCP.start!()
+      connection = {instance, make_ref()}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because it does not exist/,
-                   fn -> TestServer.TCP.send({instance, make_ref()}) end
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to have a connection registered under \#Reference\<[0-9.]+\>/,
+                   fn -> TestServer.TCP.send(connection) end
     end
 
     test "when client has not connected" do

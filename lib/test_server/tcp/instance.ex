@@ -20,7 +20,7 @@ defmodule TestServer.TCP.Instance do
   @spec register(
           TestServer.instance(),
           {:handle, TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}
-        ) :: {:ok, map()}
+        ) :: {:ok, map()} | {:error, :not_found}
   def register({TestServer.TCP, instance_pid}, {:handle, connection_ref, options, stacktrace}) do
     Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
     Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 2)
@@ -33,7 +33,7 @@ defmodule TestServer.TCP.Instance do
           {:send, TestServer.TCP.connection_ref(), keyword()}
         ) ::
           {:ok, pid()}
-          | {:error, :einval}
+          | {:error, :not_found}
           | {:error, :enotconn}
           | {:error, :closed}
   def register({TestServer.TCP, instance_pid}, {:send, connection_ref, options}) do
@@ -172,15 +172,21 @@ defmodule TestServer.TCP.Instance do
   end
 
   def handle_call({:register, {:handle, connection_ref, options, stacktrace}}, _from, state) do
-    handler = %{
-      connection_ref: connection_ref,
-      match: Keyword.get(options, :match),
-      to: Keyword.fetch!(options, :to),
-      stacktrace: stacktrace,
-      suspended: false
-    }
+    case Enum.find(state.connections, &(&1.ref == connection_ref)) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+      _connection ->
+        handler = %{
+          connection_ref: connection_ref,
+          match: Keyword.get(options, :match),
+          to: Keyword.fetch!(options, :to),
+          stacktrace: stacktrace,
+          suspended: false
+        }
+
+        {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+    end
   end
 
   def handle_call({:register, {:send, connection_ref, timeout}}, from, state) do
@@ -189,7 +195,7 @@ defmodule TestServer.TCP.Instance do
 
     case {connection, alive?} do
       {nil, _} ->
-        {:reply, {:error, :einval}, state}
+        {:reply, {:error, :not_found}, state}
 
       {%{owner: nil} = connection, _} ->
         timer =

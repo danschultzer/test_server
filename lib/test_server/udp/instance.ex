@@ -20,7 +20,7 @@ defmodule TestServer.UDP.Instance do
   @spec register(
           TestServer.instance(),
           {:handle, TestServer.UDP.peer_ref(), keyword(), TestServer.stacktrace()}
-        ) :: {:ok, map()}
+        ) :: {:ok, map()} | {:error, :not_found}
   def register({TestServer.UDP, instance_pid}, {:handle, peer_ref, options, stacktrace}) do
     Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
     Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 2)
@@ -33,7 +33,7 @@ defmodule TestServer.UDP.Instance do
           {:send, TestServer.UDP.peer_ref(), keyword()}
         ) ::
           {:ok, pid()}
-          | {:error, :einval}
+          | {:error, :not_found}
           | {:error, :enotconn}
           | {:error, :closed}
   def register({TestServer.UDP, instance_pid}, {:send, peer_ref, options}) do
@@ -174,15 +174,21 @@ defmodule TestServer.UDP.Instance do
   end
 
   def handle_call({:register, {:handle, peer_ref, options, stacktrace}}, _from, state) do
-    handler = %{
-      peer_ref: peer_ref,
-      match: Keyword.get(options, :match),
-      to: Keyword.fetch!(options, :to),
-      stacktrace: stacktrace,
-      suspended: false
-    }
+    case Enum.find(state.peers, &(&1.ref == peer_ref)) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+      _peer ->
+        handler = %{
+          peer_ref: peer_ref,
+          match: Keyword.get(options, :match),
+          to: Keyword.fetch!(options, :to),
+          stacktrace: stacktrace,
+          suspended: false
+        }
+
+        {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+    end
   end
 
   def handle_call({:register, {:send, peer_ref, timeout}}, from, state) do
@@ -191,7 +197,7 @@ defmodule TestServer.UDP.Instance do
 
     case {peer, alive?} do
       {nil, _} ->
-        {:reply, {:error, :einval}, state}
+        {:reply, {:error, :not_found}, state}
 
       {%{owner: nil} = peer, _} ->
         timer =

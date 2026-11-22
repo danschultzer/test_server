@@ -713,6 +713,15 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.stop()
     end
 
+    test "when peer doesn't exist" do
+      instance = TestServer.UDP.start!()
+      peer = {instance, make_ref()}
+
+      assert_raise RuntimeError,
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to have a peer registered under \#Reference\<[0-9.]+\>/,
+                   fn -> TestServer.UDP.handle(peer) end
+    end
+
     test "when peer instance not running" do
       instance = TestServer.UDP.start!()
       peer = TestServer.UDP.peer(instance)
@@ -1092,10 +1101,11 @@ defmodule TestServer.UDPTest do
 
     test "when peer doesn't exist" do
       instance = TestServer.UDP.start!()
+      peer = {instance, make_ref()}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to peer on TestServer\.UDP\.Instance \#PID\<[0-9.]+\> because it does not exist/,
-                   fn -> TestServer.UDP.send({instance, make_ref()}) end
+                   ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to have a peer registered under \#Reference\<[0-9.]+\>/,
+                   fn -> TestServer.UDP.send(peer) end
     end
 
     test "when client has not sent a datagram" do

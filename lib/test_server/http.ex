@@ -566,10 +566,10 @@ defmodule TestServer.HTTP do
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
     options = Keyword.put_new(options, :to, &default_websocket_handler/2)
 
-    {:ok, _handler} =
-      Instance.register(instance, {:websocket, {:handle, websocket_ref, options, stacktrace}})
-
-    :ok
+    case Instance.register(instance, {:websocket, {:handle, websocket_ref, options, stacktrace}}) do
+      {:ok, _handler} -> :ok
+      {:error, :not_found} -> raise_websocket_not_found!(instance, websocket_ref)
+    end
   end
 
   defp default_websocket_handler(frame, state),
@@ -577,6 +577,10 @@ defmodule TestServer.HTTP do
 
   @spec websocket_send(websocket()) :: :ok
   def websocket_send(websocket), do: websocket_send(websocket, [])
+
+  defp raise_websocket_not_found!(instance, websocket_ref) do
+    raise "expected #{TestServer.format_instance(instance)} to have a websocket registered under #{inspect(websocket_ref)}"
+  end
 
   @doc """
   Sends a message to a websocket endpoint.
@@ -613,8 +617,8 @@ defmodule TestServer.HTTP do
 
         :ok
 
-      {:error, :einval} ->
-        raise_send_error!(instance, "it does not exist")
+      {:error, :not_found} ->
+        raise_websocket_not_found!(instance, websocket_ref)
 
       {:error, :enotconn} ->
         raise_send_error!(instance, "no client has connected to it")

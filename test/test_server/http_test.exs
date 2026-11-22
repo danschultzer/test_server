@@ -1238,6 +1238,15 @@ defmodule TestServer.HTTPTest do
                      fn -> TestServer.HTTP.websocket_handle(websocket) end
       end
 
+      test "when websocket doesn't exist" do
+        instance = TestServer.HTTP.start!()
+        websocket = {instance, make_ref()}
+
+        assert_raise RuntimeError,
+                     ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to have a websocket registered under \#Reference\<[0-9.]+\>/,
+                     fn -> TestServer.HTTP.websocket_handle(websocket) end
+      end
+
       test "with invalid options" do
         websocket = TestServer.HTTP.websocket("/ws")
 
@@ -1563,10 +1572,11 @@ defmodule TestServer.HTTPTest do
 
       test "when connection doesn't exist" do
         instance = TestServer.HTTP.start!()
+        connection = {instance, make_ref()}
 
         assert_raise RuntimeError,
-                     ~r/cannot send to websocket on TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> because it does not exist/,
-                     fn -> TestServer.HTTP.websocket_send({instance, make_ref()}) end
+                     ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to have a websocket registered under \#Reference\<[0-9.]+\>/,
+                     fn -> TestServer.HTTP.websocket_send(connection) end
       end
 
       test "when client has disconnected" do

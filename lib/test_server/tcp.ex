@@ -380,12 +380,17 @@ defmodule TestServer.TCP do
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
     options = Keyword.put_new(options, :to, &default_handler/2)
 
-    {:ok, _handler} = Instance.register(instance, {:handle, connection_ref, options, stacktrace})
-
-    :ok
+    case Instance.register(instance, {:handle, connection_ref, options, stacktrace}) do
+      {:ok, _handler} -> :ok
+      {:error, :not_found} -> raise_connection_not_found!(instance, connection_ref)
+    end
   end
 
   defp default_handler(data, state), do: {:reply, data, state}
+
+  defp raise_connection_not_found!(instance, connection_ref) do
+    raise "expected #{TestServer.format_instance(instance)} to have a connection registered under #{inspect(connection_ref)}"
+  end
 
   @spec send(connection()) :: :ok
   def send(connection), do: send(connection, [])
@@ -429,8 +434,8 @@ defmodule TestServer.TCP do
 
         :ok
 
-      {:error, :einval} ->
-        raise_send_error!(instance, "it does not exist")
+      {:error, :not_found} ->
+        raise_connection_not_found!(instance, connection_ref)
 
       {:error, :enotconn} ->
         raise_send_error!(instance, "no client has connected to it")

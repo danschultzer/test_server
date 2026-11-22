@@ -25,7 +25,7 @@ defmodule TestServer.SSH.Instance do
           TestServer.instance(),
           {:handle, TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}
         ) ::
-          {:ok, map()}
+          {:ok, map()} | {:error, :not_found}
   def register({TestServer.SSH, instance_pid}, {:handle, channel_ref, options, stacktrace}) do
     Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
     Keyword.has_key?(options, :to) && validate_function_option!(options, :to, [2, 3])
@@ -190,15 +190,21 @@ defmodule TestServer.SSH.Instance do
   end
 
   def handle_call({:register, {:handle, channel_ref, options, stacktrace}}, _from, state) do
-    handler = %{
-      channel_ref: channel_ref,
-      match: Keyword.get(options, :match),
-      to: Keyword.fetch!(options, :to),
-      stacktrace: stacktrace,
-      suspended: false
-    }
+    case Enum.find(state.channels, &(&1.ref == channel_ref)) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+      _channel ->
+        handler = %{
+          channel_ref: channel_ref,
+          match: Keyword.get(options, :match),
+          to: Keyword.fetch!(options, :to),
+          stacktrace: stacktrace,
+          suspended: false
+        }
+
+        {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+    end
   end
 
   def handle_call(

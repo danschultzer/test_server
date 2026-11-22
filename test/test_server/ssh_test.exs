@@ -860,12 +860,21 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.stop()
     end
 
-    test "when connection instance not running" do
+    test "when channel instance not running" do
       channel = TestServer.SSH.channel()
       :ok = TestServer.SSH.stop()
 
       assert_raise RuntimeError,
                    ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
+                   fn -> TestServer.SSH.handle(channel) end
+    end
+
+    test "when channel doesn't exist" do
+      instance = TestServer.SSH.start!()
+      channel = {instance, make_ref()}
+
+      assert_raise RuntimeError,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to have a channel registered under \#Reference\<[0-9.]+\>/,
                    fn -> TestServer.SSH.handle(channel) end
     end
 

@@ -446,9 +446,10 @@ defmodule TestServer.SSH do
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
     options = Keyword.put_new(options, :to, &default_handler/2)
 
-    {:ok, _handler} = Instance.register(instance, {:handle, channel_ref, options, stacktrace})
-
-    :ok
+    case Instance.register(instance, {:handle, channel_ref, options, stacktrace}) do
+      {:ok, _handler} -> :ok
+      {:error, :not_found} -> raise_channel_not_found!(instance, channel_ref)
+    end
   end
 
   defp default_handler({:exec, _channel_id, _want_reply, command}, state),
@@ -459,6 +460,10 @@ defmodule TestServer.SSH do
 
   defp default_handler(_message, state),
     do: {:ok, state}
+
+  defp raise_channel_not_found!(instance, channel_ref) do
+    raise "expected #{TestServer.format_instance(instance)} to have a channel registered under #{inspect(channel_ref)}"
+  end
 
   @doc """
   Fetches the host keys for the current test server.

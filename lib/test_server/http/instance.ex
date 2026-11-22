@@ -39,7 +39,7 @@ defmodule TestServer.HTTP.Instance do
           {:websocket,
            {:handle, TestServer.HTTP.websocket_ref(), keyword(), TestServer.stacktrace()}}
         ) ::
-          {:ok, map()}
+          {:ok, map()} | {:error, :not_found}
   def register(
         {TestServer.HTTP, instance_pid},
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
@@ -56,7 +56,7 @@ defmodule TestServer.HTTP.Instance do
   @spec register(
           TestServer.instance(),
           {:websocket, {:send, TestServer.HTTP.websocket_ref(), keyword()}}
-        ) :: {:ok, pid()} | {:error, :einval} | {:error, :enotconn} | {:error, :closed}
+        ) :: {:ok, pid()} | {:error, :not_found} | {:error, :enotconn} | {:error, :closed}
   def register({TestServer.HTTP, instance_pid}, {:websocket, {:send, websocket_ref, options}}) do
     validate_function_option!(options, :to, 1)
 
@@ -282,22 +282,29 @@ defmodule TestServer.HTTP.Instance do
         _from,
         state
       ) do
-    handler = %{
-      websocket_ref: websocket_ref,
-      match: Keyword.get(options, :match),
-      to: Keyword.fetch!(options, :to),
-      stacktrace: stacktrace,
-      suspended: false
-    }
+    case Enum.find(state.websockets, &(&1.ref == websocket_ref)) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, {:ok, handler}, %{state | websocket_handlers: state.websocket_handlers ++ [handler]}}
+      _websocket ->
+        handler = %{
+          websocket_ref: websocket_ref,
+          match: Keyword.get(options, :match),
+          to: Keyword.fetch!(options, :to),
+          stacktrace: stacktrace,
+          suspended: false
+        }
+
+        {:reply, {:ok, handler},
+         %{state | websocket_handlers: state.websocket_handlers ++ [handler]}}
+    end
   end
 
   def handle_call({:register, {:websocket, {:send, websocket_ref, _options}}}, _from, state) do
     result =
       case Enum.find(state.websockets, &(&1.ref == websocket_ref)) do
         nil ->
-          {:error, :einval}
+          {:error, :not_found}
 
         %{owner: nil} ->
           {:error, :enotconn}

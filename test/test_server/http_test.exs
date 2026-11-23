@@ -383,7 +383,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to receive a request for these handlers before the test ended:/
@@ -402,7 +402,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected GET request at / with params:"
       assert io =~ "query_params: %{\"a\" => \"1\"}"
       assert io =~ "No active handlers."
@@ -423,7 +423,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /."
       refute io =~ "No active handlers."
       refute io =~ "The following handlers have been processed:"
@@ -449,7 +449,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /."
       assert io =~ "No active handlers."
       assert io =~ "The following handlers have been processed:"
@@ -469,7 +469,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /other-path."
     end
 
@@ -487,7 +487,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /other-path."
       assert io =~ "Active handlers:"
       assert io =~ "#1: GET | POST at /path"
@@ -507,7 +507,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /."
       assert io =~ "#1: POST at any path"
     end
@@ -526,7 +526,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected GET request at /."
       assert io =~ "#1: no methods at any path"
     end
@@ -617,7 +617,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/1 in TestServer.HTTPTest.HandleToFunctionRaiseTest"
     end
@@ -636,7 +636,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "expected a Plug.Conn struct, got: :invalid"
     end
 
@@ -654,7 +654,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "cannot halt a connection because all requests must be processed"
     end
 
@@ -678,7 +678,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/1 in TestServer.HTTPTest.HandleMatchFunctionRaiseTest"
     end
@@ -811,7 +811,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/1 in TestServer.HTTPTest.PlugFunctionRaiseTest"
     end
@@ -831,7 +831,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "expected a Plug.Conn struct, got: :invalid"
     end
 
@@ -850,7 +850,7 @@ defmodule TestServer.HTTPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "cannot halt a connection because all requests must be processed"
     end
   end
@@ -1086,7 +1086,7 @@ defmodule TestServer.HTTPTest do
           end
         end
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
         assert io =~
                  ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to receive a frame for these websocket handlers before the test ended:/
@@ -1110,7 +1110,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketHandleUnexpectedFrameTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "received an unexpected WebSocket frame"
         assert io =~ "No active websocket handlers."
         refute io =~ "The following websocket handlers have been processed:"
@@ -1140,7 +1140,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketHandleUnexpectedBeforeProcessedTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "received an unexpected WebSocket frame"
         refute io =~ "No active websocket handlers."
         refute io =~ "The following websocket handlers have been processed:"
@@ -1172,7 +1172,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketHandleUnexpectedAfterProcessedTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "received an unexpected WebSocket frame"
         assert io =~ "No active websocket handlers."
         assert io =~ "The following websocket handlers have been processed:"
@@ -1214,7 +1214,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketHandleMatchFunctionRaiseTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "(RuntimeError) boom"
         assert io =~ "anonymous fn/2 in TestServer.HTTPTest.WebSocketHandleMatchFunctionRaiseTest"
         assert_receive {:frame, {:text, frame}}
@@ -1262,7 +1262,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketHandleToFunctionRaiseTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "(RuntimeError) boom"
         assert io =~ "anonymous fn/2 in TestServer.HTTPTest.WebSocketHandleToFunctionRaiseTest"
         assert_receive {:frame, {:text, frame}}
@@ -1291,7 +1291,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketHandleToFunctionInvalidResponseTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "(RuntimeError) expected callback response to be one of:"
         assert io =~ "Got: :invalid"
         assert_receive {:frame, {:text, frame}}
@@ -1411,7 +1411,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketSendToFunctionRaiseTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "(RuntimeError) boom"
         assert io =~ "anonymous fn/1 in TestServer.HTTPTest.WebSocketSendToFunctionRaiseTest"
         assert_receive {:frame, {:text, message}}
@@ -1438,7 +1438,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketSendToInvalidResponseTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "(RuntimeError) expected callback response to be one of:"
         assert io =~ "Got: :invalid"
         assert_receive {:frame, {:text, message}}
@@ -1467,7 +1467,7 @@ defmodule TestServer.HTTPTest do
 
         Process.register(self(), WebSocketSendToInvalidFrameTest)
 
-        assert io = capture_io(fn -> ExUnit.run() end)
+        assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
         assert io =~ "(RuntimeError) expected callback response to be one of:"
         assert io =~ "Got: {:reply, :invalid, %{}}"
         assert_receive {:frame, {:text, message}}

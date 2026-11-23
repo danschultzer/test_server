@@ -580,7 +580,7 @@ defmodule TestServer.SSHTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                ~r/expected all channels on TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be used, but some were not:/
@@ -599,7 +599,7 @@ defmodule TestServer.SSHTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "No channels registered."
       refute io =~ "The following channels were registered:"
     end
@@ -624,7 +624,7 @@ defmodule TestServer.SSHTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       refute io =~ "No channels registered."
       assert io =~ "The following channels were registered:"
     end
@@ -803,7 +803,7 @@ defmodule TestServer.SSHTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to receive a message for these handlers before the test ended:/
@@ -825,7 +825,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleUnexpectedMessageTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected SSH message"
       assert io =~ "No active handlers."
       refute io =~ "The following handlers have been processed:"
@@ -850,7 +850,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleUnexpectedMessageBeforeProcessedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected SSH message"
       assert io =~ "Active handlers:"
       refute io =~ "The following handlers have been processed:"
@@ -882,7 +882,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleUnexpectedMessageAfterProcessedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected SSH message"
       assert io =~ "The following handlers have been processed:"
       assert_receive {:data, data}
@@ -905,7 +905,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo3ArityFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/3 in TestServer.SSHTest.HandleTo3ArityFunctionRaiseTest"
       assert_receive {:data, data}
@@ -928,7 +928,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo3ArityFunctionInvalidResponseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) expected callback response to be one of:"
       assert io =~ "Got: :invalid"
       assert_receive {:data, data}
@@ -993,7 +993,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.SSHTest.HandleTo2ArityFunctionRaiseTest"
       assert_receive {:data, data}
@@ -1016,7 +1016,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionInvalidResponseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) expected callback response to be one of:"
       assert io =~ "Got: :invalid"
       assert_receive {:data, data}
@@ -1105,7 +1105,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionInvalidOptionsTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "(RuntimeError) expected valid options in callback response, got: [invalid: :option]"
@@ -1135,7 +1135,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionInvalidCloseOptionTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "(RuntimeError) expected valid options in callback response, got: [close: :invalid]"
@@ -1165,7 +1165,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionInvalidExitStatusOptionTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "(RuntimeError) expected valid options in callback response, got: [exit_status: :invalid]"
@@ -1195,7 +1195,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionOutOfRangeExitStatusOptionTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "(RuntimeError) expected valid options in callback response, got: [exit_status: #{0xFFFF_FFFF + 1}]"
@@ -1225,7 +1225,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionInvalidDataTypeCodeOptionTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "(RuntimeError) expected valid options in callback response, got: [data_type_code: :invalid]"
@@ -1255,7 +1255,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), HandleTo2ArityFunctionOutOfRangeDataTypeCodeOptionTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "(RuntimeError) expected valid options in callback response, got: [data_type_code: #{0xFFFF_FFFF + 1}]"
@@ -1310,7 +1310,7 @@ defmodule TestServer.SSHTest do
 
       Process.register(self(), MatchFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.SSHTest.MatchFunctionRaiseTest"
       assert_receive {:data, data}

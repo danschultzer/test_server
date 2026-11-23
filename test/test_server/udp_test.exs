@@ -419,7 +419,7 @@ defmodule TestServer.UDPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                ~r/expected all peers on TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be used, but some were not:/
@@ -442,7 +442,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), PeerNoPeersTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected UDP peer"
       assert io =~ "No peers registered."
       refute io =~ "The following peers were registered:"
@@ -472,7 +472,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), PeersUnexpectedPeerAfterUsedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected UDP peer"
       refute io =~ "No peers registered."
       assert io =~ "The following peers were registered:"
@@ -522,7 +522,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleToFunctionRaisePeerRecoverTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "(RuntimeError) could not handle UDP data: peer process no longer accepts data"
@@ -602,7 +602,7 @@ defmodule TestServer.UDPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to receive data for these handlers before the test ended:/
@@ -626,7 +626,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleUnexpectedDataTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received unexpected UDP data"
       assert io =~ "No active handlers."
       refute io =~ "The following handlers have been processed:"
@@ -653,7 +653,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleUnexpectedDataBeforeProcessedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received unexpected UDP data"
       assert io =~ "Active handlers:"
       refute io =~ "The following handlers have been processed:"
@@ -683,7 +683,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleUnexpectedDataAfterProcessedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received unexpected UDP data"
       assert io =~ "The following handlers have been processed:"
       assert_receive {:data, data}
@@ -735,7 +735,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleSSLErrorTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "could not receive UDP data: :test"
       assert_receive {:data, data}
       assert_io_udp_data(io, data)
@@ -760,7 +760,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleToFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.UDPTest.HandleToFunctionRaiseTest"
       assert_receive {:data, data}
@@ -785,7 +785,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleToInvalidResponseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) expected callback response to be one of:"
       assert io =~ "Got: :invalid"
       assert_receive {:data, data}
@@ -816,7 +816,7 @@ defmodule TestServer.UDPTest do
 
       assert io =
                capture_io(fn ->
-                 log = capture_log(fn -> ExUnit.run() end)
+                 log = capture_log(fn -> assert %{failures: 1} = ExUnit.run() end)
 
                  send(self(), {:log, log})
                end)
@@ -865,7 +865,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), HandleMatchFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.UDPTest.HandleMatchFunctionRaiseTest"
       assert_receive {:data, data}
@@ -1037,7 +1037,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), SendToFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/1 in TestServer.UDPTest.SendToFunctionRaiseTest"
       assert_receive {:data, data}
@@ -1065,7 +1065,7 @@ defmodule TestServer.UDPTest do
 
       Process.register(self(), SendToInvalidResponseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) expected callback response to be one of:"
       assert io =~ "Got: :invalid"
       assert_receive {:data, data}
@@ -1097,7 +1097,7 @@ defmodule TestServer.UDPTest do
 
       assert io =
                capture_io(fn ->
-                 log = capture_log(fn -> ExUnit.run() end)
+                 log = capture_log(fn -> assert %{failures: 1} = ExUnit.run() end)
 
                  send(self(), {:log, log})
                end)

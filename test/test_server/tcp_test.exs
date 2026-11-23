@@ -417,7 +417,7 @@ defmodule TestServer.TCPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                ~r/expected all connections on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be used, but some were not:/
@@ -439,7 +439,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), ConnectionNoConnectionsTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected TCP connection attempt"
       assert io =~ "No connections registered."
       refute io =~ "The following connections were registered:"
@@ -465,7 +465,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), ConnectionUnexpectedConnectionAfterUsedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received an unexpected TCP connection attempt"
       refute io =~ "No connections registered."
       assert io =~ "The following connections were registered:"
@@ -565,7 +565,7 @@ defmodule TestServer.TCPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to receive data for these handlers before the test ended:/
@@ -589,7 +589,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleUnexpectedDataTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received unexpected TCP data"
       assert io =~ "No active handlers."
       refute io =~ "The following handlers have been processed:"
@@ -616,7 +616,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleUnexpectedDataBeforeProcessedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received unexpected TCP data"
       assert io =~ "Active handlers:"
       refute io =~ "The following handlers have been processed:"
@@ -646,7 +646,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleUnexpectedDataAfterProcessedTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "received unexpected TCP data"
       assert io =~ "The following handlers have been processed:"
       assert_receive {:data, data}
@@ -696,7 +696,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleTCPErrorTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
@@ -730,7 +730,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleSSLErrorTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "could not receive TCP data: :test"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
@@ -755,7 +755,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleToFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.TCPTest.HandleToFunctionRaiseTest"
       assert_receive {:data, data}
@@ -780,7 +780,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleToInvalidResponseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) expected callback response to be one of:"
       assert io =~ "Got: :invalid"
       assert_receive {:data, data}
@@ -811,7 +811,7 @@ defmodule TestServer.TCPTest do
 
       assert io =
                capture_io(fn ->
-                 log = capture_log(fn -> ExUnit.run() end)
+                 log = capture_log(fn -> assert %{failures: 1} = ExUnit.run() end)
 
                  send(self(), {:log, log})
                end)
@@ -854,7 +854,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleToReplyResponseInvalidReplyOptionsTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "expected valid options in callback response, got: [invalid: true]"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
@@ -882,7 +882,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleToReplyResponseInvalidUpgradeOptionsTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "can only upgrade TCP transport from TCP to TLS, got: :tcp to :udp"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
@@ -910,7 +910,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleToReplyResponseNoTLSTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
       assert io =~
                "cannot upgrade TCP transport to TLS without the [transport: [:tcp, :tls]] option"
@@ -943,7 +943,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleToReplyResponseInvalidTransportSwitchTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "can only upgrade TCP transport from TCP to TLS, got: :tls to :tls"
       assert_receive {:data, data}
       assert_io_tcp_data(io, data)
@@ -970,7 +970,7 @@ defmodule TestServer.TCPTest do
         end
       end
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "could not upgrade TCP transport: :closed"
     end
 
@@ -1039,7 +1039,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), HandleMatchFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/2 in TestServer.TCPTest.HandleMatchFunctionRaiseTest"
       assert_receive {:data, data}
@@ -1224,7 +1224,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), SendToFunctionRaiseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) boom"
       assert io =~ "anonymous fn/1 in TestServer.TCPTest.SendToFunctionRaiseTest"
       assert_receive {:data, data}
@@ -1251,7 +1251,7 @@ defmodule TestServer.TCPTest do
 
       Process.register(self(), SendToInvalidResponseTest)
 
-      assert io = capture_io(fn -> ExUnit.run() end)
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
       assert io =~ "(RuntimeError) expected callback response to be one of:"
       assert io =~ "Got: :invalid"
       assert_receive {:data, data}
@@ -1283,7 +1283,7 @@ defmodule TestServer.TCPTest do
 
       assert io =
                capture_io(fn ->
-                 log = capture_log(fn -> ExUnit.run() end)
+                 log = capture_log(fn -> assert %{failures: 1} = ExUnit.run() end)
 
                  send(self(), {:log, log})
                end)

@@ -23,6 +23,7 @@ Requires Elixir 1.15 or higher.
 - Added UDP support with `TestServer.UDP`
 - Added buffered support for `Plug.Conn.send_chunked/2` to `TestServer.HTTP.Server.Httpd`
 - Added support for `Plug.Conn.send_file/3` to `TestServer.HTTP.Server.Httpd`
+- Added support for plug tuples in `TestServer.HTTP.plug/2` and `TestServer.HTTP.handle/2`
 
 ### Changed
 

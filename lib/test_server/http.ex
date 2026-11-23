@@ -10,7 +10,8 @@ defmodule TestServer.HTTP do
   alias TestServer.HTTP.Instance
 
   @type handler_ref :: reference()
-  @type plug_module :: module()
+  @type plug :: plug_module() | plug_fun()
+  @type plug_module :: module() | {module(), Plug.opts()}
   @type plug_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
 
   @typedoc "An anonymous function that matches a request."
@@ -276,7 +277,7 @@ defmodule TestServer.HTTP do
     * `:match`     - an `t:match_fun/0` function that returns a boolean.
       Defaults to matching anything;
 
-    * `:to`        - a `t:handler_fun/0` or `t:plug_module/0` that will be
+    * `:to`        - a `t:handler_fun/0` or `t:plug/0` that will be
       called when the handler matches. Defaults to return the HTTP protocol;
 
   ## Examples
@@ -355,7 +356,7 @@ defmodule TestServer.HTTP do
   @doc """
   Adds a plug to the current test server.
 
-  This plug will be called for all requests before a handler is matched.
+  This `t:plug/0` will be called for all requests before a handler is matched.
 
   ## Examples
 

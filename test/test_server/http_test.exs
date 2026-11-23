@@ -567,13 +567,13 @@ defmodule TestServer.HTTPTest do
 
     test "with invalid `:to` option" do
       assert_raise ArgumentError,
-                   ~r/expected :to to be a 1-arity function or a Plug module, got: :invalid/,
+                   "expected :to to be a 1-arity function, a Plug module, or a Plug module tuple, got: :invalid",
                    fn ->
                      TestServer.HTTP.handle(to: :invalid)
                    end
 
       assert_raise ArgumentError,
-                   ~r/expected :to to be a 1-arity function or a Plug module/,
+                   ~r/expected :to to be a 1-arity function, a Plug module, or a Plug module tuple, got: \#Function/,
                    fn ->
                      TestServer.HTTP.handle(to: fn conn, _options -> conn end)
                    end
@@ -800,12 +800,14 @@ defmodule TestServer.HTTPTest do
       defmodule HandleToPlug do
         def init(options), do: options
 
-        def call(conn, _options), do: Plug.Conn.resp(conn, 200, to_string(__MODULE__))
+        def call(conn, options), do: Plug.Conn.resp(conn, 200, inspect({__MODULE__, options}))
       end
 
       TestServer.HTTP.handle(to: HandleToPlug)
+      TestServer.HTTP.handle(to: {HandleToPlug, [a: 1]})
 
-      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, to_string(HandleToPlug)}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, inspect({HandleToPlug, []})}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, inspect({HandleToPlug, [a: 1]})}
     end
 
     test "when `:to` function raises exception" do
@@ -966,14 +968,22 @@ defmodule TestServer.HTTPTest do
 
     test "with invalid plug" do
       assert_raise ArgumentError,
-                   ~r/expected a 1-arity function or a Plug module, got: :invalid/,
+                   "expected a 1-arity function, a Plug module, or a Plug module tuple, got: :invalid",
                    fn ->
                      TestServer.HTTP.plug(:invalid)
                    end
 
-      assert_raise ArgumentError, ~r/expected a 1-arity function or a Plug module/, fn ->
-        TestServer.HTTP.plug(InvalidPlug)
-      end
+      assert_raise ArgumentError,
+                   ~r/expected a 1-arity function, a Plug module, or a Plug module tuple, got: #{inspect(InvalidPlug)}/,
+                   fn ->
+                     TestServer.HTTP.plug(InvalidPlug)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/expected a 1-arity function, a Plug module, or a Plug module tuple, got:/,
+                   fn ->
+                     TestServer.HTTP.plug({fn conn -> conn end, []})
+                   end
     end
 
     test "with plug function" do
@@ -993,13 +1003,18 @@ defmodule TestServer.HTTPTest do
       defmodule ModulePlug do
         def init(options), do: options
 
-        def call(conn, _options), do: %{conn | params: %{"plug" => to_string(__MODULE__)}}
+        def call(conn, options), do: %{conn | params: %{"plug" => inspect({__MODULE__, options})}}
       end
 
       TestServer.HTTP.plug(ModulePlug)
       TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
 
-      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, to_string(ModulePlug)}
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, inspect({ModulePlug, []})}
+
+      TestServer.HTTP.plug({ModulePlug, [a: 1]})
+      TestServer.HTTP.handle(to: &Plug.Conn.resp(&1, 200, &1.params["plug"]))
+
+      assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, inspect({ModulePlug, [a: 1]})}
     end
 
     test "when plug function raises exception" do
@@ -1170,13 +1185,13 @@ defmodule TestServer.HTTPTest do
                      end
 
         assert_raise ArgumentError,
-                     ~r/expected :to to be a 1-arity function or a Plug module, got: :invalid/,
+                     "expected :to to be a 1-arity function, a Plug module, or a Plug module tuple, got: :invalid",
                      fn ->
                        TestServer.HTTP.websocket(to: :invalid)
                      end
 
         assert_raise ArgumentError,
-                     ~r/expected :to to be a 1-arity function or a Plug module, got: #Function/,
+                     ~r/expected :to to be a 1-arity function, a Plug module, or a Plug module tuple, got: \#Function/,
                      fn ->
                        TestServer.HTTP.websocket(to: fn conn, _options -> conn end)
                      end

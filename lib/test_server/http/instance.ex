@@ -70,7 +70,7 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected a 1-arity function or a Plug module, got: #{inspect(plug)}"
+              "expected a 1-arity function, a Plug module, or a Plug module tuple, got: #{inspect(plug)}"
     end
   end
 
@@ -83,11 +83,13 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a 1-arity function or a Plug module, got: #{inspect(plug)}"
+              "expected #{inspect(option)} to be a 1-arity function, a Plug module, or a Plug module tuple, got: #{inspect(plug)}"
     end
   end
 
   defp plug?(plug) when is_function(plug, 1), do: true
+
+  defp plug?({plug, _options}) when is_atom(plug), do: plug?(plug)
 
   defp plug?(plug) do
     is_atom(plug) and
@@ -480,7 +482,11 @@ defmodule TestServer.HTTP.Instance do
   end
 
   defp run_plug_handler(conn, plug) when is_atom(plug) do
-    options = plug.init([])
+    run_plug_handler(conn, {plug, []})
+  end
+
+  defp run_plug_handler(conn, {plug, options}) when is_atom(plug) do
+    options = plug.init(options)
     plug.call(conn, options)
   end
 

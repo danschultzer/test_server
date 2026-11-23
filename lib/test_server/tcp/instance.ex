@@ -22,8 +22,8 @@ defmodule TestServer.TCP.Instance do
           {:handle, TestServer.TCP.connection_ref(), keyword(), TestServer.stacktrace()}
         ) :: {:ok, map()} | {:error, :not_found}
   def register({TestServer.TCP, instance_pid}, {:handle, connection_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 2)
+    Keyword.has_key?(options, :match) && TestServer.validate_function_option!(options, :match, 2)
+    Keyword.has_key?(options, :to) && TestServer.validate_function_option!(options, :to, 2)
 
     GenServer.call(instance_pid, {:register, {:handle, connection_ref, options, stacktrace}})
   end
@@ -37,41 +37,15 @@ defmodule TestServer.TCP.Instance do
           | {:error, :enotconn}
           | {:error, :closed}
   def register({TestServer.TCP, instance_pid}, {:send, connection_ref, options}) do
-    timeout = validate_timeout!(options)
+    timeout = TestServer.validate_timeout!(options, @send_timeout)
 
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 1)
+    Keyword.has_key?(options, :to) && TestServer.validate_function_option!(options, :to, 1)
 
     GenServer.call(
       instance_pid,
       {:register, {:send, connection_ref, timeout}},
       timeout + 1_000
     )
-  end
-
-  defp validate_function_option!(options, option, arity) do
-    value = Keyword.get(options, option)
-
-    case is_function(value, arity) do
-      true ->
-        :ok
-
-      false ->
-        raise ArgumentError,
-              "expected #{inspect(option)} to be a #{arity}-arity function, got: #{inspect(value)}"
-    end
-  end
-
-  defp validate_timeout!(options) do
-    timeout = Keyword.get(options, :timeout, @send_timeout)
-
-    case is_integer(timeout) and timeout > 0 do
-      true ->
-        timeout
-
-      false ->
-        raise ArgumentError,
-              "expected :timeout to be a positive integer, got: #{inspect(timeout)}"
-    end
   end
 
   @spec dispatch(

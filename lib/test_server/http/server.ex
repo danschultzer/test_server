@@ -59,7 +59,7 @@ defmodule TestServer.HTTP.Server do
     port = TestServer.validate_port!(options)
     {ipfamily, ip} = TestServer.validate_ip!(options)
     options = put_tls_options(options, scheme)
-    {mod, server_options} = http_server(options)
+    {mod, server_options} = validate_http_server_option!(options)
 
     test_server_options =
       options
@@ -101,8 +101,9 @@ defmodule TestServer.HTTP.Server do
   defp put_tls_options(options, :https), do: TestServer.put_tls_options(options)
   defp put_tls_options(options, :http), do: options
 
-  defp http_server(options) do
-    case options[:http_server] || Application.get_env(:test_server, :http_server) ||
+  defp validate_http_server_option!(options) do
+    case options[:http_server] ||
+           Application.get_env(:test_server, :http_server) ||
            default_http_server() do
       {mod, server_options} when is_atom(mod) and is_list(server_options) ->
         {mod, server_options}

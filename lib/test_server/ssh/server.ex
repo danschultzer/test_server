@@ -44,7 +44,7 @@ defmodule TestServer.SSH.Server do
 
     {log_level, daemon_options} = Keyword.pop(daemon_options, :log_level, :warning)
 
-    validate_log_level!(log_level)
+    TestServer.validate_log_level!(log_level)
 
     {host_keys_fn, host_keys} =
       case host_keys(options) do
@@ -106,15 +106,6 @@ defmodule TestServer.SSH.Server do
       end)
 
     {host_keys, daemon_options}
-  end
-
-  @levels [:emergency, :alert, :critical, :error, :warning, :notice, :info, :debug, :none, :all]
-
-  defp validate_log_level!(level) when level in @levels, do: :ok
-
-  defp validate_log_level!(level) do
-    raise ArgumentError,
-          "expected :log_level in :daemon to be one of #{Enum.map_join(@levels, ", ", &inspect/1)}, got: #{inspect(level)}"
   end
 
   defp host_keys(options) do

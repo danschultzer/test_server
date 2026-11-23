@@ -309,6 +309,45 @@ defmodule TestServer do
   defp ipfamily(_other), do: :inet
 
   @doc false
+  def validate_function_option!(options, option, arity) do
+    value = Keyword.get(options, option)
+    arities = List.wrap(arity)
+
+    case Enum.any?(arities, &is_function(value, &1)) do
+      true ->
+        :ok
+
+      false ->
+        raise ArgumentError,
+              "expected #{inspect(option)} to be a #{Enum.join(arities, " or ")}-arity function, got: #{inspect(value)}"
+    end
+  end
+
+  @doc false
+  def validate_timeout!(options, default_timeout) do
+    timeout = Keyword.get(options, :timeout, default_timeout)
+
+    case is_integer(timeout) and timeout > 0 do
+      true ->
+        timeout
+
+      false ->
+        raise ArgumentError,
+              "expected :timeout to be a positive integer, got: #{inspect(timeout)}"
+    end
+  end
+
+  @levels [:emergency, :alert, :critical, :error, :warning, :notice, :info, :debug, :none, :all]
+
+  @doc false
+  def validate_log_level!(level) when level in @levels, do: :ok
+
+  def validate_log_level!(level) do
+    raise ArgumentError,
+          "expected :log_level in :daemon to be one of #{Enum.map_join(@levels, ", ", &inspect/1)}, got: #{inspect(level)}"
+  end
+
+  @doc false
   def split_atom_options_with_ipfamily(options, ipfamily_options) do
     {atoms, options} = Enum.split_with(options, &is_atom/1)
 

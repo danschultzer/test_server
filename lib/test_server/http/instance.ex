@@ -44,8 +44,8 @@ defmodule TestServer.HTTP.Instance do
         {TestServer.HTTP, instance_pid},
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
       ) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
-    validate_function_option!(options, :to, 2)
+    Keyword.has_key?(options, :match) && TestServer.validate_function_option!(options, :match, 2)
+    TestServer.validate_function_option!(options, :to, 2)
 
     GenServer.call(
       instance_pid,
@@ -58,7 +58,7 @@ defmodule TestServer.HTTP.Instance do
           {:websocket, {:send, TestServer.HTTP.websocket_ref(), keyword()}}
         ) :: {:ok, pid()} | {:error, :not_found} | {:error, :enotconn} | {:error, :closed}
   def register({TestServer.HTTP, instance_pid}, {:websocket, {:send, websocket_ref, options}}) do
-    validate_function_option!(options, :to, 1)
+    TestServer.validate_function_option!(options, :to, 1)
 
     GenServer.call(instance_pid, {:register, {:websocket, {:send, websocket_ref, options}}})
   end
@@ -96,19 +96,6 @@ defmodule TestServer.HTTP.Instance do
       Code.ensure_loaded?(plug) and
       function_exported?(plug, :init, 1) and
       function_exported?(plug, :call, 2)
-  end
-
-  defp validate_function_option!(options, option, arity) do
-    value = Keyword.get(options, option)
-
-    case is_function(value, arity) do
-      true ->
-        :ok
-
-      false ->
-        raise ArgumentError,
-              "expected #{inspect(option)} to be a #{arity}-arity function, got: #{inspect(value)}"
-    end
   end
 
   @spec dispatch(TestServer.instance(), {:plug, Plug.Conn.t()}) ::

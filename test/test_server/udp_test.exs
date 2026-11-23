@@ -649,32 +649,38 @@ defmodule TestServer.UDPTest do
       assert UDPClient.receive_data(socket_1) == {:ok, "peer 2"}
     end
 
-    test "when peer process dies" do
-      defmodule HandleToFunctionRaisePeerRecoverTest do
+    test "when peer process crashes with raise" do
+      defmodule HandlePeerProcessCrashWithRaiseTest do
         use ExUnit.Case
 
-        test "continues" do
+        test "continues receiving" do
           instance = TestServer.UDP.start!(suppress_warning: true)
-          peer = TestServer.UDP.peer(instance)
+          peer_1 = TestServer.UDP.peer(instance)
+          peer_2 = TestServer.UDP.peer(instance)
           address = TestServer.UDP.address(instance)
 
-          TestServer.UDP.handle(peer, to: fn _data, _state -> raise "boom" end)
+          TestServer.UDP.handle(peer_1, to: fn _data, _state -> raise "boom" end)
+          TestServer.UDP.handle(peer_2)
 
           assert {:ok, socket} = UDPClient.open()
           assert UDPClient.send(socket, address, "first") == :ok
           assert {:ok, error} = UDPClient.receive_data(socket)
           assert error =~ "(RuntimeError) boom"
-          assert [%{owner: owner_pid}] = TestServer.UDP.Instance.peers(instance)
+          assert [%{owner: owner_pid}, _peer] = TestServer.UDP.Instance.peers(instance)
           assert monitor = Process.monitor(owner_pid)
           assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
-          assert UDPClient.send(socket, address, "second") == :ok
+          assert UDPClient.send(socket, address, "ping") == :ok
           assert {:ok, data} = UDPClient.receive_data(socket)
 
           send(__MODULE__, {:data, data})
+
+          assert {:ok, socket} = UDPClient.open()
+          assert UDPClient.send(socket, address, "ping") == :ok
+          assert UDPClient.receive_data(socket) == {:ok, "ping"}
         end
       end
 
-      Process.register(self(), HandleToFunctionRaisePeerRecoverTest)
+      Process.register(self(), HandlePeerProcessCrashWithRaiseTest)
 
       assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 

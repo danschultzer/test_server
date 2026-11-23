@@ -123,16 +123,22 @@ defmodule TestServer.UDP.Server do
         socket = {:udp, raw_socket, address, port}
         peer = Map.get_lazy(peers, {address, port}, fn -> start_peer(instance, socket) end)
 
-        case Process.alive?(peer) do
-          true ->
-            send(peer, {:udp, raw_socket, data})
-            receive_loop(instance, listener, Map.put(peers, {address, port}, peer))
+        peers =
+          case Process.alive?(peer) do
+            true ->
+              send(peer, {:udp, raw_socket, data})
 
-          false ->
-            message = "could not handle UDP data: peer process no longer accepts data"
+              Map.put(peers, {address, port}, peer)
 
-            send_error(socket, instance, RuntimeError.exception(message))
-        end
+            false ->
+              message = "could not handle UDP data: peer process no longer accepts data"
+
+              send_error(socket, instance, RuntimeError.exception(message))
+
+              peers
+          end
+
+        receive_loop(instance, listener, peers)
 
       {:error, :closed} ->
         exit(:shutdown)

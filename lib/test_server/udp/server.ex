@@ -193,13 +193,15 @@ defmodule TestServer.UDP.Server do
     owner_pid
   end
 
+  @handshake_timeout 5_000
+
   defp dtls_handshake(raw_socket) do
-    case :ssl.handshake(raw_socket) do
+    case :ssl.handshake(raw_socket, @handshake_timeout) do
       {:ok, raw_socket} ->
         {:ok, raw_socket}
 
       {:ok, raw_socket, _extensions} ->
-        :ssl.handshake_continue(raw_socket, [])
+        :ssl.handshake_continue(raw_socket, [], @handshake_timeout)
 
       {:error, reason} ->
         {:error, reason}

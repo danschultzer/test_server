@@ -163,11 +163,13 @@ defmodule TestServer.TCP.Server do
     :ok
   end
 
+  @handshake_timeout 5_000
+
   defp transport_handshake({transport, raw_socket}, options \\ []) do
     transport
     |> case do
       :tcp -> {:ok, raw_socket}
-      :tls -> :ssl.handshake(raw_socket, options)
+      :tls -> :ssl.handshake(raw_socket, options, @handshake_timeout)
     end
     |> case do
       {:ok, raw_socket} ->
@@ -182,7 +184,7 @@ defmodule TestServer.TCP.Server do
   end
 
   defp transport_handshake_continue(raw_socket, :tls) do
-    case :ssl.handshake_continue(raw_socket, []) do
+    case :ssl.handshake_continue(raw_socket, [], @handshake_timeout) do
       {:ok, raw_socket} -> {:ok, {:tls, raw_socket}}
       {:error, reason} -> {:error, reason}
     end

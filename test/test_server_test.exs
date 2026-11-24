@@ -668,6 +668,19 @@ defmodule TestServerTest do
   end
 
   describe "add_host/2" do
+    setup do
+      assert_inet_db_lookup_reset()
+
+      :ok
+    end
+
+    # Remove when Elixir 1.18 is required
+    if Version.match?(System.version(), "< 1.18.0") do
+      setup do
+        {:ok, test_pid: self()}
+      end
+    end
+
     test "with invalid options" do
       assert_raise ArgumentError, ~r/unknown keys/, fn ->
         TestServer.add_host(invalid: :option)
@@ -684,70 +697,187 @@ defmodule TestServerTest do
       assert TestServer.add_host([]) == "localhost"
     end
 
-    test "with `:host` option" do
-      assert TestServer.add_host(host: "myhost.test") == "myhost.test"
-
-      assert {:ok, {_, _, _, _, _, [{127, 0, 0, 1}]}} =
-               :inet.gethostbyname(~c"myhost.test", :inet)
-
-      assert :inet.gethostbyname(~c"myhost.test", :inet6) == {:error, :nxdomain}
+    test "with `host: \"localhost\"` option" do
+      assert TestServer.add_host(host: "localhost") == "localhost"
+      assert TestServer.add_host(host: "localhost", ip: {127, 0, 0, 1}) == "localhost"
+      assert TestServer.add_host(host: "localhost", ip: {0, 0, 0, 0, 0, 0, 0, 1}) == "localhost"
     end
 
-    test "with `:host` option and `ipfamily: :inet6`" do
-      assert TestServer.add_host(host: "myhost.test", ipfamily: :inet6) == "myhost.test"
-      assert :inet.gethostbyname(~c"myhost.test", :inet) == {:error, :nxdomain}
-
-      assert {:ok, {_, _, _, _, _, [{0, 0, 0, 0, 0, 0, 0, 1}]}} =
-               :inet.gethostbyname(~c"myhost.test", :inet6)
-    end
-
-    test "with `:host` option with existing DNS entry" do
-      assert TestServer.add_host(host: "myhost.test") == "myhost.test"
+    test "with `:host` option with existing host with different IP" do
+      lookup = :inet_db.res_option(:lookup)
 
       assert_raise ArgumentError,
                    ~r/expected :host not to resolve to an IP address, got: \[{127, 0, 0, 1}\]/,
                    fn ->
-                     TestServer.add_host(host: "myhost.test")
+                     TestServer.add_host(host: "localhost", ip: {127, 0, 0, 2})
                    end
+
+      assert :inet_db.res_option(:lookup) == lookup
+    end
+
+    test "with `:host` option with existing host in registrations with different IP" do
+      assert TestServer.add_host(host: "example.test", ip: {127, 0, 0, 2}) == "example.test"
+
+      assert_raise ArgumentError,
+                   ~r/expected :host not to resolve to an IP address, got: \[{127, 0, 0, 2}\]/,
+                   fn ->
+                     TestServer.add_host(host: "EXAMPLE.test")
+                   end
+    end
+
+    test "with `:host` option with existing hosts in :inet_db :file with different IP" do
+      :ok = :inet_db.add_host({127, 0, 0, 2}, [~c"existing.test"])
+
+      on_exit(fn ->
+        assert inet_db_hosts() == [{{127, 0, 0, 2}, [~c"existing.test"]}]
+        assert :inet_db.del_host({127, 0, 0, 2}) == :ok
+      end)
+
+      assert_raise ArgumentError,
+                   ~r/expected :host not to resolve to an IP address, got: \[{127, 0, 0, 2}\]/,
+                   fn ->
+                     TestServer.add_host(host: "EXISTING.test")
+                   end
+    end
+
+    test "with `:host` option" do
+      assert TestServer.add_host(host: "example.test") == "example.test"
+
+      assert {:ok, {_, _, _, _, _, [{127, 0, 0, 1}]}} =
+               :inet.gethostbyname(~c"example.test", :inet)
+
+      assert :inet.gethostbyname(~c"example.test", :inet6) == {:error, :nxdomain}
+    end
+
+    test "with `:host` option and `ipfamily: :inet6`" do
+      assert TestServer.add_host(host: "example.test", ipfamily: :inet6) == "example.test"
+      assert :inet.gethostbyname(~c"example.test", :inet) == {:error, :nxdomain}
+
+      assert {:ok, {_, _, _, _, _, [{0, 0, 0, 0, 0, 0, 0, 1}]}} =
+               :inet.gethostbyname(~c"example.test", :inet6)
     end
 
     test "with `:host` option and `:ip` option" do
       private_inet_ip = Application.fetch_env!(:test_server, :private_inet_ip)
 
-      assert TestServer.add_host(host: "myhost.test", ip: private_inet_ip) == "myhost.test"
+      assert TestServer.add_host(host: "example.test", ip: private_inet_ip) == "example.test"
 
       assert {:ok, {_, _, _, _, _, [^private_inet_ip]}} =
-               :inet.gethostbyname(~c"myhost.test", :inet)
+               :inet.gethostbyname(~c"example.test", :inet)
     end
 
-    test "with `:host` option when test ends" do
-      defmodule AddHostWithHostOptionTestEndsTest do
-        use ExUnit.Case
+    test "with `:host` option with existing host with same IP in registrations" do
+      assert TestServer.add_host(host: "example.test") == "example.test"
+      assert TestServer.add_host(host: "example.test") == "example.test"
+    end
 
-        test "succeeds" do
-          TestServer.start_instance(
-            unquote(__MODULE__).FakeProtocol,
-            [],
-            fn _instance -> :ok end
-          )
+    test "with `:host` option with existing hosts with same IP in :inet_db" do
+      :ok = :inet_db.add_host({127, 0, 0, 1}, [~c"existing.test"])
 
-          TestServer.add_host(ip: :loopback, host: "myhost.test")
-
-          assert {:ok, _} = :inet.gethostbyname(~c"myhost.test", :inet)
-          assert {:ok, _} = :inet.gethostbyname(~c"otherhost-1.test", :inet)
-          assert {:ok, _} = :inet.gethostbyname(~c"otherhost-2.test", :inet)
-        end
-      end
-
-      :inet_db.add_host({127, 0, 0, 1}, [~c"otherhost-1.test", ~c"otherhost-2.test"])
-
-      capture_io(fn ->
-        assert %{failures: 0} = ExUnit.run()
+      on_exit(fn ->
+        assert_inet_db_host_release("example.test")
+        assert inet_db_hosts() == [{{127, 0, 0, 1}, [~c"existing.test"]}]
+        assert :inet_db.del_host({127, 0, 0, 1}) == :ok
       end)
 
-      assert :inet.gethostbyname(~c"myhost.test", :inet) == {:error, :nxdomain}
-      assert {:ok, _} = :inet.gethostbyname(~c"otherhost-1.test", :inet)
-      assert {:ok, _} = :inet.gethostbyname(~c"otherhost-2.test", :inet)
+      assert TestServer.add_host(host: "example.test") == "example.test"
+
+      assert {:ok, {_, _, _, _, _, [{127, 0, 0, 1}]}} =
+               :inet.gethostbyname(~c"example.test", :inet)
+    end
+
+    test "with `:host` option with multiple processes", %{test_pid: test_pid} do
+      {:ok, task_1} =
+        Task.start_link(fn ->
+          assert TestServer.add_host(host: "example.test") == "example.test"
+          assert TestServer.add_host(host: "example.test", ipfamily: :inet6) == "example.test"
+          assert TestServer.add_host(host: "task1.test") == "task1.test"
+          assert TestServer.add_host(host: "otherip.test", ip: {127, 0, 0, 2}) == "otherip.test"
+
+          send(test_pid, {:done, self()})
+
+          assert_receive :stop
+        end)
+
+      {:ok, task_2} =
+        Task.start_link(fn ->
+          assert TestServer.add_host(host: "example.test") == "example.test"
+          assert TestServer.add_host(host: "task2.test") == "task2.test"
+
+          send(test_pid, {:done, self()})
+
+          assert_receive :stop
+        end)
+
+      assert monitor_1 = Process.monitor(task_1)
+      assert_receive {:done, ^task_1}
+      assert monitor_2 = Process.monitor(task_2)
+      assert_receive {:done, ^task_2}
+
+      assert :inet.getaddrs(~c"task2.test", :inet) == {:ok, [{127, 0, 0, 1}]}
+
+      send(task_2, :stop)
+
+      assert_receive {:DOWN, ^monitor_2, :process, ^task_2, _reason}
+      assert_inet_db_host_release("task2.test")
+
+      assert :inet.getaddrs(~c"example.test", :inet) == {:ok, [{127, 0, 0, 1}]}
+      assert :inet.getaddrs(~c"example.test", :inet6) == {:ok, [{0, 0, 0, 0, 0, 0, 0, 1}]}
+      assert :inet.getaddrs(~c"task1.test", :inet) == {:ok, [{127, 0, 0, 1}]}
+      assert :inet.getaddrs(~c"otherip.test", :inet) == {:ok, [{127, 0, 0, 2}]}
+      assert :inet_db.res_option(:lookup) == [:file, :native]
+
+      send(task_1, :stop)
+
+      assert_receive {:DOWN, ^monitor_1, :process, ^task_1, _reason}
+      assert_inet_db_lookup_reset()
+    end
+
+    test "with `:host` option when there is a dead process", %{test_pid: test_pid} do
+      {:ok, task_pid} =
+        Task.start(fn ->
+          assert TestServer.add_host(host: "example.test") == "example.test"
+
+          send(test_pid, {:done, self()})
+
+          assert_receive :stop
+        end)
+
+      assert monitor = Process.monitor(task_pid)
+      assert_receive {:done, ^task_pid}
+      assert :inet.getaddrs(~c"example.test", :inet) == {:ok, [{127, 0, 0, 1}]}
+
+      Process.exit(task_pid, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^task_pid, _reason}
+
+      assert TestServer.add_host(host: "otherhost.test") == "otherhost.test"
+      assert :inet.getaddrs(~c"example.test", :inet) == {:error, :nxdomain}
+    end
+
+    test "with `:host` option when InetDB instance terminates" do
+      ip = {127, 0, 0, 2}
+      aliases = [~c"existing-otherhost.test", ~c"existing.test"]
+      :ok = :inet_db.add_host(ip, aliases)
+      on_exit(fn -> :ok = :inet_db.del_host(ip) end)
+
+      assert TestServer.add_host(host: "EXISTING.test", ip: ip) == "EXISTING.test"
+      assert TestServer.add_host(host: "example.test") == "example.test"
+      assert :inet_db.res_option(:lookup) == [:file, :native]
+      assert {ip, aliases} in inet_db_hosts()
+
+      on_exit(fn -> Supervisor.restart_child(TestServer.Supervisor, TestServer.InetDB) end)
+
+      assert :ok = Supervisor.terminate_child(TestServer.Supervisor, TestServer.InetDB)
+
+      assert :inet_db.res_option(:lookup) == [:native]
+      assert inet_db_hosts() == [{ip, aliases}]
+    end
+
+    test "with `:host` option when InetDB instance terminates with no registrations" do
+      on_exit(fn -> Supervisor.restart_child(TestServer.Supervisor, TestServer.InetDB) end)
+
+      assert :ok = Supervisor.terminate_child(TestServer.Supervisor, TestServer.InetDB)
+      assert :inet_db.res_option(:lookup) == [:native]
     end
   end
 
@@ -797,6 +927,52 @@ defmodule TestServerTest do
 
       false ->
         exit(:normal)
+    end
+  end
+
+  defp assert_inet_db_lookup_reset(attempts \\ 10)
+
+  defp assert_inet_db_lookup_reset(0) do
+    flunk(
+      "expected :inet_db lookup to be [:native], got: #{inspect(:inet_db.res_option(:lookup))}"
+    )
+  end
+
+  defp assert_inet_db_lookup_reset(attempts) do
+    case :inet_db.res_option(:lookup) do
+      [:native] ->
+        assert inet_db_hosts() == []
+        :ok
+
+      [:file | _rest] ->
+        Process.sleep(10)
+        assert_inet_db_lookup_reset(attempts - 1)
+    end
+  end
+
+  defp inet_db_hosts do
+    :inet_db.get_rc()
+    |> Enum.map(fn
+      {:host, ip, names} -> {ip, names}
+      _entry -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp assert_inet_db_host_release(host, attempts \\ 10)
+
+  defp assert_inet_db_host_release(host, 0) do
+    flunk("expected #{inspect(host)} to be released from inet_db")
+  end
+
+  defp assert_inet_db_host_release(host, attempts) when attempts > 0 do
+    case Enum.any?(inet_db_hosts(), fn {_ip, names} -> String.to_charlist(host) in names end) do
+      true ->
+        Process.sleep(10)
+        assert_inet_db_host_release(host, attempts - 1)
+
+      false ->
+        :ok
     end
   end
 end

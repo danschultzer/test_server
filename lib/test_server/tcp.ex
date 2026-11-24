@@ -184,14 +184,15 @@ defmodule TestServer.TCP do
   ## Options
 
     * `:host` - binary host value, it'll be registered in the `m::inet` DNS
-      file for the instance's IP. Defaults to `"localhost"`;
+      file for the instance's IP, and will last the duration of the test.
+      Defaults to `"localhost"`.
 
   ## Examples
 
       TestServer.TCP.start!(port: 4040)
 
       assert TestServer.TCP.address() == {"localhost", 4040}
-      assert TestServer.TCP.address(host: "myhost.test") == {"myhost.test", 4040}
+      assert TestServer.TCP.address(host: "example.test") == {"example.test", 4040}
   """
   @spec address(keyword() | TestServer.instance()) :: {binary(), TestServer.port_number()}
   def address(options) when is_list(options),

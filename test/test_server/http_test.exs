@@ -437,7 +437,7 @@ defmodule TestServer.HTTPTest do
 
       assert TestServer.HTTP.url() =~ ~r/^http\:\/\/localhost\:[0-9]+$/
       assert TestServer.HTTP.url("/path") =~ "/path"
-      assert TestServer.HTTP.url(host: "myhost.test") =~ ~r/^http\:\/\/myhost.test\:[0-9]+$/
+      assert TestServer.HTTP.url(host: "example.test") =~ ~r/^http\:\/\/example.test\:[0-9]+$/
     end
 
     test "with invalid `:host` option" do
@@ -456,17 +456,17 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.handle(
         to: fn conn ->
           assert conn.remote_ip == {127, 0, 0, 1}
-          assert conn.host == "myhost.test"
+          assert conn.host == "example.test"
 
           Plug.Conn.resp(conn, 200, "OK")
         end
       )
 
-      url = TestServer.HTTP.url(host: "myhost.test")
+      url = TestServer.HTTP.url(host: "example.test")
 
-      assert %{host: "myhost.test"} = URI.parse(url)
-      assert :inet.getaddr(~c"myhost.test", :inet) == {:ok, {127, 0, 0, 1}}
-      assert :inet.getaddr(~c"myhost.test", :inet6) == {:error, :nxdomain}
+      assert %{host: "example.test"} = URI.parse(url)
+      assert :inet.getaddr(~c"example.test", :inet) == {:ok, {127, 0, 0, 1}}
+      assert :inet.getaddr(~c"example.test", :inet6) == {:error, :nxdomain}
       assert {:ok, _} = HTTPClient.fetch(url)
     end
 
@@ -489,13 +489,13 @@ defmodule TestServer.HTTPTest do
             assert %{address: address} = Plug.Conn.get_sock_data(conn)
             assert address == unquote(Macro.escape(host_ip))
             assert conn.remote_ip == unquote(Macro.escape(host_ip))
-            assert conn.host == "myhost.test"
+            assert conn.host == "example.test"
 
             Plug.Conn.resp(conn, 200, "OK")
           end
         )
 
-        url = TestServer.HTTP.url(host: "myhost.test")
+        url = TestServer.HTTP.url(host: "example.test")
 
         assert ip == unquote(Macro.escape(bind_ip))
         assert %{host: host} = URI.parse(url)

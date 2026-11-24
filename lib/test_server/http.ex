@@ -210,7 +210,8 @@ defmodule TestServer.HTTP do
   ## Options
 
     * `:host` - binary host value, it'll be registered in the `m::inet` DNS
-      file for the instance's IP. Defaults to `"localhost"`;
+      file for the instance's IP, and will last the duration of the test.
+      Defaults to `"localhost"`.
 
   ## Examples
 
@@ -218,7 +219,7 @@ defmodule TestServer.HTTP do
 
       assert TestServer.HTTP.url() == "http://localhost:4444"
       assert TestServer.HTTP.url("/test") == "http://localhost:4444/test"
-      assert TestServer.HTTP.url(host: "myhost.test") == "http://myhost.test:4444"
+      assert TestServer.HTTP.url(host: "example.test") == "http://example.test:4444"
   """
   @spec url(uri_path :: binary() | keyword() | TestServer.instance()) :: binary()
   def url(path) when is_binary(path), do: url(path, [])

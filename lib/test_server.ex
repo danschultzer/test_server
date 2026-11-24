@@ -14,6 +14,7 @@ defmodule TestServer do
   @type ipfamily :: :inet | :inet6
   @type port_number :: :inet.port_number()
 
+  alias TestServer.InetDB
   alias TestServer.InstanceManager
 
   @doc false
@@ -382,45 +383,31 @@ defmodule TestServer do
         "localhost"
 
       true ->
-        host = Keyword.fetch!(options, :host)
+        name = Keyword.fetch!(options, :host)
 
-        do_add_host(host, options)
+        do_add_host(name, options)
     end
   end
 
-  defp do_add_host(host, options) when is_binary(host) do
-    ipfamily = Keyword.get(options, :ipfamily, :inet)
-    host_ip = resolve_ip(Keyword.get(options, :ip), ipfamily)
-    name = String.to_charlist(host)
+  defp do_add_host(name, options) when is_binary(name) do
+    ipfamily = Keyword.get(options, :ipfamily)
+    ip = resolve_ip(Keyword.get(options, :ip), ipfamily)
+    ipfamily = resolve_ipfamily(ip)
 
-    lookup =
-      case Keyword.fetch!(:inet_db.get_rc(), :lookup) do
-        [:file | methods] -> methods
-        methods -> methods
-      end
+    case InetDB.add_host(ip, name, ipfamily) do
+      :ok ->
+        :ok
 
-    :ok = :inet_db.set_lookup([:file])
-    aliases = list_aliases_for_ip(host_ip)
-    ips = list_ips_for_hostname(name, ipfamily)
-    :ok = :inet_db.set_lookup([:file | lookup])
+      {:error, ips} ->
+        raise ArgumentError,
+              "expected :host not to resolve to an IP address, got: #{inspect(ips)}"
+    end
 
-    ips != [] &&
-      raise ArgumentError, "expected :host not to resolve to an IP address, got: #{inspect(ips)}"
-
-    :inet_db.add_host(host_ip, [name | aliases])
-
-    ExUnit.Callbacks.on_exit(fn ->
-      case aliases do
-        [] -> :inet_db.del_host(host_ip)
-        aliases -> :inet_db.add_host(host_ip, aliases)
-      end
-    end)
-
-    host
+    name
   end
 
-  defp do_add_host(host, _options) do
-    raise(ArgumentError, "expected :host to be a binary, got: #{inspect(host)}")
+  defp do_add_host(name, _options) do
+    raise(ArgumentError, "expected :host to be a binary, got: #{inspect(name)}")
   end
 
   defp resolve_ip({0, 0, 0, 0}, _inet), do: {127, 0, 0, 1}
@@ -429,20 +416,10 @@ defmodule TestServer do
   defp resolve_ip({_, _, _, _, _, _, _, _} = ip, _inet), do: ip
   defp resolve_ip(_, :inet6), do: {0, 0, 0, 0, 0, 0, 0, 1}
   defp resolve_ip(_, :inet), do: {127, 0, 0, 1}
+  defp resolve_ip(_, nil), do: {127, 0, 0, 1}
 
-  defp list_aliases_for_ip(ip) do
-    case :inet.gethostbyaddr(ip) do
-      {:ok, {:hostent, name, aliases, _inet, _, _ips}} -> [name | aliases]
-      {:error, :nxdomain} -> []
-    end
-  end
-
-  defp list_ips_for_hostname(name, ipfamily) do
-    case :inet.gethostbyname(name, ipfamily) do
-      {:ok, {:hostent, _name, _aliases, _inet, _, ips}} -> ips
-      {:error, _} -> []
-    end
-  end
+  defp resolve_ipfamily({_, _, _, _, _, _, _, _}), do: :inet6
+  defp resolve_ipfamily({_, _, _, _}), do: :inet
 
   @doc false
   def report_error(instance, {exception, stacktrace}, options) do

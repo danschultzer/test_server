@@ -616,11 +616,11 @@ defmodule TestServer.SSHTest do
         :ok = TestServer.SSH.handle()
         ip = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:ip)
 
-        assert address = TestServer.SSH.address(host: "myhost.test")
+        assert address = TestServer.SSH.address(host: "example.test")
 
         assert ip == unquote(Macro.escape(bind_ip))
         assert {host, port} = address
-        assert host == "myhost.test"
+        assert host == "example.test"
         assert host = to_charlist(host)
         assert :inet.getaddr(host, unquote(ipfamily)) == {:ok, unquote(Macro.escape(host_ip))}
         assert {:ok, conn} = SSHClient.connect(address, inet6: unquote(ipfamily) == :inet6)

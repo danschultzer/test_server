@@ -443,11 +443,11 @@ defmodule TestServer.TCPTest do
         :ok = TestServer.TCP.handle()
         ip = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:ip)
 
-        assert address = TestServer.TCP.address(host: "myhost.test")
+        assert address = TestServer.TCP.address(host: "example.test")
 
         assert ip == unquote(Macro.escape(bind_ip))
         assert {host, port} = address
-        assert host == "myhost.test"
+        assert host == "example.test"
         assert host = to_charlist(host)
         assert :inet.getaddr(host, unquote(ipfamily)) == {:ok, unquote(Macro.escape(host_ip))}
         assert {:ok, socket} = TCPClient.connect(address, [unquote(ipfamily)])

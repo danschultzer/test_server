@@ -21,7 +21,6 @@ defmodule TestServer.InstanceManager do
           {:ok, TestServer.instance()} | {:error, term()}
   def start_instance(caller, protocol_module, options) do
     [_first | stacktrace] = TestServer.pruned_stacktrace(protocol_module)
-
     instance_module = Module.concat(protocol_module, Instance)
 
     options =

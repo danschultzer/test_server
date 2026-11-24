@@ -341,7 +341,6 @@ defmodule TestServer.SSH do
     TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :messages, [:exec, :data])
 
     {:ok, channel} = Instance.register(instance, {:channel, options, stacktrace})
@@ -380,7 +379,7 @@ defmodule TestServer.SSH do
   from a `t:handler_fun/0` allow you to specify options in a keyword list:
 
     * `:data_type_code` - an unsigned 32-bit SSH data type code to send with
-      the reply, defaults to `0` (SSH_MSG_CHANNEL_DATA). Only valid for
+      the reply. Defaults to `0` (SSH_MSG_CHANNEL_DATA). Only valid for
       `:reply` responses;
 
     * `:close`          - whether to send an exit status and EOF and close the
@@ -388,7 +387,7 @@ defmodule TestServer.SSH do
       messages;
 
     * `:exit_status`    - an unsigned 32-bit exit status to send when closing
-      the channel, defaults to `0`;
+      the channel. Defaults to `0`;
 
   ## Examples
 

@@ -75,10 +75,11 @@ defmodule TestServer.HTTP do
       `{TestServer.HTTP.Server.Httpd, []}` depending on which web server is
       available in the project dependencies;
 
-    * `:tls`              - passthru options for TLS configuration handled by
-      the webserver. Default will autogenerate key and certificates when
-      neither `:key` nor `:keyfile` is set and `:scheme` is `:https`. The CA
-      certificates can be fetched from `cacerts/1`;
+    * `:tls`              - options for TLS configuration passed directly to
+      the webserver. When `scheme: :https` defaults to
+      `[key: key, cert: cert, cacerts: cacerts]` when neither `:key` nor
+      `:keyfile` is set in `:tls`. The generated CA certificates can be fetched
+      from `cacerts/0`;
 
     * `:suppress_warning` - suppresses IO warnings on expectation failures
       related to this instance. Defaults to `false`;
@@ -343,7 +344,6 @@ defmodule TestServer.HTTP do
     TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_handler/1)
 
     Instance.register(instance, {:handle, options, stacktrace})

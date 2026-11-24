@@ -72,7 +72,7 @@ defmodule TestServer.MixProject do
     [
       source_ref: "v#{@version}",
       main: "TestServer",
-      canonical: "http://hexdocs.pm/test_server",
+      canonical: "https://test-server.hexdocs.pm",
       source_url: @source_url,
       extras: [
         "CHANGELOG.md": [filename: "CHANGELOG"]

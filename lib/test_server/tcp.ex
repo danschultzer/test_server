@@ -61,11 +61,13 @@ defmodule TestServer.TCP do
     * `:transport`        - the supported socket transport, either `:tcp`,
       `:tls`, or a list containing both. Defaults to `:tcp`;
 
-    * `:tls`              - passthru options for TLS configuration handled by
-      `:ssl`;
-
-    * `:listen`           - options passed to the transport listener. Defaults
-      to `[mode: :binary]`, `:active` can't be set;
+    * `:tls`              - options for TLS configuration passed directly to
+      `:ssl.listen/2`. When `transport: :tls` defaults to
+      `[key: key, cert: cert, cacerts: cacerts]` when neither `:key` nor
+      `:keyfile` is set in `:tls`. The generated CA certificates can be fetched
+      from `cacerts/0`; options for TLS configuration passed directly to
+      `:ssl.listen/2`. Defaults to `[key: key, cert: cert, cacerts: cacerts]`
+      with generated certificates when `transport: :tls`;
 
     * `:suppress_warning` - suppresses IO warnings on expectation failures
       related to this instance. Defaults to `false`;

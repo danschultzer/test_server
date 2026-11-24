@@ -55,8 +55,13 @@ defmodule TestServer.UDP do
     * `:transport`        - the supported socket transport, either `:udp` or
       `:dtls`. Defaults to `:udp`;
 
-    * `:tls`              - passthru options for DTLS configuration handled by
-      `:ssl`;
+    * `:tls`              - options for DTLS configuration passed directly to
+      `:ssl.listen/2`. When `transport: :dtls` defaults to
+      `[key: key, cert: cert, cacerts: cacerts]` when neither `:key` nor
+      `:keyfile` is set in `:tls`. The generated CA certificates can be fetched
+      from `cacerts/0`; options for TLS configuration passed directly to
+      `:ssl.listen/2`. Defaults to `[key: key, cert: cert, cacerts: cacerts]`
+      with generated certificates when `transport: :dtls`;
 
     * `:listen`           - options passed to the transport listener. Defaults
       to `[mode: :binary]`, `:active` can't be set;
@@ -288,7 +293,6 @@ defmodule TestServer.UDP do
     TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     {:ok, peer} = Instance.register(instance, {:peer, stacktrace})
 
     {instance, peer.ref}

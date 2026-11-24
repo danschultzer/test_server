@@ -95,11 +95,8 @@ defmodule TestServer.SSHTest do
     test "with `:host_keys` option list" do
       host_key_1 = :public_key.generate_key({:rsa, 2048, 65_537})
       host_key_2 = :public_key.generate_key({:namedCurve, :secp521r1})
-
-      {:RSAPrivateKey, _, other_mod, other_exp, _, _, _, _, _, _, _} =
-        :public_key.generate_key({:rsa, 2048, 65_537})
-
-      other_hostkey_fingerprint = :ssh.hostkey_fingerprint({:RSAPublicKey, other_mod, other_exp})
+      other_host_key = :public_key.generate_key({:rsa, 2048, 65_537})
+      other_host_key_fingerprint = SSHClient.hostkey_fingerprint(other_host_key)
 
       TestServer.SSH.start!(host_keys: [host_key_1, host_key_2])
 
@@ -110,7 +107,7 @@ defmodule TestServer.SSHTest do
                assert SSHClient.connect(
                         TestServer.SSH.address(),
                         silently_accept_hosts: fn _peer, fingerprint ->
-                          fingerprint == other_hostkey_fingerprint
+                          fingerprint == other_host_key_fingerprint
                         end
                       ) == {:error, "Key exchange failed"}
              end) =~ "Key exchange failed"
@@ -134,13 +131,10 @@ defmodule TestServer.SSHTest do
 
     test "with `:host_keys` option function" do
       host_key = :public_key.generate_key({:rsa, 2_048, 65_537})
-      {:RSAPrivateKey, _, mod, exp, _, _, _, _, _, _, _} = host_key
-      hostkey_fingerprint = :ssh.hostkey_fingerprint({:RSAPublicKey, mod, exp})
+      hostkey_fingerprint = SSHClient.hostkey_fingerprint(host_key)
 
-      {:RSAPrivateKey, _, other_mod, other_exp, _, _, _, _, _, _, _} =
-        :public_key.generate_key({:rsa, 2_048, 65_537})
-
-      other_host_key_fingerprint = :ssh.hostkey_fingerprint({:RSAPublicKey, other_mod, other_exp})
+      other_host_key = :public_key.generate_key({:rsa, 2_048, 65_537})
+      other_host_key_fingerprint = SSHClient.hostkey_fingerprint(other_host_key)
 
       TestServer.SSH.start!(
         host_keys: fn _algorithm, _daemon_options ->
@@ -1506,6 +1500,10 @@ defmodule TestServer.SSHTest do
       path
     end
 
+    def hostkey_fingerprint({:RSAPrivateKey, _, mod, exp, _, _, _, _, _, _, _}) do
+      to_string(:ssh.hostkey_fingerprint({:RSAPublicKey, mod, exp}))
+    end
+
     def sockname(conn) do
       {:sockname, res} = :ssh.connection_info(conn, :sockname)
 
@@ -1525,6 +1523,15 @@ defmodule TestServer.SSHTest do
           user_interaction: false
         ]
         |> Keyword.merge(options)
+        |> Keyword.update!(:silently_accept_hosts, fn
+          fun when is_function(fun, 2) ->
+            fn peer, fingerprint ->
+              fun.(peer, to_string(fingerprint))
+            end
+
+          boolean when is_boolean(boolean) ->
+            boolean
+        end)
         |> normalize_ssh_connect_options()
 
       suppress_ssh_log_messages()

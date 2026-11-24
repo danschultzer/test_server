@@ -144,10 +144,12 @@ defmodule TestServer.SSH.Server do
   defp to_host_key_maps(host_keys) do
     Enum.map(host_keys, fn
       {:RSAPrivateKey, _, mod, exp, _, _, _, _, _, _, _} = host_key ->
+        fingerprint = :ssh.hostkey_fingerprint({:RSAPublicKey, mod, exp})
+
         %{
           key: host_key,
           algorithms: [:"rsa-sha2-256", :"rsa-sha2-512"],
-          fingerprint: :ssh.hostkey_fingerprint({:RSAPublicKey, mod, exp})
+          fingerprint: to_string(fingerprint)
         }
 
       {:ECPrivateKey, _, _, {:namedCurve, curve_oid}, public_key, _} = host_key ->
@@ -157,7 +159,7 @@ defmodule TestServer.SSH.Server do
         %{
           key: host_key,
           algorithms: [algorithm],
-          fingerprint: fingerprint
+          fingerprint: to_string(fingerprint)
         }
 
       other ->

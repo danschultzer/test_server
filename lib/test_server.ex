@@ -7,6 +7,8 @@ defmodule TestServer do
              |> then(&Regex.replace(~r/\[(`[^`]+`)\]\([^)]+\)/, &1, "\\1"))
              |> String.trim()
 
+  require Logger
+
   @type instance :: {module(), pid()}
   @type stacktrace :: list()
   @type cacerts :: [binary()]
@@ -43,6 +45,8 @@ defmodule TestServer do
 
   @doc false
   def start_instance(protocol_module, options, verify_instance_fn) do
+    options = Keyword.put(options, :log, validate_log_option!(options))
+
     case ExUnit.fetch_test_supervisor() do
       {:ok, _sup} ->
         start_with_ex_unit(protocol_module, options, verify_instance_fn)
@@ -338,14 +342,30 @@ defmodule TestServer do
     end
   end
 
-  @levels [:emergency, :alert, :critical, :error, :warning, :notice, :info, :debug, :none, :all]
+  @log_levels ~w(emergency alert critical error warning notice info debug)a
+
+  defp validate_log_option!(options) do
+    case Keyword.get(options, :log, :warning) do
+      false ->
+        false
+
+      log when log in @log_levels ->
+        log
+
+      other ->
+        raise ArgumentError,
+              "expected :log to be one of #{Enum.map_join(@log_levels, ", ", &inspect/1)}, got: #{inspect(other)}"
+    end
+  end
 
   @doc false
-  def validate_log_level!(level) when level in @levels, do: :ok
+  def validate_log_level!(:none), do: :ok
+  def validate_log_level!(:all), do: :ok
+  def validate_log_level!(level) when level in @log_levels, do: :ok
 
   def validate_log_level!(level) do
     raise ArgumentError,
-          "expected :log_level in :daemon to be one of #{Enum.map_join(@levels, ", ", &inspect/1)}, got: #{inspect(level)}"
+          "expected :log_level in :daemon to be one of #{Enum.map_join(@log_levels ++ [:none, :all], ", ", &inspect/1)}, got: #{inspect(level)}"
   end
 
   @doc false
@@ -423,8 +443,13 @@ defmodule TestServer do
 
   @doc false
   def report_error(instance, {exception, stacktrace}, options) do
-    unless Keyword.get(options, :suppress_warning, false),
-      do: IO.warn(Exception.format(:error, exception, stacktrace))
+    case Keyword.fetch!(options, :log) do
+      false ->
+        :ok
+
+      level ->
+        Logger.log(level, Exception.format(:error, exception, stacktrace), domain: [:test_server])
+    end
 
     InstanceManager.add_error(instance, {exception, stacktrace})
 

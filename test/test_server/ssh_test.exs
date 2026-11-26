@@ -695,7 +695,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
           assert {:ok, channel_id_1} = SSHClient.session_channel(conn)
@@ -713,7 +713,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle()
 
           assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
@@ -927,7 +927,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.channel()
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -951,7 +951,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(match: fn _message, _state -> false end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -978,7 +978,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle()
 
           assert {:ok, conn, channel_id} = unquote(__MODULE__).ssh_shell()
@@ -1007,7 +1007,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _connection, _state -> raise "boom" end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -1030,7 +1030,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _connection, _state -> :invalid end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -1095,7 +1095,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _state -> raise "boom" end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -1118,7 +1118,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _state -> :invalid end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -1202,7 +1202,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1232,7 +1232,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1262,7 +1262,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1292,7 +1292,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1322,7 +1322,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1352,7 +1352,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1407,7 +1407,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             match: fn {:exec, _channel_id, _want_reply, _command}, _state ->

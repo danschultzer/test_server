@@ -601,7 +601,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url("/?a=1"))
         end
@@ -621,7 +621,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(match: fn _conn -> false end)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -646,7 +646,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle()
 
           assert {:ok, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -667,7 +667,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle("/path")
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url("/other-path"))
@@ -685,7 +685,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(path: "/path", method: [:get, :post])
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url("/other-path"))
@@ -705,7 +705,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(method: :post)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -724,7 +724,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(method: [])
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -817,7 +817,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(to: fn _conn -> raise "boom" end)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -836,7 +836,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(to: fn _conn -> :invalid end)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -854,7 +854,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(to: fn conn -> Plug.Conn.halt(conn) end)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -878,7 +878,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.handle(match: fn _conn -> raise "boom" end)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -1024,7 +1024,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.plug(fn _conn -> raise "boom" end)
 
           assert {:error, _} = HTTPClient.fetch(TestServer.HTTP.url())
@@ -1043,7 +1043,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.plug(fn _conn -> :invalid end)
           TestServer.HTTP.handle()
 
@@ -1062,7 +1062,7 @@ defmodule TestServer.HTTPTest do
         alias unquote(__MODULE__).HTTPClient
 
         test "fails" do
-          TestServer.HTTP.start!(suppress_warning: true)
+          TestServer.HTTP.start!(log: false)
           TestServer.HTTP.plug(fn conn -> Plug.Conn.halt(conn) end)
           TestServer.HTTP.handle()
 
@@ -1324,7 +1324,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            TestServer.HTTP.start!(suppress_warning: true)
+            TestServer.HTTP.start!(log: false)
             TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -1350,7 +1350,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
 
             TestServer.HTTP.websocket_handle(websocket,
@@ -1383,7 +1383,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
             :ok = TestServer.HTTP.websocket_handle(websocket)
 
@@ -1424,7 +1424,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
 
             TestServer.HTTP.websocket_handle(websocket,
@@ -1472,7 +1472,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
 
             TestServer.HTTP.websocket_handle(websocket,
@@ -1501,7 +1501,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
 
             TestServer.HTTP.websocket_handle(websocket,
@@ -1526,7 +1526,7 @@ defmodule TestServer.HTTPTest do
       end
 
       test "with `:to` function" do
-        _instance = TestServer.HTTP.start!(suppress_warning: true)
+        _instance = TestServer.HTTP.start!(log: false)
         websocket = TestServer.HTTP.websocket("/ws")
 
         TestServer.HTTP.websocket_handle(websocket,
@@ -1624,7 +1624,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -1651,7 +1651,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))
@@ -1678,7 +1678,7 @@ defmodule TestServer.HTTPTest do
           use ExUnit.Case
 
           test "fails" do
-            _instance = TestServer.HTTP.start!(suppress_warning: true)
+            _instance = TestServer.HTTP.start!(log: false)
             websocket = TestServer.HTTP.websocket("/ws")
 
             assert {:ok, client} = WebSocketClient.start_link(TestServer.HTTP.url("/ws"))

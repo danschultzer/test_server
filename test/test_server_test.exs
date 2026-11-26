@@ -45,6 +45,16 @@ defmodule TestServerTest do
                |> Task.await()
     end
 
+    test "when `:log` option is invalid" do
+      options = [log: :invalid]
+
+      assert_raise ArgumentError,
+                   ~r/expected :log to be one of :emergency, :alert, :critical, :error, :warning, :notice, :info, :debug, got: :invalid/,
+                   fn ->
+                     TestServer.start_instance(FakeProtocol, options, fn _instance -> :ok end)
+                   end
+    end
+
     test "when instance fails to start" do
       options = [init: fn -> {:stop, {:shutdown, :boom}} end]
 
@@ -335,13 +345,13 @@ defmodule TestServerTest do
           TestServer.report_error(
             instance,
             {ArgumentError.exception("error without stacktrace"), []},
-            suppress_warning: true
+            log: false
           )
 
           TestServer.report_error(
             instance,
             {ArgumentError.exception("error with stacktrace"), stacktrace},
-            suppress_warning: true
+            log: false
           )
 
           send(__MODULE__, {:instance, instance})
@@ -375,7 +385,7 @@ defmodule TestServerTest do
                   TestServer.report_error(
                     instance,
                     {ArgumentError.exception("error with stacktrace"), stacktrace},
-                    suppress_warning: true
+                    log: false
                   )
 
                 :ok
@@ -385,7 +395,7 @@ defmodule TestServerTest do
           TestServer.report_error(
             instance,
             {ArgumentError.exception("error without stacktrace"), []},
-            suppress_warning: true
+            log: false
           )
         end
       end

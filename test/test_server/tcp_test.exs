@@ -537,7 +537,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
           assert {:ok, data} = TCPClient.receive_data(socket)
@@ -561,7 +561,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle()
 
           assert {:ok, _socket_1} = TCPClient.connect(TestServer.TCP.address())
@@ -694,7 +694,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -720,7 +720,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(match: fn _data, _state -> false end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -749,7 +749,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -795,7 +795,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!(suppress_warning: true)
+          instance = TestServer.TCP.start!(log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -827,7 +827,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!(transport: :tls, suppress_warning: true)
+          instance = TestServer.TCP.start!(transport: :tls, log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} =
@@ -859,7 +859,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(to: fn _data, _state -> raise "boom" end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -885,7 +885,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(to: fn _data, _state -> :invalid end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -911,7 +911,7 @@ defmodule TestServer.TCPTest do
 
         test "fails" do
           LogHandler.setup()
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(to: fn _data, state -> {:reply, :not_iodata, state} end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -955,7 +955,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"pong", invalid: true}, state} end
@@ -983,7 +983,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"pong", upgrade: :udp}, state} end
@@ -1011,7 +1011,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true, transport: :tcp)
+          TestServer.TCP.start!(log: false, transport: :tcp)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"upgrade", upgrade: :tls}, state} end
@@ -1042,7 +1042,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(transport: :tls, suppress_warning: true)
+          TestServer.TCP.start!(transport: :tls, log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"upgrade", upgrade: :tls}, state} end
@@ -1072,7 +1072,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!(transport: [:tcp, :tls], suppress_warning: true)
+          instance = TestServer.TCP.start!(transport: [:tcp, :tls], log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"upgrade", upgrade: :tls}, state} end
@@ -1143,7 +1143,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(match: fn _data, _state -> raise "boom" end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -1328,7 +1328,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          _instance = TestServer.TCP.start!(suppress_warning: true)
+          _instance = TestServer.TCP.start!(log: false)
           connection = TestServer.TCP.connection()
           {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
 
@@ -1355,7 +1355,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          _instance = TestServer.TCP.start!(suppress_warning: true)
+          _instance = TestServer.TCP.start!(log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -1383,7 +1383,7 @@ defmodule TestServer.TCPTest do
 
         test "fails" do
           :ok = LogHandler.setup()
-          _instance = TestServer.TCP.start(suppress_warning: true)
+          _instance = TestServer.TCP.start(log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())

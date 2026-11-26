@@ -15,6 +15,7 @@ Requires Elixir 1.15 or higher.
 - Renamed `websocket_info/2` to `TestServer.HTTP.websocket_send/2`; it now accepts options as its second argument instead of a function
 - Replaced `x509_suite/0` with `TestServer.HTTP.cacerts/0`, which returns the CA certificates directly
 - Changed `TestServer.HTTP.start/1` to return `{:error, reason}` instead of raising
+- Removed `:suppress_warning` option in favor of `:log` option
 
 ### Added
 

@@ -42,20 +42,19 @@ defmodule TestServer.UDP do
 
   ## Options
 
-    * `:port`             - integer of port number. Defaults to `0` which
-      selects a random port;
+    * `:port`      - integer of port number. Defaults to `0` which selects a
+      random port;
 
-    * `:ip`               - a `t:TestServer.ip_address/0` the server will bind
-      to. Defaults to `:loopback`;
+    * `:ip`        - a `t:TestServer.ip_address/0` the server will bind to.
+      Defaults to `:loopback`;
 
-    * `:ipfamily`         - the IP address type to use, either `:inet` or
-      `:inet6`. Defaults to `:inet6` if `:ip` is IPv6 format, otherwise
-      `:inet`;
+    * `:ipfamily`  - the IP address type to use, either `:inet` or `:inet6`.
+      Defaults to `:inet6` if `:ip` is IPv6 format, otherwise `:inet`;
 
-    * `:transport`        - the supported socket transport, either `:udp` or
-      `:dtls`. Defaults to `:udp`;
+    * `:transport` - the supported socket transport, either `:udp` or `:dtls`.
+      Defaults to `:udp`;
 
-    * `:tls`              - options for DTLS configuration passed directly to
+    * `:tls`       - options for DTLS configuration passed directly to
       `:ssl.listen/2`. When `transport: :dtls` defaults to
       `[key: key, cert: cert, cacerts: cacerts]` when neither `:key` nor
       `:keyfile` is set in `:tls`. The generated CA certificates can be fetched
@@ -63,11 +62,11 @@ defmodule TestServer.UDP do
       `:ssl.listen/2`. Defaults to `[key: key, cert: cert, cacerts: cacerts]`
       with generated certificates when `transport: :dtls`;
 
-    * `:listen`           - options passed to the transport listener. Defaults
-      to `[mode: :binary]`, `:active` can't be set;
+    * `:listen`    - options passed to the transport listener. Defaults to
+      `[mode: :binary]`, `:active` can't be set;
 
-    * `:suppress_warning` - suppresses IO warnings on expectation failures
-      related to this instance. Defaults to `false`;
+    * `:log`       - The log level for the instance when errors occur. Defaults
+      to `:warning`, can be set to false to disable it.;
 
   ## Examples
 
@@ -86,7 +85,7 @@ defmodule TestServer.UDP do
       :tls,
       :ipfamily,
       :listen,
-      :suppress_warning
+      :log
     ])
 
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)

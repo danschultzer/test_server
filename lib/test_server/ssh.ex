@@ -69,42 +69,43 @@ defmodule TestServer.SSH do
 
   ## Options
 
-    * `:port`             - integer of port number. Defaults to `0` which
-      selects a random port;
+    * `:port`           - integer of port number. Defaults to `0` which selects
+      a random port;
 
-    * `:ip`               - a `t:TestServer.ip_address/0` the server will bind
+    * `:ip`             - a `t:TestServer.ip_address/0` the server will bind
       to. Defaults to `:loopback`;
 
-    * `:ipfamily`         - the IP address type to use, either `:inet` or
+    * `:ipfamily`       - the IP address type to use, either `:inet` or
       `:inet6`. Defaults to `:inet6` if `:ip` is IPv6 format, otherwise
       `:inet`;
 
-    * `:host_keys`        - list of host keys, or a
+    * `:host_keys`      - list of host keys, or a
       `c::ssh_server_key_api.host_key/2` function. Default will autogenerate
       keys for algorithms specified in `t::ssh.pubkey_alg/0` and they can be
       fetched from `host_keys/1`;
 
-    * `:auth_keys`        - list of `{"user", public_key}` tuples, or a
+    * `:auth_keys`      - list of `{"user", public_key}` tuples, or a
       `c::ssh_server_key_api.is_auth_key/3` function. Defaults to an empty
       list.
 
-    * `:user_passwords`   - list of `{"user", "password"}` tuples;
+    * `:user_passwords` - list of `{"user", "password"}` tuples;
 
-    * `:no_auth_needed`   - boolean value indicating whether to allow
-      connections with no authentication. Defaults to `true` if `:auth_keys`
-      and `:user_passwords` has not been set, otherwise `false`;
+    * `:no_auth_needed` - boolean value indicating whether to allow connections
+      with no authentication. Defaults to `true` if `:auth_keys` and
+      `:user_passwords` has not been set, otherwise `false`;
 
-    * `:subsystems`       - list of SSH subsystem names to handle with channel
+    * `:subsystems`     - list of SSH subsystem names to handle with channel
       expectations. Channels initialized with subsystems will have a
       `:subsystem` key set in the state. Defaults to `[]`;
 
-    * `:daemon`           - options to pass directly to `:ssh.daemon/2`;
+    * `:daemon`         - options to pass directly to `:ssh.daemon/2`;
 
-      * `:log_level`      - a `t:log_level/0` that sets the minimum severity
-      log level for SSH daemon log messages. Defaults to `:warning`;
+      * `:log_level`    - a `t:log_level/0` that sets the minimum severity log
+        level for SSH daemon log messages. Defaults to `:warning`;
 
-    * `:suppress_warning` - Suppresses IO warnings on expectation failures
-      related to this instance. Defaults to `false`;
+    * `:log`            - The log level for the instance when errors occur.
+      Defaults to `:warning`, can be set to false to disable it.;
+
 
   ## Examples
 
@@ -163,7 +164,7 @@ defmodule TestServer.SSH do
       :ipfamily,
       :subsystems,
       :daemon,
-      :suppress_warning
+      :log
     ])
 
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)

@@ -584,7 +584,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
 
           assert {:ok, socket} = UDPClient.open()
           assert UDPClient.send(socket, TestServer.UDP.address(), "ping") == :ok
@@ -609,7 +609,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.handle()
 
           assert {:ok, socket_1} = UDPClient.open()
@@ -654,7 +654,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "continues receiving" do
-          instance = TestServer.UDP.start!(suppress_warning: true)
+          instance = TestServer.UDP.start!(log: false)
           peer_1 = TestServer.UDP.peer(instance)
           peer_2 = TestServer.UDP.peer(instance)
           address = TestServer.UDP.address(instance)
@@ -782,7 +782,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.peer()
 
           assert {:ok, socket} = UDPClient.open()
@@ -808,7 +808,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.handle(match: fn _data, _state -> false end)
 
           assert {:ok, socket} = UDPClient.open()
@@ -837,7 +837,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.handle()
 
           assert {:ok, socket} = UDPClient.open()
@@ -883,7 +883,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.UDP.start!(transport: :dtls, suppress_warning: true)
+          instance = TestServer.UDP.start!(transport: :dtls, log: false)
           peer = TestServer.UDP.peer()
 
           assert {:ok, socket} =
@@ -915,7 +915,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.handle(to: fn _data, _state -> raise "boom" end)
 
           assert {:ok, socket} = UDPClient.open()
@@ -941,7 +941,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.handle(to: fn _data, _state -> :invalid end)
 
           assert {:ok, socket} = UDPClient.open()
@@ -967,7 +967,7 @@ defmodule TestServer.UDPTest do
 
         test "fails" do
           LogHandler.setup()
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.handle(to: fn _data, state -> {:reply, :not_iodata, state} end)
 
           assert {:ok, socket} = UDPClient.open()
@@ -1020,7 +1020,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.UDP.start!(suppress_warning: true)
+          TestServer.UDP.start!(log: false)
           TestServer.UDP.handle(match: fn _data, _state -> raise "boom" end)
 
           assert {:ok, socket} = UDPClient.open()
@@ -1190,7 +1190,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          _instance = TestServer.UDP.start!(suppress_warning: true)
+          _instance = TestServer.UDP.start!(log: false)
           peer = TestServer.UDP.peer()
           :ok = TestServer.UDP.handle(peer, to: fn _data, state -> {:ok, state} end)
           {:ok, socket} = UDPClient.open()
@@ -1219,7 +1219,7 @@ defmodule TestServer.UDPTest do
         use ExUnit.Case
 
         test "fails" do
-          _instance = TestServer.UDP.start!(suppress_warning: true)
+          _instance = TestServer.UDP.start!(log: false)
           peer = TestServer.UDP.peer()
           :ok = TestServer.UDP.handle(peer, to: fn _data, state -> {:ok, state} end)
           {:ok, socket} = UDPClient.open()
@@ -1248,7 +1248,7 @@ defmodule TestServer.UDPTest do
 
         test "fails" do
           :ok = LogHandler.setup()
-          _instance = TestServer.UDP.start!(suppress_warning: true)
+          _instance = TestServer.UDP.start!(log: false)
           peer = TestServer.UDP.peer()
           :ok = TestServer.UDP.handle(peer, to: fn _data, state -> {:ok, state} end)
           {:ok, socket} = UDPClient.open()

@@ -18,20 +18,20 @@ defmodule TestServer.HTTP.Instance do
           {:handle, keyword(), TestServer.stacktrace()}
         ) ::
           {:ok, %{ref: TestServer.HTTP.handler_ref()}}
-  def register(instance, {:handle, options, stacktrace}) do
+  def register({TestServer.HTTP, instance_pid}, {:handle, options, stacktrace}) do
     options = put_match_function(options)
 
     validate_plug!(options, :to)
 
-    GenServer.call(instance, {:register, {:handle, options, stacktrace}})
+    GenServer.call(instance_pid, {:register, {:handle, options, stacktrace}})
   end
 
   @spec register(TestServer.instance(), {:plug, atom() | function(), TestServer.stacktrace()}) ::
           {:ok, map()}
-  def register(instance, {:plug, plug, stacktrace}) do
+  def register({TestServer.HTTP, instance_pid}, {:plug, plug, stacktrace}) do
     validate_plug!(plug)
 
-    GenServer.call(instance, {:register, {:plug, plug, stacktrace}})
+    GenServer.call(instance_pid, {:register, {:plug, plug, stacktrace}})
   end
 
   @spec register(
@@ -39,16 +39,16 @@ defmodule TestServer.HTTP.Instance do
           {:websocket,
            {:handle, TestServer.HTTP.websocket_ref(), keyword(), TestServer.stacktrace()}}
         ) ::
-          {:ok, map()}
+          {:ok, map()} | {:error, :not_found}
   def register(
-        instance,
+        {TestServer.HTTP, instance_pid},
         {:websocket, {:handle, websocket_ref, options, stacktrace}}
       ) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
-    validate_function_option!(options, :to, 2)
+    Keyword.has_key?(options, :match) && TestServer.validate_function_option!(options, :match, 2)
+    TestServer.validate_function_option!(options, :to, 2)
 
     GenServer.call(
-      instance,
+      instance_pid,
       {:register, {:websocket, {:handle, websocket_ref, options, stacktrace}}}
     )
   end
@@ -56,11 +56,11 @@ defmodule TestServer.HTTP.Instance do
   @spec register(
           TestServer.instance(),
           {:websocket, {:send, TestServer.HTTP.websocket_ref(), keyword()}}
-        ) :: {:ok, pid()} | {:error, :einval} | {:error, :enotconn} | {:error, :closed}
-  def register(instance, {:websocket, {:send, websocket_ref, options}}) do
-    validate_function_option!(options, :to, 1)
+        ) :: {:ok, pid()} | {:error, :not_found} | {:error, :enotconn} | {:error, :closed}
+  def register({TestServer.HTTP, instance_pid}, {:websocket, {:send, websocket_ref, options}}) do
+    TestServer.validate_function_option!(options, :to, 1)
 
-    GenServer.call(instance, {:register, {:websocket, {:send, websocket_ref, options}}})
+    GenServer.call(instance_pid, {:register, {:websocket, {:send, websocket_ref, options}}})
   end
 
   defp validate_plug!(plug) do
@@ -70,7 +70,7 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected a 1-arity function or a Plug module, got: #{inspect(plug)}"
+              "expected a 1-arity function, a Plug module, or a Plug module tuple, got: #{inspect(plug)}"
     end
   end
 
@@ -83,11 +83,13 @@ defmodule TestServer.HTTP.Instance do
 
       false ->
         raise ArgumentError,
-              "expected #{inspect(option)} to be a 1-arity function or a Plug module, got: #{inspect(plug)}"
+              "expected #{inspect(option)} to be a 1-arity function, a Plug module, or a Plug module tuple, got: #{inspect(plug)}"
     end
   end
 
   defp plug?(plug) when is_function(plug, 1), do: true
+
+  defp plug?({plug, _options}) when is_atom(plug), do: plug?(plug)
 
   defp plug?(plug) do
     is_atom(plug) and
@@ -96,25 +98,12 @@ defmodule TestServer.HTTP.Instance do
       function_exported?(plug, :call, 2)
   end
 
-  defp validate_function_option!(options, option, arity) do
-    value = Keyword.get(options, option)
-
-    case is_function(value, arity) do
-      true ->
-        :ok
-
-      false ->
-        raise ArgumentError,
-              "expected #{inspect(option)} to be a #{arity}-arity function, got: #{inspect(value)}"
-    end
-  end
-
   @spec dispatch(TestServer.instance(), {:plug, Plug.Conn.t()}) ::
           {:ok, Plug.Conn.t()}
           | {:error, {:not_found, Plug.Conn.t()}}
           | {:error, {term(), list()}}
-  def dispatch(instance, {:plug, conn}) do
-    GenServer.call(instance, {:dispatch, {:plug, conn}})
+  def dispatch({TestServer.HTTP, instance_pid}, {:plug, conn}) do
+    GenServer.call(instance_pid, {:dispatch, {:plug, conn}})
   end
 
   @spec dispatch(
@@ -122,8 +111,8 @@ defmodule TestServer.HTTP.Instance do
           {:websocket, {:upgrade, TestServer.HTTP.handler_ref(), pid()}}
         ) ::
           {:ok, TestServer.HTTP.websocket_ref(), TestServer.HTTP.websocket_state()}
-  def dispatch(instance, {:websocket, {:upgrade, handler_ref, socket_pid}}) do
-    GenServer.call(instance, {:dispatch, {:websocket, {:upgrade, handler_ref, socket_pid}}})
+  def dispatch({TestServer.HTTP, instance_pid}, {:websocket, {:upgrade, handler_ref, socket_pid}}) do
+    GenServer.call(instance_pid, {:dispatch, {:websocket, {:upgrade, handler_ref, socket_pid}}})
   end
 
   @spec dispatch(
@@ -135,9 +124,12 @@ defmodule TestServer.HTTP.Instance do
           {:ok, TestServer.HTTP.websocket_reply()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:websocket, {:handle, websocket_ref, frame, websocket_state}}) do
+  def dispatch(
+        {TestServer.HTTP, instance_pid},
+        {:websocket, {:handle, websocket_ref, frame, websocket_state}}
+      ) do
     GenServer.call(
-      instance,
+      instance_pid,
       {:dispatch, {:websocket, {:handle, websocket_ref, frame, websocket_state}}}
     )
   end
@@ -150,23 +142,23 @@ defmodule TestServer.HTTP.Instance do
         ) ::
           {:ok, TestServer.HTTP.websocket_reply()} | {:error, {term(), TestServer.stacktrace()}}
   def dispatch(
-        instance,
+        {TestServer.HTTP, instance_pid},
         {:websocket, {:send, websocket_ref, options, websocket_state, stacktrace}}
       ) do
     GenServer.call(
-      instance,
+      instance_pid,
       {:dispatch, {:websocket, {:send, websocket_ref, options, websocket_state, stacktrace}}}
     )
   end
 
   @spec options(TestServer.instance()) :: keyword()
-  def options(instance) do
-    GenServer.call(instance, :options)
+  def options({TestServer.HTTP, instance_pid}) do
+    GenServer.call(instance_pid, :options)
   end
 
   @spec handlers(TestServer.instance()) :: [map()]
-  def handlers(instance) do
-    GenServer.call(instance, :handlers)
+  def handlers({TestServer.HTTP, instance_pid}) do
+    GenServer.call(instance_pid, :handlers)
   end
 
   @spec format_handlers([map()]) :: binary()
@@ -198,13 +190,13 @@ defmodule TestServer.HTTP.Instance do
   end
 
   @spec websocket_handlers(TestServer.instance()) :: [map()]
-  def websocket_handlers(instance) do
-    GenServer.call(instance, :websocket_handlers)
+  def websocket_handlers({TestServer.HTTP, instance_pid}) do
+    GenServer.call(instance_pid, :websocket_handlers)
   end
 
   @spec websockets(TestServer.instance()) :: [map()]
-  def websockets(instance) do
-    GenServer.call(instance, :websockets)
+  def websockets({TestServer.HTTP, instance_pid}) do
+    GenServer.call(instance_pid, :websockets)
   end
 
   @spec format_websocket_handlers([map()]) :: binary()
@@ -221,7 +213,9 @@ defmodule TestServer.HTTP.Instance do
 
   @impl true
   def init(options) do
-    case Server.start(self(), options) do
+    {protocol_module, options} = Keyword.pop!(options, :protocol_module)
+
+    case Server.start({protocol_module, self()}, options) do
       {:ok, options} ->
         {:ok,
          %{
@@ -277,23 +271,35 @@ defmodule TestServer.HTTP.Instance do
         _from,
         state
       ) do
-    handler = %{
-      websocket_ref: websocket_ref,
-      match: Keyword.get(options, :match),
-      to: Keyword.fetch!(options, :to),
-      stacktrace: stacktrace,
-      suspended: false
-    }
+    case Enum.find(state.websockets, &(&1.ref == websocket_ref)) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, {:ok, handler}, %{state | websocket_handlers: state.websocket_handlers ++ [handler]}}
+      _websocket ->
+        handler = %{
+          websocket_ref: websocket_ref,
+          match: Keyword.get(options, :match),
+          to: Keyword.fetch!(options, :to),
+          stacktrace: stacktrace,
+          suspended: false
+        }
+
+        {:reply, {:ok, handler},
+         %{state | websocket_handlers: state.websocket_handlers ++ [handler]}}
+    end
   end
 
   def handle_call({:register, {:websocket, {:send, websocket_ref, _options}}}, _from, state) do
     result =
       case Enum.find(state.websockets, &(&1.ref == websocket_ref)) do
-        nil -> {:error, :einval}
-        %{owner: nil} -> {:error, :enotconn}
-        %{owner: pid} -> (Process.alive?(pid) && {:ok, pid}) || {:error, :closed}
+        nil ->
+          {:error, :not_found}
+
+        %{owner: nil} ->
+          {:error, :enotconn}
+
+        %{owner: owner_pid} ->
+          (Process.alive?(owner_pid) && {:ok, owner_pid}) || {:error, :closed}
       end
 
     {:reply, result, state}
@@ -463,7 +469,11 @@ defmodule TestServer.HTTP.Instance do
   end
 
   defp run_plug_handler(conn, plug) when is_atom(plug) do
-    options = plug.init([])
+    run_plug_handler(conn, {plug, []})
+  end
+
+  defp run_plug_handler(conn, {plug, options}) when is_atom(plug) do
+    options = plug.init(options)
     plug.call(conn, options)
   end
 

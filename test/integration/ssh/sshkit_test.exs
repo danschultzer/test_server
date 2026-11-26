@@ -18,7 +18,7 @@ defmodule TestServer.Integration.SSH.SSHKitTest do
       password: "test-password",
       auth_methods: "password",
       user_dir: tmp_dir,
-      silently_accept_hosts: fn _peer, fingerprint -> fingerprint in fingerprints end,
+      silently_accept_hosts: fn _peer, fingerprint -> to_string(fingerprint) in fingerprints end,
       user_interaction: false
     ]
 

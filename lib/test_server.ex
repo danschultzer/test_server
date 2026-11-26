@@ -7,10 +7,16 @@ defmodule TestServer do
              |> then(&Regex.replace(~r/\[(`[^`]+`)\]\([^)]+\)/, &1, "\\1"))
              |> String.trim()
 
-  @type instance :: pid()
+  require Logger
+
+  @type instance :: {module(), pid()}
   @type stacktrace :: list()
   @type cacerts :: [binary()]
+  @type ip_address :: :inet.ip_address() | :any | :loopback
+  @type ipfamily :: :inet | :inet6
+  @type port_number :: :inet.port_number()
 
+  alias TestServer.InetDB
   alias TestServer.InstanceManager
 
   @doc false
@@ -39,6 +45,8 @@ defmodule TestServer do
 
   @doc false
   def start_instance(protocol_module, options, verify_instance_fn) do
+    options = Keyword.put(options, :log, validate_log_option!(options))
+
     case ExUnit.fetch_test_supervisor() do
       {:ok, _sup} ->
         start_with_ex_unit(protocol_module, options, verify_instance_fn)
@@ -54,7 +62,7 @@ defmodule TestServer do
 
     case InstanceManager.start_instance(caller, protocol_module, options) do
       {:ok, instance} ->
-        put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn)
+        put_ex_unit_on_exit_callback(instance, verify_instance_fn)
 
         {:ok, instance}
 
@@ -66,94 +74,171 @@ defmodule TestServer do
     end
   end
 
-  defp put_ex_unit_on_exit_callback(protocol_module, instance, verify_instance_fn) do
-    Process.put({:test_process, __MODULE__}, true)
+  defp put_ex_unit_on_exit_callback(instance, verify_instance_fn) do
+    {protocol_module, _instance_pid} = instance
 
     ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
-      try do
-        assert_instance_alive!(protocol_module, instance)
+      errors = run_verify_instance(instance, protocol_module, verify_instance_fn)
+      :ok = InstanceManager.delete_instance_entry(instance)
+      :ok = raise_on_exit!(errors)
+      :ok = raise_errors!(errors)
+    end)
+  end
 
-        try do
-          verify_instance_fn.(instance)
-        after
-          protocol_module.stop(instance)
-        end
-      after
-        InstanceManager.delete_instance_entry(instance)
+  defp run_verify_instance(instance, protocol_module, verify_instance_fn) do
+    verify_errors =
+      case InstanceManager.fetch_instance_entry(instance) do
+        {:ok, %{status: :running}} ->
+          capture_exceptions(instance, [verify_instance_fn, &protocol_module.stop(&1)])
+
+        {:ok, %{status: {:stopped, _stacktrace}}} ->
+          capture_exceptions(instance, [])
+
+        {:ok, %{status: {:exited, reason}}} ->
+          capture_exceptions([instance, reason], &raise_instance_exited!/2)
+
+        {:error, :not_found} ->
+          capture_exceptions(instance, &raise_instance_not_found!/1)
+      end
+
+    recorded_errors =
+      case InstanceManager.fetch_instance_entry(instance) do
+        {:ok, %{errors: errors}} -> errors
+        {:error, :not_found} -> []
+      end
+
+    recorded_errors ++ verify_errors
+  end
+
+  defp capture_exceptions(args, funs) do
+    funs
+    |> List.wrap()
+    |> Enum.reduce([], fn fun, acc ->
+      case capture_exception(args, fun) do
+        :ok -> acc
+        {:error, error} -> acc ++ [error]
       end
     end)
   end
 
-  @doc false
-  def stop_instance(protocol_module, instance) do
-    assert_instance_alive!(protocol_module, instance)
+  defp capture_exception(args, fun) do
+    apply(fun, List.wrap(args))
 
-    case InstanceManager.stop_instance(instance, protocol_module) do
-      :ok ->
-        Process.get({:test_process, __MODULE__}) &&
-          ExUnit.Callbacks.on_exit({TestServer, instance}, fn ->
-            InstanceManager.delete_instance_entry(instance)
-          end)
+    :ok
+  rescue
+    exception -> {:error, {exception, __STACKTRACE__}}
+  catch
+    :exit, reason -> {:error, {:exit, reason}}
+  end
 
-        :ok
+  defp raise_instance_exited!(instance, reason) do
+    raise RuntimeError, """
+    expected #{format_instance(instance)} to be running, but it exited with reason:
 
-      {:error, reason} ->
-        {:error, reason}
-    end
+    #{Exception.format_exit(reason)}
+    """
+  end
+
+  defp raise_instance_not_found!(instance) do
+    raise RuntimeError,
+          "expected #{format_instance(instance)} to be a TestServer-managed instance"
+  end
+
+  defp raise_on_exit!(errors) do
+    Enum.each(errors, fn
+      {:exit, reason} -> exit(reason)
+      {_exception, _stacktrace} -> :ok
+    end)
+  end
+
+  defp raise_errors!([]), do: :ok
+
+  defp raise_errors!([{exception, stacktrace}]) do
+    reraise(exception, stacktrace)
+  end
+
+  defp raise_errors!(errors) do
+    message =
+      Enum.map_join(errors, "\n\n", fn {exception, stacktrace} ->
+        Exception.format(:error, exception, stacktrace)
+      end)
+
+    raise RuntimeError, "expected no errors, got:\n\n#{message}"
   end
 
   @doc false
-  def assert_instance_alive!(protocol_module, instance) do
+  def assert_instance_alive!(instance) do
     case InstanceManager.fetch_instance_entry(instance) do
-      {:error, :not_found} ->
-        raise "expected #{format_instance(protocol_module, instance)} to be a TestServer-managed instance"
+      {:ok, %{status: :running}} -> instance
+      {:ok, %{status: {:stopped, stacktrace}}} -> raise_instance_stopped!(instance, stacktrace)
+      {:ok, %{status: {:exited, reason}}} -> raise_instance_exited!(instance, reason)
+      {:error, :not_found} -> raise_instance_not_found!(instance)
+    end
 
-      {:ok, %{protocol_module: other_protocol_module}}
-      when other_protocol_module != protocol_module ->
-        raise "expected #{format_instance(protocol_module, instance)}, but got #{format_instance(other_protocol_module, instance)}"
+    :ok
+  end
 
-      {:ok, %{protocol_module: ^protocol_module, exit: nil}} ->
-        :ok
+  defp raise_instance_stopped!(instance, stacktrace) do
+    raise RuntimeError, """
+    expected #{format_instance(instance)} to be running, but it was stopped at:
 
-      {:ok, %{protocol_module: ^protocol_module, exit: %{reason: nil, stacktrace: stacktrace}}}
-      when is_list(stacktrace) ->
-        raise """
-        expected #{format_instance(protocol_module, instance)} to be running, but it was stopped at:
+    #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
+    """
+  end
 
-        #{Enum.map_join(stacktrace, "\n    ", &Exception.format_stacktrace_entry/1)}
-        """
-
-      {:ok, %{protocol_module: ^protocol_module, exit: %{reason: reason, stacktrace: nil}}} ->
-        raise """
-        expected #{format_instance(protocol_module, instance)} to be running, but it exited with reason:
-
-        #{Exception.format_exit(reason)}
-        """
+  @doc false
+  def stop_instance(instance) do
+    case InstanceManager.stop_instance(instance) do
+      {:ok, {:stopped, _stacktrace}} -> :ok
+      {:error, :not_found} -> raise_instance_not_found!(instance)
+      {:error, {:stopped, stacktrace}} -> raise_instance_stopped!(instance, stacktrace)
+      {:error, {:exited, reason}} -> raise_instance_exited!(instance, reason)
     end
   end
 
   @doc false
-  def format_instance(protocol_module, instance) do
+  def format_instance({protocol_module, instance_pid}) do
     instance_module = Module.concat(protocol_module, Instance)
 
-    "#{inspect(instance_module)} #{inspect(instance)}"
+    "#{inspect(instance_module)} #{inspect(instance_pid)}"
   end
 
   @doc false
   def raise_start_failure!(protocol_module, options, reason) do
-    raise "could not start #{inspect(protocol_module)} instance#{format_port(options)}:\n\n#{Exception.format_exit(reason)}"
+    raise "could not start #{inspect(protocol_module)} instance#{format_address(options)}:\n\n#{Exception.format_exit(reason)}"
   end
 
-  defp format_port(options) do
-    case Keyword.get(options, :port) do
-      port when is_integer(port) -> " on port #{port}"
-      _no_port -> ""
+  defp format_address(options) do
+    case {Keyword.get(options, :ip, :any), Keyword.get(options, :port)} do
+      {:any, nil} -> ""
+      {:any, port} -> " on port #{port}"
+      {ip, nil} -> " on #{format_ip(ip)}"
+      {ip, port} -> " on #{format_ip(ip)}:#{port}"
     end
+  end
+
+  defp format_ip({_, _, _, _} = ip), do: :inet.ntoa(ip)
+  defp format_ip({_, _, _, _, _, _, _, _} = ip), do: "[#{:inet.ntoa(ip)}]"
+  defp format_ip(:loopback), do: "localhost"
+
+  @doc false
+  def supervise_server(server_pid, shutdown_fn) do
+    spawn_link(fn ->
+      false = Process.flag(:trap_exit, true)
+      monitor = Process.monitor(server_pid)
+
+      receive do
+        {:DOWN, ^monitor, :process, ^server_pid, reason} -> exit({:shutdown, reason})
+        {:EXIT, _pid, _reason} -> shutdown_fn.(server_pid)
+      end
+    end)
+
+    :ok
   end
 
   @doc false
   def autostart_instance(protocol_module) do
-    case InstanceManager.fetch_instance(self(), protocol_module) do
+    case InstanceManager.fetch_instance_by_caller_protocol(self(), protocol_module) do
       :error -> protocol_module.start!()
       {:ok, instance} -> instance
     end
@@ -174,67 +259,199 @@ defmodule TestServer do
   end
 
   @doc false
-  def open_port(options) do
-    {port, listen_options} =
-      case Keyword.get(options, :port, 0) do
-        {port, options} -> {port, options}
-        port -> {port, []}
-      end
+  def validate_ip!(options) do
+    ipfamily = validate_ipfamily!(options)
+    ip = validate_ip!(options, Keyword.get(options, :ipfamily))
 
-    port = validate_port!(port: port)
+    {ipfamily, ip}
+  end
 
-    with {:ok, socket} <- :gen_tcp.listen(port, listen_options),
-         {:ok, port} <- :inet.port(socket),
-         true <- :erlang.port_close(socket) do
-      {:ok, port}
-    else
-      {:error, reason} ->
-        {:error,
-         RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")}
+  defp validate_ip!(options, ipfamily) when is_list(options) do
+    ip = Keyword.get(options, :ip, :loopback)
+
+    case {ip, ipfamily} do
+      {{_, _, _, _}, ipfamily} when ipfamily in [:inet, nil] ->
+        ip
+
+      {{_, _, _, _, _, _, _, _}, ipfamily} when ipfamily in [:inet6, nil] ->
+        ip
+
+      {ip, _} when ip in [:loopback, :any] ->
+        ip
+
+      {_ip, :inet} ->
+        raise ArgumentError, "expected :ip to be an IPv4 tuple, got: #{inspect(ip)}"
+
+      {_ip, :inet6} ->
+        raise ArgumentError, "expected :ip to be an IPv6 tuple, got: #{inspect(ip)}"
+
+      {_ip, nil} ->
+        raise ArgumentError,
+              "expected :ip to be an IP tuple, :any, or :loopback, got: #{inspect(ip)}"
+    end
+  end
+
+  defp validate_ipfamily!(options) do
+    ip = Keyword.get(options, :ip)
+    ipfamily = Keyword.get(options, :ipfamily, ipfamily(ip))
+
+    case ipfamily do
+      :inet ->
+        :inet
+
+      :inet6 ->
+        :inet6
+
+      other ->
+        raise(
+          ArgumentError,
+          "expected :ipfamily to be one of :inet or :inet6, got: #{inspect(other)}"
+        )
+    end
+  end
+
+  defp ipfamily({_, _, _, _, _, _, _, _}), do: :inet6
+  defp ipfamily(_other), do: :inet
+
+  @doc false
+  def validate_function_option!(options, option, arity) do
+    value = Keyword.get(options, option)
+    arities = List.wrap(arity)
+
+    case Enum.any?(arities, &is_function(value, &1)) do
+      true ->
+        :ok
+
+      false ->
+        raise ArgumentError,
+              "expected #{inspect(option)} to be a #{Enum.join(arities, " or ")}-arity function, got: #{inspect(value)}"
     end
   end
 
   @doc false
-  def fetch_instance!(protocol_module) do
+  def validate_timeout!(options, default_timeout) do
+    timeout = Keyword.get(options, :timeout, default_timeout)
+
+    case is_integer(timeout) and timeout > 0 do
+      true ->
+        timeout
+
+      false ->
+        raise ArgumentError,
+              "expected :timeout to be a positive integer, got: #{inspect(timeout)}"
+    end
+  end
+
+  @log_levels ~w(emergency alert critical error warning notice info debug)a
+
+  defp validate_log_option!(options) do
+    case Keyword.get(options, :log, :warning) do
+      false ->
+        false
+
+      log when log in @log_levels ->
+        log
+
+      other ->
+        raise ArgumentError,
+              "expected :log to be one of #{Enum.map_join(@log_levels, ", ", &inspect/1)}, got: #{inspect(other)}"
+    end
+  end
+
+  @doc false
+  def validate_log_level!(:none), do: :ok
+  def validate_log_level!(:all), do: :ok
+  def validate_log_level!(level) when level in @log_levels, do: :ok
+
+  def validate_log_level!(level) do
+    raise ArgumentError,
+          "expected :log_level in :daemon to be one of #{Enum.map_join(@log_levels ++ [:none, :all], ", ", &inspect/1)}, got: #{inspect(level)}"
+  end
+
+  @doc false
+  def split_atom_options_with_ipfamily(options, ipfamily_options) do
+    {atoms, options} = Enum.split_with(options, &is_atom/1)
+
+    atoms =
+      case atoms -- ~w(inet inet6)a do
+        ^atoms ->
+          atoms ++ List.wrap(Keyword.get(ipfamily_options, :ipfamily))
+
+        _atoms ->
+          atoms
+      end
+
+    {atoms, options}
+  end
+
+  @doc false
+  def fetch_protocol_instance!(protocol_module) do
     instance_module = Module.concat(protocol_module, Instance)
 
-    case InstanceManager.fetch_instance(self(), protocol_module) do
+    case InstanceManager.fetch_instance_by_caller_protocol(self(), protocol_module) do
       :error -> raise "expected #{inspect(instance_module)} to be running"
       {:ok, instance} -> instance
     end
   end
 
   @doc false
-  def host(options) do
-    host = Keyword.get(options, :host)
+  def add_host(options) do
+    Keyword.validate!(options, [:host, :port, :ip, :ipfamily])
 
-    unless is_nil(host) or is_binary(host),
-      do: raise(ArgumentError, "expected :host to be a binary or nil, got: #{inspect(host)}")
-
-    case host do
-      nil ->
+    case Keyword.has_key?(options, :host) do
+      false ->
         "localhost"
 
-      host ->
-        :inet_db.set_lookup([:file, :dns])
-        :inet_db.add_host({127, 0, 0, 1}, [String.to_charlist(host)])
-        :inet_db.add_host({0, 0, 0, 0, 0, 0, 0, 1}, [String.to_charlist(host)])
+      true ->
+        name = Keyword.fetch!(options, :host)
 
-        host
+        do_add_host(name, options)
     end
   end
 
+  defp do_add_host(name, options) when is_binary(name) do
+    ipfamily = Keyword.get(options, :ipfamily)
+    ip = resolve_ip(Keyword.get(options, :ip), ipfamily)
+    ipfamily = resolve_ipfamily(ip)
+
+    case InetDB.add_host(ip, name, ipfamily) do
+      :ok ->
+        :ok
+
+      {:error, ips} ->
+        raise ArgumentError,
+              "expected :host not to resolve to an IP address, got: #{inspect(ips)}"
+    end
+
+    name
+  end
+
+  defp do_add_host(name, _options) do
+    raise(ArgumentError, "expected :host to be a binary, got: #{inspect(name)}")
+  end
+
+  defp resolve_ip({0, 0, 0, 0}, _inet), do: {127, 0, 0, 1}
+  defp resolve_ip({0, 0, 0, 0, 0, 0, 0, 0}, _inet), do: {0, 0, 0, 0, 0, 0, 0, 1}
+  defp resolve_ip({_, _, _, _} = ip, _inet), do: ip
+  defp resolve_ip({_, _, _, _, _, _, _, _} = ip, _inet), do: ip
+  defp resolve_ip(_, :inet6), do: {0, 0, 0, 0, 0, 0, 0, 1}
+  defp resolve_ip(_, :inet), do: {127, 0, 0, 1}
+  defp resolve_ip(_, nil), do: {127, 0, 0, 1}
+
+  defp resolve_ipfamily({_, _, _, _, _, _, _, _}), do: :inet6
+  defp resolve_ipfamily({_, _, _, _}), do: :inet
+
   @doc false
-  @spec report_error(keyword(), {struct(), TestServer.stacktrace()}) :: :ok
-  def report_error(options, {exception, stacktrace}) do
-    caller = Keyword.fetch!(options, :caller)
+  def report_error(instance, {exception, stacktrace}, options) do
+    case Keyword.fetch!(options, :log) do
+      false ->
+        :ok
 
-    unless Keyword.get(options, :suppress_warning, false),
-      do: IO.warn(Exception.format(:error, exception, stacktrace))
+      level ->
+        Logger.log(level, Exception.format(:error, exception, stacktrace), domain: [:test_server])
+    end
 
-    ExUnit.OnExitHandler.add(caller, make_ref(), fn ->
-      reraise exception, stacktrace
-    end)
+    InstanceManager.add_error(instance, {exception, stacktrace})
 
     :ok
   end

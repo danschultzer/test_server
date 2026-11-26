@@ -26,11 +26,18 @@ if Code.ensure_loaded?(Bandit) do
 
     defp send_and_receive(plug_pid, f, a) do
       mfa = {Bandit.Adapter, f, a}
+      monitor = Process.monitor(plug_pid)
 
       send(plug_pid, {self(), mfa})
 
       receive do
-        {:ok, ^mfa, res} -> res
+        {:ok, ^mfa, res} ->
+          Process.demonitor(monitor, [:flush])
+
+          res
+
+        {:DOWN, ^monitor, :process, ^plug_pid, reason} ->
+          exit({:plug, reason})
       end
     end
 
@@ -97,6 +104,11 @@ if Code.ensure_loaded?(Bandit) do
     @impl Plug.Conn.Adapter
     def get_http_protocol({plug_pid, payload}) do
       send_and_receive(plug_pid, :get_http_protocol, [payload])
+    end
+
+    @impl Plug.Conn.Adapter
+    def get_sock_data({plug_pid, payload}) do
+      send_and_receive(plug_pid, :get_sock_data, [payload])
     end
   end
 end

@@ -7,10 +7,11 @@ defmodule TestServer.HTTP do
              |> String.trim()
 
   alias Plug.Conn
-  alias TestServer.HTTP.{Instance, Server}
+  alias TestServer.HTTP.Instance
 
   @type handler_ref :: reference()
-  @type plug_module :: module()
+  @type plug :: plug_module() | plug_fun()
+  @type plug_module :: module() | {module(), Plug.opts()}
   @type plug_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
 
   @typedoc "An anonymous function that matches a request."
@@ -56,39 +57,43 @@ defmodule TestServer.HTTP do
 
   ## Options
 
-    * `:port`             - integer of port number, defaults to random port
-      that can be opened;
+    * `:port`        - integer of port number. Defaults to `0` which selects a
+      random port;
+
+    * `:ip`               - a `t:TestServer.ip_address/0` the server will bind
+      to. Defaults to `:loopback`;
+
+    * `:ipfamily`    - the IP address type to use, either `:inet` or `:inet6`.
+      Defaults to `:inet6` if `:ip` is IPv6 format, otherwise `:inet`;
 
     * `:scheme`           - an atom for the http scheme. Defaults to `:http`;
 
-    * `:http_server`      - HTTP server configuration. Defaults to
+    * `:http_server` - HTTP server configuration. Defaults to
       `{TestServer.HTTP.Server.Bandit, []}`,
       `{TestServer.HTTP.Server.Plug.Cowboy, []}`, or
       `{TestServer.HTTP.Server.Httpd, []}` depending on which web server is
       available in the project dependencies;
 
-    * `:tls`              - passthru options for TLS configuration handled by
-      the webserver. Default will autogenerate key and certificates when
-      neither `:key` nor `:keyfile` is set and `:scheme` is `:https`. The CA
-      certificates can be fetched from `cacerts/1`;
+    * `:tls`         - options for TLS configuration passed directly to the
+      webserver. When `scheme: :https` defaults to
+      `[key: key, cert: cert, cacerts: cacerts]` when neither `:key` nor
+      `:keyfile` is set in `:tls`. The generated CA certificates can be fetched
+      from `cacerts/0`;
 
-    * `:ipfamily`         - the IP address type to use, either `:inet` or
-      `:inet6`. Defaults to `:inet`;
-
-    * `:suppress_warning` - suppresses IO warnings on expectation failures
-      related to this instance. Defaults to `false`;
+    * `:log`         - The log level for the instance when errors occur.
+      Defaults to `:warning`, can be set to false to disable it.;
 
   ## Examples
 
       TestServer.HTTP.start!(
         scheme: :https,
         ipfamily: :inet6,
-        http_server: {TestServer.HTTP.Server.Bandit, [ip: :any]}
+        http_server: {TestServer.HTTP.Server.Bandit, [http_options: [compress: false]]}
       )
 
       TestServer.HTTP.handle(
         to: fn conn ->
-          assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+          assert conn.remote_ip == {0, 0, 0, 0, 0, 0, 0, 1}
 
           Plug.Conn.resp(conn, 200, to_string(Plug.Conn.get_http_protocol(conn)))
         end
@@ -106,7 +111,16 @@ defmodule TestServer.HTTP do
   """
   @spec start(keyword()) :: {:ok, TestServer.instance()} | {:error, term()}
   def start(options \\ []) do
-    Keyword.validate!(options, [:port, :scheme, :http_server, :tls, :ipfamily, :suppress_warning])
+    Keyword.validate!(options, [
+      :port,
+      :ip,
+      :scheme,
+      :http_server,
+      :tls,
+      :ipfamily,
+      :log
+    ])
+
     TestServer.start_instance(__MODULE__, options, &verify_instance!/1)
   end
 
@@ -125,7 +139,7 @@ defmodule TestServer.HTTP do
 
       active_handlers ->
         raise """
-        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a request for these handlers before the test ended:
+        expected #{TestServer.format_instance(instance)} to receive a request for these handlers before the test ended:
 
         #{Instance.format_handlers(active_handlers)}
         """
@@ -142,7 +156,7 @@ defmodule TestServer.HTTP do
 
       active_websocket_handlers ->
         raise """
-        expected #{TestServer.format_instance(__MODULE__, instance)} to receive a frame for these websocket handlers before the test ended:
+        expected #{TestServer.format_instance(instance)} to receive a frame for these websocket handlers before the test ended:
 
         #{Instance.format_websocket_handlers(active_websocket_handlers)}
         """
@@ -163,21 +177,27 @@ defmodule TestServer.HTTP do
 
       assert {:error, %Req.TransportError{}} = Req.get(url, retry: false)
   """
-  @spec stop() :: :ok | {:error, term()}
-  def stop, do: stop(TestServer.fetch_instance!(__MODULE__))
+  @spec stop() :: :ok
+  def stop, do: stop(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Shuts down a test server instance.
 
   See `stop/0` for more.
   """
-  @spec stop(TestServer.instance()) :: :ok | {:error, term()}
-  def stop(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  @spec stop(TestServer.instance()) :: :ok
+  def stop({__MODULE__, _instance_pid} = instance) do
+    :ok = TestServer.assert_instance_alive!(instance)
+    server_pid = instance |> Instance.options() |> Keyword.fetch!(:server)
+    monitor = Process.monitor(server_pid)
 
-    :ok = Server.stop(Instance.options(instance))
+    TestServer.stop_instance(instance)
 
-    TestServer.stop_instance(__MODULE__, instance)
+    receive do
+      {:DOWN, ^monitor, :process, ^server_pid, _reason} -> :ok
+    after
+      5_000 -> raise "expected HTTP server #{inspect(server_pid)} to shut down"
+    end
   end
 
   @spec url() :: binary()
@@ -188,8 +208,9 @@ defmodule TestServer.HTTP do
 
   ## Options
 
-    * `:host` - binary host value, it'll be added to inet for IP `127.0.0.1`
-      and `::1`, defaults to `"localhost"`;
+    * `:host` - binary host value, it'll be registered in the `m::inet` DNS
+      file for the instance's IP, and will last the duration of the test.
+      Defaults to `"localhost"`.
 
   ## Examples
 
@@ -197,19 +218,20 @@ defmodule TestServer.HTTP do
 
       assert TestServer.HTTP.url() == "http://localhost:4444"
       assert TestServer.HTTP.url("/test") == "http://localhost:4444/test"
-      assert TestServer.HTTP.url(host: "example.com") == "http://example.com:4444"
+      assert TestServer.HTTP.url(host: "example.test") == "http://example.test:4444"
   """
   @spec url(uri_path :: binary() | keyword() | TestServer.instance()) :: binary()
   def url(path) when is_binary(path), do: url(path, [])
   def url(options) when is_list(options), do: url("", options)
-  def url(instance) when is_pid(instance), do: url(instance, "", [])
+  def url({__MODULE__, _instance_pid} = instance), do: url(instance, "", [])
 
   @spec url(uri_path :: binary(), keyword()) :: binary()
-  def url(path, options) when is_binary(path),
-    do: url(TestServer.fetch_instance!(__MODULE__), path, options)
+  def url(path, options) when is_binary(path) and is_list(options),
+    do: url(TestServer.fetch_protocol_instance!(__MODULE__), path, options)
 
   @spec url(TestServer.instance(), uri_path :: binary()) :: binary()
-  def url(instance, path) when is_pid(instance), do: url(instance, path, [])
+  def url({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
+    do: url(instance, path, [])
 
   @doc """
   Produces a URL for a test server instance.
@@ -217,14 +239,21 @@ defmodule TestServer.HTTP do
   See `url/1` for options.
   """
   @spec url(TestServer.instance(), uri_path :: binary(), keyword()) :: binary()
-  def url(instance, path, options) do
-    Keyword.validate!(options, [:host])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def url({__MODULE__, _instance_pid} = instance, path, options)
+      when is_binary(path) and is_list(options) do
+    TestServer.assert_instance_alive!(instance)
 
-    domain = TestServer.host(options)
-    options = Instance.options(instance)
+    options =
+      instance
+      |> Instance.options()
+      |> Keyword.take(~w(scheme port ip ipfamily)a)
+      |> Keyword.merge(options)
 
-    "#{Keyword.fetch!(options, :scheme)}://#{domain}:#{Keyword.fetch!(options, :port)}#{path}"
+    {scheme, options} = Keyword.pop(options, :scheme)
+    port = Keyword.fetch!(options, :port)
+    host = TestServer.add_host(options)
+
+    "#{scheme}://#{host}:#{port}#{path}"
   end
 
   def handle, do: handle([])
@@ -249,7 +278,7 @@ defmodule TestServer.HTTP do
     * `:match`     - an `t:match_fun/0` function that returns a boolean.
       Defaults to matching anything;
 
-    * `:to`        - a `t:handler_fun/0` or `t:plug_module/0` that will be
+    * `:to`        - a `t:handler_fun/0` or `t:plug/0` that will be
       called when the handler matches. Defaults to return the HTTP protocol;
 
   ## Examples
@@ -280,10 +309,10 @@ defmodule TestServer.HTTP do
   def handle(path) when is_binary(path), do: handle(path, [])
 
   @spec handle(TestServer.instance()) :: :ok
-  def handle(instance) when is_pid(instance), do: handle(instance, [])
+  def handle({__MODULE__, _instance_pid} = instance), do: handle(instance, [])
 
   @spec handle(TestServer.instance(), uri_path :: binary()) :: :ok
-  def handle(instance, path) when is_pid(instance) and is_binary(path),
+  def handle({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
     do: handle(instance, path, [])
 
   @doc """
@@ -292,7 +321,7 @@ defmodule TestServer.HTTP do
   See `handle/1` for options.
   """
   @spec handle(TestServer.instance(), keyword()) :: :ok
-  def handle(instance, options) when is_pid(instance) and is_list(options) do
+  def handle({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:path, :method, :match, :to])
 
     {:ok, _handler} = register_handler(instance, options)
@@ -306,16 +335,15 @@ defmodule TestServer.HTTP do
   end
 
   @spec handle(TestServer.instance(), uri_path :: binary(), keyword()) :: :ok
-  def handle(instance, path, options)
-      when is_pid(instance) and is_binary(path) and is_list(options) do
+  def handle({__MODULE__, _instance_pid} = instance, path, options)
+      when is_binary(path) and is_list(options) do
     handle(instance, Keyword.put(options, :path, path))
   end
 
   defp register_handler(instance, options) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_handler/1)
 
     Instance.register(instance, {:handle, options, stacktrace})
@@ -328,7 +356,7 @@ defmodule TestServer.HTTP do
   @doc """
   Adds a plug to the current test server.
 
-  This plug will be called for all requests before a handler is matched.
+  This `t:plug/0` will be called for all requests before a handler is matched.
 
   ## Examples
 
@@ -353,8 +381,8 @@ defmodule TestServer.HTTP do
   See `plug/1` for more.
   """
   @spec plug(TestServer.instance(), plug_module() | plug_fun()) :: :ok
-  def plug(instance, plug) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def plug({__MODULE__, _instance_pid} = instance, plug) do
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
     {:ok, _plug} = Instance.register(instance, {:plug, plug, stacktrace})
@@ -377,7 +405,7 @@ defmodule TestServer.HTTP do
               Req.get(TestServer.HTTP.url(), req_options)
   """
   @spec cacerts() :: TestServer.cacerts()
-  def cacerts, do: cacerts(TestServer.fetch_instance!(__MODULE__))
+  def cacerts, do: cacerts(TestServer.fetch_protocol_instance!(__MODULE__))
 
   @doc """
   Fetches the generated CA certificates for a test server instance.
@@ -385,17 +413,17 @@ defmodule TestServer.HTTP do
   See `cacerts/0` for more.
   """
   @spec cacerts(TestServer.instance()) :: TestServer.cacerts()
-  def cacerts(instance) do
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+  def cacerts({__MODULE__, _instance_pid} = instance) do
+    TestServer.assert_instance_alive!(instance)
 
     options = Instance.options(instance)
 
     cond do
       options[:scheme] != :https ->
-        raise "expected #{TestServer.format_instance(__MODULE__, instance)} to be running with [scheme: :https] option"
+        raise "expected #{TestServer.format_instance(instance)} to be running with [scheme: :https] option"
 
       not Keyword.has_key?(options, :cacerts) ->
-        raise "expected #{TestServer.format_instance(__MODULE__, instance)} not to be running with [tls: [cacerts: ...]] option"
+        raise "expected #{TestServer.format_instance(instance)} not to be running with [tls: [cacerts: ...]] option"
 
       true ->
         Keyword.fetch!(options, :cacerts)
@@ -454,10 +482,10 @@ defmodule TestServer.HTTP do
   def websocket(path) when is_binary(path), do: websocket(path, [])
 
   @spec websocket(TestServer.instance()) :: websocket()
-  def websocket(instance) when is_pid(instance), do: websocket(instance, [])
+  def websocket({__MODULE__, _instance_pid} = instance), do: websocket(instance, [])
 
   @spec websocket(TestServer.instance(), uri_path :: binary()) :: websocket()
-  def websocket(instance, path) when is_pid(instance) and is_binary(path),
+  def websocket({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
     do: websocket(instance, path, [])
 
   @doc """
@@ -466,7 +494,7 @@ defmodule TestServer.HTTP do
   See `websocket/1` for options.
   """
   @spec websocket(TestServer.instance(), keyword()) :: websocket()
-  def websocket(instance, options) when is_pid(instance) and is_list(options) do
+  def websocket({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:path, :method, :match, :to])
 
     options =
@@ -485,8 +513,8 @@ defmodule TestServer.HTTP do
   end
 
   @spec websocket(TestServer.instance(), uri_path :: binary(), keyword()) :: websocket()
-  def websocket(instance, path, options)
-      when is_pid(instance) and is_binary(path) and is_list(options) do
+  def websocket({__MODULE__, _instance_pid} = instance, path, options)
+      when is_binary(path) and is_list(options) do
     websocket(instance, Keyword.put(options, :path, path))
   end
 
@@ -528,18 +556,21 @@ defmodule TestServer.HTTP do
       assert WebSocketClient.send_message(client, "ping") == {:ok, "pong"}
   """
   @spec websocket_handle(websocket(), keyword()) :: :ok
-  def websocket_handle({instance, websocket_ref} = _websocket, options) do
+  def websocket_handle(
+        {{__MODULE__, _instance_pid} = instance, websocket_ref} = _websocket,
+        options
+      )
+      when is_list(options) do
     Keyword.validate!(options, [:match, :to])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_websocket_handler/2)
 
-    {:ok, _handler} =
-      Instance.register(instance, {:websocket, {:handle, websocket_ref, options, stacktrace}})
-
-    :ok
+    case Instance.register(instance, {:websocket, {:handle, websocket_ref, options, stacktrace}}) do
+      {:ok, _handler} -> :ok
+      {:error, :not_found} -> raise_websocket_not_found!(instance, websocket_ref)
+    end
   end
 
   defp default_websocket_handler(frame, state),
@@ -547,6 +578,10 @@ defmodule TestServer.HTTP do
 
   @spec websocket_send(websocket()) :: :ok
   def websocket_send(websocket), do: websocket_send(websocket, [])
+
+  defp raise_websocket_not_found!(instance, websocket_ref) do
+    raise "expected #{TestServer.format_instance(instance)} to have a websocket registered under #{inspect(websocket_ref)}"
+  end
 
   @doc """
   Sends a message to a websocket endpoint.
@@ -566,22 +601,25 @@ defmodule TestServer.HTTP do
       assert WebSocketClient.receive_message(client) == {:ok, "hello"}
   """
   @spec websocket_send(websocket(), keyword()) :: :ok
-  def websocket_send({instance, websocket_ref} = _websocket, options) do
+  def websocket_send(
+        {{__MODULE__, _instance_pid} = instance, websocket_ref} = _websocket,
+        options
+      )
+      when is_list(options) do
     Keyword.validate!(options, [:to])
-    TestServer.assert_instance_alive!(__MODULE__, instance)
+    TestServer.assert_instance_alive!(instance)
 
     [_first_module_entry | stacktrace] = TestServer.pruned_stacktrace(__MODULE__)
-
     options = Keyword.put_new(options, :to, &default_websocket_send/1)
 
     case Instance.register(instance, {:websocket, {:send, websocket_ref, options}}) do
-      {:ok, pid} ->
-        Kernel.send(pid, {:send, {options, stacktrace}})
+      {:ok, owner_pid} ->
+        Kernel.send(owner_pid, {:send, {options, stacktrace}})
 
         :ok
 
-      {:error, :einval} ->
-        raise_send_error!(instance, "it does not exist")
+      {:error, :not_found} ->
+        raise_websocket_not_found!(instance, websocket_ref)
 
       {:error, :enotconn} ->
         raise_send_error!(instance, "no client has connected to it")
@@ -594,6 +632,6 @@ defmodule TestServer.HTTP do
   defp default_websocket_send(state), do: {:reply, {:text, "ping"}, state}
 
   defp raise_send_error!(instance, reason) do
-    raise "cannot send to websocket on #{TestServer.format_instance(__MODULE__, instance)} because #{reason}"
+    raise "cannot send to websocket on #{TestServer.format_instance(instance)} because #{reason}"
   end
 end

@@ -8,21 +8,26 @@ defmodule TestServer.TCP.Server do
   def start(instance, options) do
     {default_transport, transports} = validate_transport!(options)
     port = TestServer.validate_port!(options)
+    {ipfamily, ip} = TestServer.validate_ip!(options)
 
     options =
       options
+      |> Keyword.put(:ipfamily, ipfamily)
+      |> Keyword.put(:ip, ip)
       |> put_tls_options(transports)
       |> Keyword.put(:transport, transports)
 
     listen_options = listen_options(options, default_transport)
 
     case transport_listen(default_transport, port, listen_options) do
-      {:ok, socket, port} ->
-        {:ok, acceptor_pid} = Task.start_link(fn -> accept_loop(instance, socket) end)
+      {:ok, socket, {ip, port}} ->
+        {:ok, acceptor_pid} = Task.start(fn -> accept_loop(instance, socket) end)
+        :ok = TestServer.supervise_server(acceptor_pid, fn _ -> transport_close(socket) end)
         {_transport, listener_socket} = socket
 
         options =
           options
+          |> Keyword.put(:ip, ip)
           |> Keyword.put(:port, port)
           |> Keyword.put(:listener, listener_socket)
           |> Keyword.put(:acceptor, acceptor_pid)
@@ -67,15 +72,19 @@ defmodule TestServer.TCP.Server do
   defp listen_options(options, transport) do
     tls_options = Keyword.get(options, :tls, [])
 
-    [mode: :binary]
-    |> Keyword.merge(Keyword.get(options, :listen, []))
+    {listen_atoms, listen_options} =
+      options
+      |> Keyword.get(:listen, [])
+      |> TestServer.split_atom_options_with_ipfamily(options)
+
+    options
+    |> Keyword.take([:ip])
+    |> Keyword.put(:mode, :binary)
+    |> Keyword.merge(listen_options)
     |> Keyword.merge((transport == :tls && tls_options) || [])
     |> Keyword.put(:active, false)
     |> then(fn listen_options ->
-      case Keyword.get(options, :ipfamily, :inet) do
-        :inet -> listen_options
-        ipfamily -> [ipfamily | listen_options]
-      end
+      listen_atoms ++ listen_options
     end)
   end
 
@@ -87,24 +96,21 @@ defmodule TestServer.TCP.Server do
     end
     |> case do
       {:ok, socket} ->
-        {:ok, {transport, socket}, transport_port({transport, socket})}
+        {:ok, {transport, socket}, transport_address({transport, socket})}
 
       {:error, reason} ->
-        exception =
-          RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")
-
-        {:error, exception}
+        {:error, reason}
     end
   end
 
-  defp transport_port({transport, raw_socket}) do
-    {:ok, {_address, port}} =
+  defp transport_address({transport, raw_socket}) do
+    {:ok, address} =
       case transport do
         :tcp -> :inet.sockname(raw_socket)
         :tls -> :ssl.sockname(raw_socket)
       end
 
-    port
+    address
   end
 
   defp accept_loop(instance, listener) do
@@ -114,7 +120,7 @@ defmodule TestServer.TCP.Server do
         accept_loop(instance, listener)
 
       {:error, :closed} ->
-        :ok
+        exit(:shutdown)
 
       {:error, reason} ->
         raise "could not accept TCP connection: #{inspect(reason)}"
@@ -134,10 +140,8 @@ defmodule TestServer.TCP.Server do
   end
 
   defp start_socket(instance, socket) do
-    {:ok, owner} =
+    {:ok, owner_pid} =
       Task.start_link(fn ->
-        Process.link(instance)
-
         receive do
           :start -> :ok
         end
@@ -152,18 +156,20 @@ defmodule TestServer.TCP.Server do
         transport_close(socket)
       end)
 
-    :ok = transport_controlling_process(socket, owner)
+    :ok = transport_controlling_process(socket, owner_pid)
 
-    send(owner, :start)
+    send(owner_pid, :start)
 
-    owner
+    :ok
   end
+
+  @handshake_timeout 5_000
 
   defp transport_handshake({transport, raw_socket}, options \\ []) do
     transport
     |> case do
       :tcp -> {:ok, raw_socket}
-      :tls -> :ssl.handshake(raw_socket, options)
+      :tls -> :ssl.handshake(raw_socket, options, @handshake_timeout)
     end
     |> case do
       {:ok, raw_socket} ->
@@ -178,7 +184,7 @@ defmodule TestServer.TCP.Server do
   end
 
   defp transport_handshake_continue(raw_socket, :tls) do
-    case :ssl.handshake_continue(raw_socket, []) do
+    case :ssl.handshake_continue(raw_socket, [], @handshake_timeout) do
       {:ok, raw_socket} -> {:ok, {:tls, raw_socket}}
       {:error, reason} -> {:error, reason}
     end
@@ -191,10 +197,10 @@ defmodule TestServer.TCP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.TCP, instance)} received an unexpected TCP connection attempt"
+          "#{TestServer.format_instance(instance)} received an unexpected TCP connection attempt"
           |> append_formatted_connections(instance)
 
-        send_error(socket, RuntimeError.exception(message), instance)
+        send_error(socket, instance, RuntimeError.exception(message))
 
         socket
     end
@@ -247,7 +253,7 @@ defmodule TestServer.TCP.Server do
         socket_loop(instance, socket, state)
 
       {:error, reason} ->
-        send_error(socket, reason, instance)
+        send_error(socket, instance, reason)
         socket
     end
   end
@@ -262,7 +268,7 @@ defmodule TestServer.TCP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.TCP, instance)} received unexpected TCP data"
+          "#{TestServer.format_instance(instance)} received unexpected TCP data"
           |> append_formatted_data(data)
           |> append_formatted_handlers(instance)
 
@@ -376,15 +382,15 @@ defmodule TestServer.TCP.Server do
     end
   end
 
-  defp send_error(socket, {exception, stacktrace}, instance) do
-    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
-
+  defp send_error(socket, instance, {exception, stacktrace}) do
+    options = Instance.options(instance)
+    :ok = TestServer.report_error(instance, {exception, stacktrace}, options)
     message = Exception.format(:error, exception, stacktrace)
 
     transport_send(socket, message)
   end
 
-  defp send_error(socket, reason, instance), do: send_error(socket, {reason, []}, instance)
+  defp send_error(socket, instance, reason), do: send_error(socket, instance, {reason, []})
 
   defp transport_close({transport, raw_socket}) do
     case transport do
@@ -393,10 +399,10 @@ defmodule TestServer.TCP.Server do
     end
   end
 
-  defp transport_controlling_process({transport, raw_socket}, owner) do
+  defp transport_controlling_process({transport, raw_socket}, owner_pid) do
     case transport do
-      :tcp -> :gen_tcp.controlling_process(raw_socket, owner)
-      :tls -> :ssl.controlling_process(raw_socket, owner)
+      :tcp -> :gen_tcp.controlling_process(raw_socket, owner_pid)
+      :tls -> :ssl.controlling_process(raw_socket, owner_pid)
     end
   end
 

@@ -28,7 +28,7 @@ defmodule TestServer.HTTP.Plug do
 
       {:error, {:not_found, conn}} ->
         message =
-          "#{TestServer.format_instance(TestServer.HTTP, instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
+          "#{TestServer.format_instance(instance)} received an unexpected #{conn.method} request at #{conn.request_path}"
           |> append_formatted_params(conn)
           |> append_formatted_handlers(instance)
 
@@ -88,7 +88,8 @@ defmodule TestServer.HTTP.Plug do
   end
 
   defp send_error_resp(conn, instance, {exception, stacktrace}) do
-    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
+    options = Instance.options(instance)
+    :ok = TestServer.report_error(instance, {exception, stacktrace}, options)
 
     Conn.send_resp(conn, 500, Exception.format(:error, exception, stacktrace))
   end

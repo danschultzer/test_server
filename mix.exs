@@ -38,12 +38,12 @@ defmodule TestServer.MixProject do
 
   defp deps do
     [
-      {:plug, "~> 1.14"},
+      {:plug, "~> 1.18"},
       {:x509, "~> 0.6"},
 
       # Optional web servers
-      {:bandit, "~> 1.4", optional: true},
-      {:plug_cowboy, "~> 2.0", optional: true},
+      {:bandit, "~> 1.7", optional: true},
+      {:plug_cowboy, "~> 2.9", optional: true},
 
       # Development and test
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
@@ -72,7 +72,7 @@ defmodule TestServer.MixProject do
     [
       source_ref: "v#{@version}",
       main: "TestServer",
-      canonical: "http://hexdocs.pm/test_server",
+      canonical: "https://test-server.hexdocs.pm",
       source_url: @source_url,
       extras: [
         "CHANGELOG.md": [filename: "CHANGELOG"]

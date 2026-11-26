@@ -13,19 +13,19 @@ defmodule TestServer.UDP.Instance do
 
   @spec register(TestServer.instance(), {:peer, TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.UDP.peer_ref()}}
-  def register(instance, {:peer, stacktrace}) do
-    GenServer.call(instance, {:register, {:peer, stacktrace}})
+  def register({TestServer.UDP, instance_pid}, {:peer, stacktrace}) do
+    GenServer.call(instance_pid, {:register, {:peer, stacktrace}})
   end
 
   @spec register(
           TestServer.instance(),
           {:handle, TestServer.UDP.peer_ref(), keyword(), TestServer.stacktrace()}
-        ) :: {:ok, map()}
-  def register(instance, {:handle, peer_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 2)
+        ) :: {:ok, map()} | {:error, :not_found}
+  def register({TestServer.UDP, instance_pid}, {:handle, peer_ref, options, stacktrace}) do
+    Keyword.has_key?(options, :match) && TestServer.validate_function_option!(options, :match, 2)
+    Keyword.has_key?(options, :to) && TestServer.validate_function_option!(options, :to, 2)
 
-    GenServer.call(instance, {:register, {:handle, peer_ref, options, stacktrace}})
+    GenServer.call(instance_pid, {:register, {:handle, peer_ref, options, stacktrace}})
   end
 
   @spec register(
@@ -33,56 +33,30 @@ defmodule TestServer.UDP.Instance do
           {:send, TestServer.UDP.peer_ref(), keyword()}
         ) ::
           {:ok, pid()}
-          | {:error, :einval}
+          | {:error, :not_found}
           | {:error, :enotconn}
           | {:error, :closed}
-  def register(instance, {:send, peer_ref, options}) do
-    timeout = validate_timeout!(options)
+  def register({TestServer.UDP, instance_pid}, {:send, peer_ref, options}) do
+    timeout = TestServer.validate_timeout!(options, @send_timeout)
 
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, 1)
+    Keyword.has_key?(options, :to) && TestServer.validate_function_option!(options, :to, 1)
 
     GenServer.call(
-      instance,
+      instance_pid,
       {:register, {:send, peer_ref, timeout}},
       timeout + 1_000
     )
   end
 
-  defp validate_function_option!(options, option, arity) do
-    value = Keyword.get(options, option)
-
-    case is_function(value, arity) do
-      true ->
-        :ok
-
-      false ->
-        raise ArgumentError,
-              "expected #{inspect(option)} to be a #{arity}-arity function, got: #{inspect(value)}"
-    end
-  end
-
-  defp validate_timeout!(options) do
-    timeout = Keyword.get(options, :timeout, @send_timeout)
-
-    case is_integer(timeout) and timeout > 0 do
-      true ->
-        timeout
-
-      false ->
-        raise ArgumentError,
-              "expected :timeout to be a positive integer, got: #{inspect(timeout)}"
-    end
-  end
-
   @spec dispatch(
           TestServer.instance(),
           {:peer, pid(),
-           {:udp, :gen_udp.socket(), :inet.ip_address(), :inet.port_number()}
+           {:udp, :gen_udp.socket(), :inet.ip_address(), TestServer.port_number()}
            | {:dtls, :ssl.sslsocket()}}
         ) ::
           {:ok, map(), TestServer.UDP.state()} | {:error, :not_found}
-  def dispatch(instance, {:peer, owner, socket}) do
-    GenServer.call(instance, {:dispatch, {:peer, owner, socket}})
+  def dispatch({TestServer.UDP, instance_pid}, {:peer, owner_pid, socket}) do
+    GenServer.call(instance_pid, {:dispatch, {:peer, owner_pid, socket}})
   end
 
   @spec dispatch(
@@ -93,8 +67,8 @@ defmodule TestServer.UDP.Instance do
           | {:ok, TestServer.UDP.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:handle, owner, data, peer_state}) do
-    GenServer.call(instance, {:dispatch, {:handle, owner, data, peer_state}})
+  def dispatch({TestServer.UDP, instance_pid}, {:handle, owner_pid, data, peer_state}) do
+    GenServer.call(instance_pid, {:dispatch, {:handle, owner_pid, data, peer_state}})
   end
 
   @spec dispatch(
@@ -104,23 +78,23 @@ defmodule TestServer.UDP.Instance do
           {:reply, iodata(), TestServer.UDP.state()}
           | {:ok, TestServer.UDP.state()}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:send, options, peer_state, stacktrace}) do
-    GenServer.call(instance, {:dispatch, {:send, options, peer_state, stacktrace}})
+  def dispatch({TestServer.UDP, instance_pid}, {:send, options, peer_state, stacktrace}) do
+    GenServer.call(instance_pid, {:dispatch, {:send, options, peer_state, stacktrace}})
   end
 
   @spec options(TestServer.instance()) :: keyword()
-  def options(instance) do
-    GenServer.call(instance, :options)
+  def options({TestServer.UDP, instance_pid}) do
+    GenServer.call(instance_pid, :options)
   end
 
   @spec peers(TestServer.instance()) :: [map()]
-  def peers(instance) do
-    GenServer.call(instance, :peers)
+  def peers({TestServer.UDP, instance_pid}) do
+    GenServer.call(instance_pid, :peers)
   end
 
   @spec handlers(TestServer.instance()) :: [map()]
-  def handlers(instance) do
-    GenServer.call(instance, :handlers)
+  def handlers({TestServer.UDP, instance_pid}) do
+    GenServer.call(instance_pid, :handlers)
   end
 
   @spec format_handlers([map()]) :: binary()
@@ -149,7 +123,9 @@ defmodule TestServer.UDP.Instance do
 
   @impl true
   def init(options) do
-    case Server.start(self(), options) do
+    {protocol_module, options} = Keyword.pop!(options, :protocol_module)
+
+    case Server.start({protocol_module, self()}, options) do
       {:ok, options} ->
         {:ok, %{options: options, handlers: [], peers: []}}
 
@@ -172,15 +148,21 @@ defmodule TestServer.UDP.Instance do
   end
 
   def handle_call({:register, {:handle, peer_ref, options, stacktrace}}, _from, state) do
-    handler = %{
-      peer_ref: peer_ref,
-      match: Keyword.get(options, :match),
-      to: Keyword.fetch!(options, :to),
-      stacktrace: stacktrace,
-      suspended: false
-    }
+    case Enum.find(state.peers, &(&1.ref == peer_ref)) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+      _peer ->
+        handler = %{
+          peer_ref: peer_ref,
+          match: Keyword.get(options, :match),
+          to: Keyword.fetch!(options, :to),
+          stacktrace: stacktrace,
+          suspended: false
+        }
+
+        {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+    end
   end
 
   def handle_call({:register, {:send, peer_ref, timeout}}, from, state) do
@@ -189,7 +171,7 @@ defmodule TestServer.UDP.Instance do
 
     case {peer, alive?} do
       {nil, _} ->
-        {:reply, {:error, :einval}, state}
+        {:reply, {:error, :not_found}, state}
 
       {%{owner: nil} = peer, _} ->
         timer =
@@ -205,17 +187,17 @@ defmodule TestServer.UDP.Instance do
 
         {:noreply, state}
 
-      {%{owner: _owner}, false} ->
+      {%{owner: _owner_pid}, false} ->
         {:reply, {:error, :closed}, state}
 
-      {%{owner: owner}, true} ->
-        {:reply, {:ok, owner}, state}
+      {%{owner: owner_pid}, true} ->
+        {:reply, {:ok, owner_pid}, state}
     end
   end
 
-  def handle_call({:dispatch, {:peer, owner, socket}}, _from, state) do
+  def handle_call({:dispatch, {:peer, owner_pid, socket}}, _from, state) do
     peer =
-      Enum.find_index(state.peers, &(&1.owner == owner)) ||
+      Enum.find_index(state.peers, &(&1.owner == owner_pid)) ||
         Enum.find_index(state.peers, &is_nil(&1.owner))
 
     case peer do
@@ -223,8 +205,8 @@ defmodule TestServer.UDP.Instance do
         {:reply, {:error, :not_found}, state}
 
       index ->
-        peer = %{Enum.at(state.peers, index) | owner: owner, socket: socket}
-        peer = notify_peer_subscribers(peer, owner)
+        peer = %{Enum.at(state.peers, index) | owner: owner_pid, socket: socket}
+        peer = notify_peer_subscribers(peer, owner_pid)
         peers = List.replace_at(state.peers, index, peer)
         state = %{state | peers: peers}
 
@@ -232,8 +214,8 @@ defmodule TestServer.UDP.Instance do
     end
   end
 
-  def handle_call({:dispatch, {:handle, owner, data, peer_state}}, _from, state) do
-    case Enum.find(state.peers, &(&1.owner == owner)) do
+  def handle_call({:dispatch, {:handle, owner_pid, data, peer_state}}, _from, state) do
+    case Enum.find(state.peers, &(&1.owner == owner_pid)) do
       nil ->
         {:reply, {:error, :not_found}, state}
 
@@ -281,10 +263,10 @@ defmodule TestServer.UDP.Instance do
     end
   end
 
-  defp notify_peer_subscribers(peer, owner) do
+  defp notify_peer_subscribers(peer, owner_pid) do
     Enum.each(peer.subscribers, fn {from, timer} ->
       Process.cancel_timer(timer)
-      GenServer.reply(from, {:ok, owner})
+      GenServer.reply(from, {:ok, owner_pid})
     end)
 
     %{peer | subscribers: []}

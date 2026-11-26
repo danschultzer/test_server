@@ -147,13 +147,19 @@ TestServer.HTTP.start!(ipfamily: :inet6)
 
 TestServer.HTTP.handle(
   to: fn conn ->
-    assert conn.remote_ip == {0, 0, 0, 0, 0, 65_535, 32_512, 1}
+    assert conn.remote_ip == {0, 0, 0, 0, 0, 0, 0, 1}
 
     Plug.Conn.resp(conn, 200, "OK")
   end
 )
 
 assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "OK"}
+```
+
+The `:ipfamily` is automatically set if you specify the `:ip` option:
+
+```elixir
+TestServer.HTTP.start!(ip: {0, 0, 0, 0, 0, 0, 0, 1})
 ```
 
 ## Default CA store

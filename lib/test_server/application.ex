@@ -4,6 +4,7 @@ defmodule TestServer.Application do
 
   def start(_type, _args) do
     children = [
+      TestServer.InetDB,
       TestServer.InstanceManager,
       {DynamicSupervisor, strategy: :one_for_one, name: TestServer.InstanceSupervisor}
     ]

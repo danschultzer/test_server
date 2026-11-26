@@ -42,12 +42,19 @@ defmodule TestServer.TCPTest do
                    end
     end
 
-    test "when port is in use" do
+    test "with invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :ip to be an IP tuple, :any, or :loopback, got: :invalid/,
+                   fn ->
+                     TestServer.TCP.start(ip: :invalid)
+                   end
+    end
+
+    test "with start error" do
       instance = TestServer.TCP.start!()
       {_, port} = TestServer.TCP.address(instance)
 
-      assert {:error, %RuntimeError{message: message}} = TestServer.TCP.start(port: port)
-      assert message == "could not listen on port #{port}: :eaddrinuse"
+      assert TestServer.TCP.start(port: port) == {:error, :eaddrinuse}
     end
 
     test "with multiple instances" do
@@ -60,6 +67,32 @@ defmodule TestServer.TCPTest do
       {_, port_2} = TestServer.TCP.address(instance_2)
 
       refute port_1 == port_2
+    end
+
+    test "with `ipfamily: :inet6` option" do
+      instance = TestServer.TCP.start!(ipfamily: :inet6)
+      :ok = TestServer.TCP.handle()
+      options = TestServer.TCP.Instance.options(instance)
+      listener_socket = Keyword.fetch!(options, :listener)
+
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.sockname(listener_socket)
+      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
+      assert TCPClient.send(socket, "ping") == :ok
+      assert TCPClient.receive_data(socket) == {:ok, "ping"}
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
+    end
+
+    test "with `:ip` option" do
+      instance = TestServer.TCP.start!(ip: {0, 0, 0, 0})
+      :ok = TestServer.TCP.handle()
+      options = TestServer.TCP.Instance.options(instance)
+      listener_socket = Keyword.fetch!(options, :listener)
+
+      assert {:ok, {{0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
+      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+      assert TCPClient.send(socket, "ping") == :ok
+      assert TCPClient.receive_data(socket) == {:ok, "ping"}
+      assert {:ok, {{127, 0, 0, 1}, _port}} = :inet.peername(socket)
     end
 
     test "with `transport: :tls` option" do
@@ -117,29 +150,12 @@ defmodule TestServer.TCPTest do
       assert TLSClient.receive_data(socket) == {:ok, "ping"}
     end
 
-    test "with `ipfamily: :inet6` option" do
-      instance = TestServer.TCP.start!(ipfamily: :inet6)
-      :ok = TestServer.TCP.handle()
+    test "with `:listen` option" do
+      instance = TestServer.TCP.start!(listen: [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 0}])
       options = TestServer.TCP.Instance.options(instance)
       listener_socket = Keyword.fetch!(options, :listener)
 
       assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
-      assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
-      assert TCPClient.send(socket, "ping") == :ok
-      assert TCPClient.receive_data(socket) == {:ok, "ping"}
-      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
-    end
-
-    test "when listener socket is closed" do
-      instance = TestServer.TCP.start!()
-      options = TestServer.TCP.Instance.options(instance)
-      acceptor_pid = Keyword.fetch!(options, :acceptor)
-      listener_socket = Keyword.fetch!(options, :listener)
-      monitor = Process.monitor(acceptor_pid)
-
-      # This triggers the {:error, :closed} code path for normal shutdown
-      assert TCPClient.close(listener_socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^acceptor_pid, :normal}
     end
 
     test "when test ends" do
@@ -159,21 +175,19 @@ defmodule TestServer.TCPTest do
       Process.register(self(), StartEndTest)
 
       assert capture_io(fn -> assert %{failures: 0} = ExUnit.run() end)
-      assert_receive {:server, instance, port}
-      assert monitor = Process.monitor(instance)
-      assert_receive {:DOWN, ^monitor, :process, ^instance, _reason}
+      assert_receive {:server, {TestServer.TCP, instance_pid}, port}
+      assert monitor = Process.monitor(instance_pid)
+      assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
     end
 
-    test "when instance crashes" do
-      Process.register(self(), __MODULE__)
-
+    test "when instance shuts down" do
       defmodule StartInstanceCrashTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!()
+          {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
 
           acceptor_pid =
             instance
@@ -182,7 +196,7 @@ defmodule TestServer.TCPTest do
 
           monitor = Process.monitor(acceptor_pid)
 
-          Process.exit(instance, :shutdown)
+          Process.exit(instance_pid, :shutdown)
 
           assert_receive {:DOWN, ^monitor, :process, ^acceptor_pid, _reason}
         end
@@ -192,22 +206,99 @@ defmodule TestServer.TCPTest do
 
       assert io =~
                ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "when acceptor process crashes" do
+      defmodule StartAcceptorProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
+
+          acceptor_pid =
+            instance
+            |> TestServer.TCP.Instance.options()
+            |> Keyword.fetch!(:acceptor)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(acceptor_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown: :killed"
+    end
+
+    test "when socket process crashes" do
+      defmodule StartSocketProcessCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
+          connection = TestServer.TCP.connection()
+          {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+          :ok = TestServer.TCP.send(connection)
+          {:ok, "ping"} = TCPClient.receive_data(socket)
+          [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(owner_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown: :killed"
     end
   end
 
   describe "start!/1" do
     test "returns instance" do
-      assert instance = TestServer.TCP.start!()
-      assert is_pid(instance)
+      assert {TestServer.TCP, instance_pid} = TestServer.TCP.start!()
+      assert is_pid(instance_pid)
     end
 
-    test "when start fails" do
-      instance = TestServer.TCP.start!()
-      port = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:port)
+    for {ip, text, text_port} <- [
+          {:any, "", " on port "},
+          {:loopback, " on localhost", " on localhost:"},
+          {{127, 0, 0, 1}, " on 127.0.0.1", " on 127.0.0.1:"},
+          {{0, 0, 0, 0, 0, 0, 0, 1}, " on [::1]", " on [::1]:"}
+        ] do
+      test "when start fails with `ip: #{inspect(ip)}`" do
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.TCP.start!(ip: unquote(Macro.escape(ip)), listen: [invalid: 1])
+          end
 
-      assert_raise RuntimeError,
-                   ~r/could not start TestServer.TCP instance on port #{port}:/,
-                   fn -> TestServer.TCP.start!(port: port) end
+        assert Exception.message(error) =~
+                 "could not start TestServer.TCP instance#{unquote(text)}:\n\n:badarg"
+      end
+
+      test "when start fails with `ip: #{inspect(ip)}` and `:port` set" do
+        instance = TestServer.TCP.start!(ip: unquote(Macro.escape(ip)))
+        port = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:port)
+
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.TCP.start!(port: port, ip: unquote(Macro.escape(ip)))
+          end
+
+        assert Exception.message(error) =~
+                 "could not start TestServer.TCP instance#{unquote(text_port)}#{port}:"
+      end
     end
   end
 
@@ -240,39 +331,45 @@ defmodule TestServer.TCPTest do
     end
 
     test "when started with `transport: :tcp` option" do
-      instance = TestServer.TCP.start!(transport: :tcp)
+      {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!(transport: :tcp)
       connection = TestServer.TCP.connection()
       address = TestServer.TCP.address()
       {:ok, socket} = TCPClient.connect(address)
       :ok = TestServer.TCP.send(connection)
       {:ok, "ping"} = TCPClient.receive_data(socket)
-      [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      monitor = Process.monitor(owner)
+      [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      options = TestServer.TCP.Instance.options(instance)
+      acceptor_pid = Keyword.fetch!(options, :acceptor)
+      monitor = Process.monitor(owner_pid)
 
       assert TestServer.TCP.stop() == :ok
 
-      refute Process.alive?(instance)
-      assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
+      refute Process.alive?(instance_pid)
+      refute Process.alive?(acceptor_pid)
       assert {:error, reason} = TCPClient.connect(address)
       assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TCPClient.receive_data(socket, 0)
     end
 
     test "when started with `transport: :tls` option" do
-      instance = TestServer.TCP.start!(transport: :tls)
+      {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!(transport: :tls)
       connection = TestServer.TCP.connection()
       address = TestServer.TCP.address()
       tls_options = tls_options()
       {:ok, socket} = TLSClient.connect(address, tls_options)
       :ok = TestServer.TCP.send(connection)
       {:ok, "ping"} = TLSClient.receive_data(socket)
-      [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      monitor = Process.monitor(owner)
+      [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      options = TestServer.TCP.Instance.options(instance)
+      acceptor_pid = Keyword.fetch!(options, :acceptor)
+      monitor = Process.monitor(owner_pid)
 
       assert TestServer.TCP.stop() == :ok
 
-      refute Process.alive?(instance)
-      assert_receive {:DOWN, ^monitor, :process, ^owner, :shutdown}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
+      refute Process.alive?(instance_pid)
+      refute Process.alive?(acceptor_pid)
       assert {:error, reason} = TLSClient.connect(address, tls_options)
       assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TLSClient.receive_data(socket)
@@ -325,28 +422,40 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!()
 
       assert_raise ArgumentError,
-                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   ~r/expected :host to be a binary, got: :invalid/,
                    fn ->
                      TestServer.TCP.address(host: :invalid)
                    end
     end
 
-    test "with `:host` option" do
-      TestServer.TCP.start!()
+    private_inet_ip = Application.compile_env(:test_server, :private_inet_ip)
+    private_inet6_ip = Application.compile_env(:test_server, :private_inet6_ip)
 
-      assert {"custom-host", _port} = TestServer.TCP.address(host: "custom-host")
-    end
+    for {ip, bind_ip, host_ip, ipfamily} <- [
+          {:loopback, {127, 0, 0, 1}, {127, 0, 0, 1}, :inet},
+          {:any, {0, 0, 0, 0}, {127, 0, 0, 1}, :inet},
+          {private_inet_ip, private_inet_ip, private_inet_ip, :inet},
+          {private_inet6_ip, private_inet6_ip, private_inet6_ip, :inet6}
+        ] do
+      test "with `:host` option when started with `ip: #{inspect(ip)}` option when started with `ipfamily: #{inspect(ipfamily)}`" do
+        options = [ip: unquote(Macro.escape(ip)), ipfamily: unquote(ipfamily)]
+        instance = TestServer.TCP.start!(options)
+        :ok = TestServer.TCP.handle()
+        ip = instance |> TestServer.TCP.Instance.options() |> Keyword.fetch!(:ip)
 
-    test "with `:host` option when started with `ipfamily: :inet6` option" do
-      TestServer.TCP.start!(ipfamily: :inet6)
-      TestServer.TCP.handle()
+        assert address = TestServer.TCP.address(host: "example.test")
 
-      assert address = TestServer.TCP.address(host: "custom-host")
-      assert {:ok, socket} = TCPClient.connect(address, [:inet6])
-
-      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
-      assert TCPClient.send(socket, "ping") == :ok
-      assert TCPClient.receive_data(socket) == {:ok, "ping"}
+        assert ip == unquote(Macro.escape(bind_ip))
+        assert {host, port} = address
+        assert host == "example.test"
+        assert host = to_charlist(host)
+        assert :inet.getaddr(host, unquote(ipfamily)) == {:ok, unquote(Macro.escape(host_ip))}
+        assert {:ok, socket} = TCPClient.connect(address, [unquote(ipfamily)])
+        assert TCPClient.send(socket, "ping") == :ok
+        assert TCPClient.receive_data(socket) == {:ok, "ping"}
+        assert {:ok, peer_address} = :inet.peername(socket)
+        assert peer_address == {unquote(Macro.escape(host_ip)), port}
+      end
     end
   end
 
@@ -428,7 +537,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
           assert {:ok, data} = TCPClient.receive_data(socket)
@@ -452,7 +561,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle()
 
           assert {:ok, _socket_1} = TCPClient.connect(TestServer.TCP.address())
@@ -513,6 +622,15 @@ defmodule TestServer.TCPTest do
                    fn -> TestServer.TCP.handle() end
 
       TestServer.TCP.stop()
+    end
+
+    test "when connection doesn't exist" do
+      instance = TestServer.TCP.start!()
+      connection = {instance, make_ref()}
+
+      assert_raise RuntimeError,
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to have a connection registered under \#Reference\<[0-9.]+\>/,
+                   fn -> TestServer.TCP.handle(connection) end
     end
 
     test "when connection instance not running" do
@@ -576,7 +694,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -602,7 +720,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(match: fn _data, _state -> false end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -631,7 +749,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -677,17 +795,17 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!(suppress_warning: true)
+          instance = TestServer.TCP.start!(log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
           assert TestServer.TCP.send(connection) == :ok
           assert TCPClient.receive_data(socket) == {:ok, "ping"}
 
-          assert [%{owner: owner, socket: {:tcp, raw_socket}}] =
+          assert [%{owner: owner_pid, socket: {:tcp, raw_socket}}] =
                    TestServer.TCP.Instance.connections(instance)
 
-          send(owner, {:tcp_error, raw_socket, :test})
+          send(owner_pid, {:tcp_error, raw_socket, :test})
           assert {:ok, data} = TCPClient.receive_data(socket)
 
           send(__MODULE__, {:data, data})
@@ -709,7 +827,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!(transport: :tls, suppress_warning: true)
+          instance = TestServer.TCP.start!(transport: :tls, log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} =
@@ -718,10 +836,10 @@ defmodule TestServer.TCPTest do
           assert TestServer.TCP.send(connection) == :ok
           assert TLSClient.receive_data(socket) == {:ok, "ping"}
 
-          assert [%{owner: owner, socket: {:tls, raw_socket}}] =
+          assert [%{owner: owner_pid, socket: {:tls, raw_socket}}] =
                    TestServer.TCP.Instance.connections(instance)
 
-          send(owner, {:ssl_error, raw_socket, :test})
+          send(owner_pid, {:ssl_error, raw_socket, :test})
           assert {:ok, data} = TLSClient.receive_data(socket)
 
           send(__MODULE__, {:data, data})
@@ -741,7 +859,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(to: fn _data, _state -> raise "boom" end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -767,7 +885,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(to: fn _data, _state -> :invalid end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -793,7 +911,7 @@ defmodule TestServer.TCPTest do
 
         test "fails" do
           LogHandler.setup()
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(to: fn _data, state -> {:reply, :not_iodata, state} end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -837,7 +955,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"pong", invalid: true}, state} end
@@ -865,7 +983,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"pong", upgrade: :udp}, state} end
@@ -893,7 +1011,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true, transport: :tcp)
+          TestServer.TCP.start!(log: false, transport: :tcp)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"upgrade", upgrade: :tls}, state} end
@@ -924,7 +1042,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(transport: :tls, suppress_warning: true)
+          TestServer.TCP.start!(transport: :tls, log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"upgrade", upgrade: :tls}, state} end
@@ -954,7 +1072,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.TCP.start!(transport: [:tcp, :tls], suppress_warning: true)
+          instance = TestServer.TCP.start!(transport: [:tcp, :tls], log: false)
 
           TestServer.TCP.handle(
             to: fn _data, state -> {:reply, {"upgrade", upgrade: :tls}, state} end
@@ -963,10 +1081,10 @@ defmodule TestServer.TCPTest do
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
           assert TCPClient.send(socket, "upgrade") == :ok
           assert TCPClient.receive_data(socket) == {:ok, "upgrade"}
-          assert [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-          assert monitor = Process.monitor(owner)
+          assert [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+          assert monitor = Process.monitor(owner_pid)
           assert TCPClient.close(socket) == :ok
-          assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+          assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
         end
       end
 
@@ -1025,7 +1143,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.TCP.start!(suppress_warning: true)
+          TestServer.TCP.start!(log: false)
           TestServer.TCP.handle(match: fn _data, _state -> raise "boom" end)
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -1106,10 +1224,11 @@ defmodule TestServer.TCPTest do
 
     test "when connection doesn't exist" do
       instance = TestServer.TCP.start!()
+      connection = {instance, make_ref()}
 
       assert_raise RuntimeError,
-                   ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because it does not exist/,
-                   fn -> TestServer.TCP.send({instance, make_ref()}) end
+                   ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to have a connection registered under \#Reference\<[0-9.]+\>/,
+                   fn -> TestServer.TCP.send(connection) end
     end
 
     test "when client has not connected" do
@@ -1130,10 +1249,10 @@ defmodule TestServer.TCPTest do
       assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
       assert TCPClient.send(socket, "ping") == :ok
       assert TCPClient.receive_data(socket) == {:ok, "ping"}
-      assert [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      assert monitor = Process.monitor(owner)
+      assert [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      assert monitor = Process.monitor(owner_pid)
       assert TCPClient.close(socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
 
       assert_raise RuntimeError,
                    ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,
@@ -1148,10 +1267,10 @@ defmodule TestServer.TCPTest do
       assert {:ok, socket} = TLSClient.connect(TestServer.TCP.address(), tls_options())
       assert TLSClient.send(socket, "ping") == :ok
       assert TLSClient.receive_data(socket) == {:ok, "ping"}
-      assert [%{owner: owner}] = TestServer.TCP.Instance.connections(instance)
-      assert monitor = Process.monitor(owner)
+      assert [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
+      assert monitor = Process.monitor(owner_pid)
       assert TLSClient.close(socket) == :ok
-      assert_receive {:DOWN, ^monitor, :process, ^owner, _reason}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, _reason}
 
       assert_raise RuntimeError,
                    ~r/cannot send to connection on TestServer\.TCP\.Instance \#PID\<[0-9.]+\> because the client has disconnected/,
@@ -1180,7 +1299,7 @@ defmodule TestServer.TCPTest do
     end
 
     test "when timeout received after connection is accepted" do
-      instance = TestServer.TCP.start!()
+      {TestServer.TCP, instance_pid} = instance = TestServer.TCP.start!()
       connection = TestServer.TCP.connection(instance)
       {:ok, _socket} = TCPClient.connect(TestServer.TCP.address(instance))
 
@@ -1189,7 +1308,7 @@ defmodule TestServer.TCPTest do
       tag = make_ref()
       from = {self(), tag}
 
-      send(instance, {:timeout, from, {:send, 0}})
+      send(instance_pid, {:timeout, from, {:send, 0}})
 
       assert [_connection] = TestServer.TCP.Instance.connections(instance)
       refute_receive {^tag, {:error, :enotconn}}
@@ -1209,7 +1328,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          _instance = TestServer.TCP.start!(suppress_warning: true)
+          _instance = TestServer.TCP.start!(log: false)
           connection = TestServer.TCP.connection()
           {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
 
@@ -1236,7 +1355,7 @@ defmodule TestServer.TCPTest do
         use ExUnit.Case
 
         test "fails" do
-          _instance = TestServer.TCP.start!(suppress_warning: true)
+          _instance = TestServer.TCP.start!(log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
@@ -1264,7 +1383,7 @@ defmodule TestServer.TCPTest do
 
         test "fails" do
           :ok = LogHandler.setup()
-          _instance = TestServer.TCP.start(suppress_warning: true)
+          _instance = TestServer.TCP.start(log: false)
           connection = TestServer.TCP.connection()
 
           assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())

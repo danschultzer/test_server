@@ -29,17 +29,26 @@ if Code.ensure_loaded?(Plug.Cowboy) do
 
     @impl TestServer.HTTP.Server
     def start(instance, port, scheme, options, cowboy_options) do
+      tls_options =
+        options
+        |> Keyword.get(:tls, [])
+        |> Keyword.put_new(:log_level, :warning)
+
       cowboy_options =
-        cowboy_options
+        [
+          ip: Keyword.get(options, :ip),
+          net: Keyword.get(options, :ipfamily)
+        ]
+        |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+        |> Keyword.merge(cowboy_options)
+        |> Keyword.put(:port, port)
+        |> Keyword.put(:dispatch, dispatch(instance))
+        |> Keyword.put(:ref, instance)
         |> Keyword.put_new(:protocol_options, @default_protocol_options)
         # For tests it is not necessary to open the default 100 acceptor
         # processes
         |> Keyword.put_new(:transport_options, num_acceptors: 1)
-        |> Keyword.put(:port, port)
-        |> Keyword.put(:dispatch, dispatch(instance))
-        |> Keyword.put(:ref, cowboy_ref(port))
-        |> Keyword.put(:net, options[:ipfamily])
-        |> put_tls_options(scheme, options[:tls])
+        |> put_tls_options(scheme, tls_options)
 
       case apply(Cowboy, scheme, [
              TestServer.HTTP.Plug,
@@ -47,9 +56,9 @@ if Code.ensure_loaded?(Plug.Cowboy) do
              cowboy_options
            ]) do
         {:ok, server_pid} ->
-          stop_on_exit(server_pid, cowboy_options)
+          address = :ranch.get_addr(instance)
 
-          {:ok, server_pid, cowboy_options}
+          {:ok, server_pid, address, cowboy_options, fn _ -> Cowboy.shutdown(instance) end}
 
         {:error, error} ->
           {:error, error}
@@ -64,32 +73,8 @@ if Code.ensure_loaded?(Plug.Cowboy) do
 
     defp put_tls_options(cowboy_options, :http, _tls_options), do: cowboy_options
 
-    defp put_tls_options(cowboy_options, :https, tls_options) do
-      Keyword.merge(cowboy_options, Keyword.put_new(tls_options, :log_level, :warning))
-    end
-
-    @impl TestServer.HTTP.Server
-    def stop(_server_pid, cowboy_options) do
-      port = Keyword.fetch!(cowboy_options, :port)
-
-      Cowboy.shutdown(cowboy_ref(port))
-    end
-
-    defp cowboy_ref(port) when is_integer(port) do
-      {__MODULE__, port}
-    end
-
-    # `Plug.Cowboy` traps exits so we must ensure we stop it explicitly when
-    # the instance dies.
-    defp stop_on_exit(server_pid, cowboy_options) do
-      spawn_link(fn ->
-        Process.flag(:trap_exit, true)
-
-        receive do
-          {:EXIT, _pid, _reason} -> stop(server_pid, cowboy_options)
-        end
-      end)
-    end
+    defp put_tls_options(cowboy_options, :https, tls_options),
+      do: Keyword.merge(cowboy_options, tls_options)
 
     @impl TestServer.HTTP.Server
     def socket_pid(%{adapter: {_, req}}), do: req.pid

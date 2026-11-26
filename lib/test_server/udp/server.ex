@@ -8,20 +8,25 @@ defmodule TestServer.UDP.Server do
   def start(instance, options) do
     transport = validate_transport!(options)
     port = TestServer.validate_port!(options)
+    {ipfamily, ip} = TestServer.validate_ip!(options)
 
     options =
       options
+      |> Keyword.put(:ipfamily, ipfamily)
+      |> Keyword.put(:ip, ip)
       |> put_tls_options(transport)
       |> Keyword.put(:transport, transport)
 
     listen_options = listen_options(options, transport)
 
-    with {:ok, socket, port} <- transport_listen(transport, port, listen_options) do
-      receiver_pid = start_receiver(instance, socket)
+    with {:ok, socket, {ip, port}} <- transport_listen(transport, port, listen_options) do
+      {:ok, receiver_pid} = start_receiver(instance, socket)
+      :ok = TestServer.supervise_server(receiver_pid, fn _ -> transport_close(socket) end)
       {_transport, listener_socket} = socket
 
       {:ok,
        options
+       |> Keyword.put(:ip, ip)
        |> Keyword.put(:port, port)
        |> Keyword.put(:listener, listener_socket)
        |> Keyword.put(:receiver, receiver_pid)}
@@ -51,15 +56,19 @@ defmodule TestServer.UDP.Server do
   defp listen_options(options, transport) do
     tls_options = Keyword.get(options, :tls, [])
 
-    [mode: :binary]
-    |> Keyword.merge(Keyword.get(options, :listen, []))
+    {listen_atoms, listen_options} =
+      options
+      |> Keyword.get(:listen, [])
+      |> TestServer.split_atom_options_with_ipfamily(options)
+
+    options
+    |> Keyword.take([:ip])
+    |> Keyword.put(:mode, :binary)
+    |> Keyword.merge(listen_options)
     |> Keyword.merge((transport == :dtls && tls_options) || [])
     |> Keyword.put(:active, false)
     |> then(fn listen_options ->
-      case Keyword.get(options, :ipfamily, :inet) do
-        :inet -> listen_options
-        ipfamily -> [ipfamily | listen_options]
-      end
+      listen_atoms ++ listen_options
     end)
   end
 
@@ -71,29 +80,26 @@ defmodule TestServer.UDP.Server do
     end
     |> case do
       {:ok, socket} ->
-        {:ok, {transport, socket}, transport_port({transport, socket})}
+        {:ok, {transport, socket}, transport_address({transport, socket})}
 
       {:error, reason} ->
-        exception =
-          RuntimeError.exception("could not listen on port #{inspect(port)}: #{inspect(reason)}")
-
-        {:error, exception}
+        {:error, reason}
     end
   end
 
-  defp transport_port({transport, raw_socket}) do
-    {:ok, {_address, port}} =
+  defp transport_address({transport, raw_socket}) do
+    {:ok, address} =
       case transport do
         :udp -> :inet.sockname(raw_socket)
         :dtls -> :ssl.sockname(raw_socket)
       end
 
-    port
+    address
   end
 
   defp start_receiver(instance, {:udp, raw_socket} = listener) do
-    {:ok, receiver} =
-      Task.start_link(fn ->
+    {:ok, receiver_pid} =
+      Task.start(fn ->
         receive do
           :start -> :ok
         end
@@ -101,16 +107,14 @@ defmodule TestServer.UDP.Server do
         receive_loop(instance, listener, %{})
       end)
 
-    :ok = :gen_udp.controlling_process(raw_socket, receiver)
-    send(receiver, :start)
+    :ok = :gen_udp.controlling_process(raw_socket, receiver_pid)
+    send(receiver_pid, :start)
 
-    receiver
+    {:ok, receiver_pid}
   end
 
   defp start_receiver(instance, {:dtls, _raw_socket} = listener) do
-    {:ok, receiver} = Task.start_link(fn -> accept_loop(instance, listener) end)
-
-    receiver
+    Task.start(fn -> accept_loop(instance, listener) end)
   end
 
   defp receive_loop(instance, {:udp, raw_socket} = listener, peers) do
@@ -119,19 +123,25 @@ defmodule TestServer.UDP.Server do
         socket = {:udp, raw_socket, address, port}
         peer = Map.get_lazy(peers, {address, port}, fn -> start_peer(instance, socket) end)
 
-        case Process.alive?(peer) do
-          true ->
-            send(peer, {:udp, raw_socket, data})
-            receive_loop(instance, listener, Map.put(peers, {address, port}, peer))
+        peers =
+          case Process.alive?(peer) do
+            true ->
+              send(peer, {:udp, raw_socket, data})
 
-          false ->
-            message = "could not handle UDP data: peer process no longer accepts data"
+              Map.put(peers, {address, port}, peer)
 
-            send_error(socket, RuntimeError.exception(message), instance)
-        end
+            false ->
+              message = "could not handle UDP data: peer process no longer accepts data"
+
+              send_error(socket, instance, RuntimeError.exception(message))
+
+              peers
+          end
+
+        receive_loop(instance, listener, peers)
 
       {:error, :closed} ->
-        :ok
+        exit(:shutdown)
 
       {:error, reason} ->
         raise "could not receive UDP data: #{inspect(reason)}"
@@ -145,7 +155,7 @@ defmodule TestServer.UDP.Server do
         accept_loop(instance, listener)
 
       {:error, :closed} ->
-        :ok
+        exit(:shutdown)
 
       {:error, reason} ->
         raise "could not accept UDP peer: #{inspect(reason)}"
@@ -153,21 +163,17 @@ defmodule TestServer.UDP.Server do
   end
 
   defp start_peer(instance, {:udp, _listener, _address, _port} = socket) do
-    {:ok, peer} =
+    {:ok, owner_pid} =
       Task.start_link(fn ->
-        Process.link(instance)
-
         assign_peer(instance, socket)
       end)
 
-    peer
+    owner_pid
   end
 
   defp start_peer(instance, {:dtls, raw_socket}) do
-    {:ok, peer} =
+    {:ok, owner_pid} =
       Task.start_link(fn ->
-        Process.link(instance)
-
         receive do
           :start -> :ok
         end
@@ -178,22 +184,24 @@ defmodule TestServer.UDP.Server do
             {:error, _reason} -> {:dtls, raw_socket}
           end
 
-        :ssl.close(raw_socket)
+        transport_close({:dtls, raw_socket})
       end)
 
-    :ok = :ssl.controlling_process(raw_socket, peer)
-    send(peer, :start)
+    :ok = :ssl.controlling_process(raw_socket, owner_pid)
+    send(owner_pid, :start)
 
-    peer
+    owner_pid
   end
 
+  @handshake_timeout 5_000
+
   defp dtls_handshake(raw_socket) do
-    case :ssl.handshake(raw_socket) do
+    case :ssl.handshake(raw_socket, @handshake_timeout) do
       {:ok, raw_socket} ->
         {:ok, raw_socket}
 
       {:ok, raw_socket, _extensions} ->
-        :ssl.handshake_continue(raw_socket, [])
+        :ssl.handshake_continue(raw_socket, [], @handshake_timeout)
 
       {:error, reason} ->
         {:error, reason}
@@ -207,10 +215,10 @@ defmodule TestServer.UDP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.UDP, instance)} received an unexpected UDP peer"
+          "#{TestServer.format_instance(instance)} received an unexpected UDP peer"
           |> append_formatted_peers(instance)
 
-        send_error(socket, RuntimeError.exception(message), instance)
+        send_error(socket, instance, RuntimeError.exception(message))
 
         socket
     end
@@ -254,7 +262,7 @@ defmodule TestServer.UDP.Server do
         socket_loop(instance, socket, state)
 
       {:error, reason} ->
-        send_error(socket, reason, instance)
+        send_error(socket, instance, reason)
         socket
     end
   end
@@ -269,7 +277,7 @@ defmodule TestServer.UDP.Server do
 
       {:error, :not_found} ->
         message =
-          "#{TestServer.format_instance(TestServer.UDP, instance)} received unexpected UDP data"
+          "#{TestServer.format_instance(instance)} received unexpected UDP data"
           |> append_formatted_data(data)
           |> append_formatted_handlers(instance)
 
@@ -306,15 +314,23 @@ defmodule TestServer.UDP.Server do
     end
   end
 
-  defp send_error(socket, {exception, stacktrace}, instance) do
-    TestServer.report_error(Instance.options(instance), {exception, stacktrace})
+  defp transport_close({:udp, raw_socket}) do
+    :gen_udp.close(raw_socket)
+  end
 
+  defp transport_close({:dtls, raw_socket}) do
+    :ssl.close(raw_socket)
+  end
+
+  defp send_error(socket, instance, {exception, stacktrace}) do
+    options = Instance.options(instance)
+    :ok = TestServer.report_error(instance, {exception, stacktrace}, options)
     message = Exception.format(:error, exception, stacktrace)
 
     transport_send(socket, message)
   end
 
-  defp send_error(socket, reason, instance), do: send_error(socket, {reason, []}, instance)
+  defp send_error(socket, instance, reason), do: send_error(socket, instance, {reason, []})
 
   defp append_formatted_data(message, data) do
     """

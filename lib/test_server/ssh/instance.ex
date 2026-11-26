@@ -15,22 +15,22 @@ defmodule TestServer.SSH.Instance do
 
   @spec register(TestServer.instance(), {:channel, keyword(), TestServer.stacktrace()}) ::
           {:ok, %{ref: TestServer.SSH.channel_ref()}}
-  def register(instance, {:channel, options, stacktrace}) do
+  def register({TestServer.SSH, instance_pid}, {:channel, options, stacktrace}) do
     Keyword.has_key?(options, :messages) && validate_messages!(options[:messages])
 
-    GenServer.call(instance, {:register, {:channel, options, stacktrace}})
+    GenServer.call(instance_pid, {:register, {:channel, options, stacktrace}})
   end
 
   @spec register(
           TestServer.instance(),
           {:handle, TestServer.SSH.channel_ref(), keyword(), TestServer.stacktrace()}
         ) ::
-          {:ok, map()}
-  def register(instance, {:handle, channel_ref, options, stacktrace}) do
-    Keyword.has_key?(options, :match) && validate_function_option!(options, :match, 2)
-    Keyword.has_key?(options, :to) && validate_function_option!(options, :to, [2, 3])
+          {:ok, map()} | {:error, :not_found}
+  def register({TestServer.SSH, instance_pid}, {:handle, channel_ref, options, stacktrace}) do
+    Keyword.has_key?(options, :match) && TestServer.validate_function_option!(options, :match, 2)
+    Keyword.has_key?(options, :to) && TestServer.validate_function_option!(options, :to, [2, 3])
 
-    GenServer.call(instance, {:register, {:handle, channel_ref, options, stacktrace}})
+    GenServer.call(instance_pid, {:register, {:handle, channel_ref, options, stacktrace}})
   end
 
   @message_events ~w(exec data env pty shell eof)a
@@ -56,28 +56,14 @@ defmodule TestServer.SSH.Instance do
     end
   end
 
-  defp validate_function_option!(options, option, arity) do
-    value = Keyword.get(options, option)
-    arities = List.wrap(arity)
-
-    case Enum.any?(arities, &is_function(value, &1)) do
-      true ->
-        :ok
-
-      false ->
-        raise ArgumentError,
-              "expected #{inspect(option)} to be a #{Enum.join(arities, " or ")}-arity function, got: #{inspect(value)}"
-    end
-  end
-
   @spec dispatch(
           TestServer.instance(),
           {:channel_up, :ssh.channel_id(), :ssh.connection_ref()}
         ) ::
           {:ok, {TestServer.SSH.channel_ref(), keyword()}}
           | {:error, :not_found}
-  def dispatch(instance, {:channel_up, channel_id, connection}) do
-    GenServer.call(instance, {:dispatch, {:channel_up, channel_id, connection}})
+  def dispatch({TestServer.SSH, instance_pid}, {:channel_up, channel_id, connection}) do
+    GenServer.call(instance_pid, {:dispatch, {:channel_up, channel_id, connection}})
   end
 
   @spec dispatch(
@@ -91,26 +77,29 @@ defmodule TestServer.SSH.Instance do
           | {:ok, TestServer.SSH.response_options(), TestServer.SSH.state()}
           | {:error, :not_found}
           | {:error, {term(), TestServer.stacktrace()}}
-  def dispatch(instance, {:handle, channel_ref, connection, message, channel_state}) do
+  def dispatch(
+        {TestServer.SSH, instance_pid},
+        {:handle, channel_ref, connection, message, channel_state}
+      ) do
     GenServer.call(
-      instance,
+      instance_pid,
       {:dispatch, {:handle, channel_ref, connection, message, channel_state}}
     )
   end
 
   @spec handlers(TestServer.instance()) :: [map()]
-  def handlers(instance) do
-    GenServer.call(instance, :handlers)
+  def handlers({TestServer.SSH, instance_pid}) do
+    GenServer.call(instance_pid, :handlers)
   end
 
   @spec channels(TestServer.instance()) :: [map()]
-  def channels(instance) do
-    GenServer.call(instance, :channels)
+  def channels({TestServer.SSH, instance_pid}) do
+    GenServer.call(instance_pid, :channels)
   end
 
   @spec options(TestServer.instance()) :: keyword()
-  def options(instance) do
-    GenServer.call(instance, :options)
+  def options({TestServer.SSH, instance_pid}) do
+    GenServer.call(instance_pid, :options)
   end
 
   @spec format_handlers([map()]) :: binary()
@@ -139,7 +128,9 @@ defmodule TestServer.SSH.Instance do
 
   @impl true
   def init(options) do
-    case Server.start(self(), options) do
+    {protocol_module, options} = Keyword.pop!(options, :protocol_module)
+
+    case Server.start({protocol_module, self()}, options) do
       {:ok, options} ->
         {:ok,
          %{
@@ -185,15 +176,21 @@ defmodule TestServer.SSH.Instance do
   end
 
   def handle_call({:register, {:handle, channel_ref, options, stacktrace}}, _from, state) do
-    handler = %{
-      channel_ref: channel_ref,
-      match: Keyword.get(options, :match),
-      to: Keyword.fetch!(options, :to),
-      stacktrace: stacktrace,
-      suspended: false
-    }
+    case Enum.find(state.channels, &(&1.ref == channel_ref)) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
 
-    {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+      _channel ->
+        handler = %{
+          channel_ref: channel_ref,
+          match: Keyword.get(options, :match),
+          to: Keyword.fetch!(options, :to),
+          stacktrace: stacktrace,
+          suspended: false
+        }
+
+        {:reply, {:ok, handler}, %{state | handlers: state.handlers ++ [handler]}}
+    end
   end
 
   def handle_call(

@@ -22,6 +22,14 @@ defmodule TestServer.SSHTest do
                    end
     end
 
+    test "with invalid `:ip` option" do
+      assert_raise ArgumentError,
+                   ~r/expected :ip to be an IP tuple, :any, or :loopback, got: :invalid/,
+                   fn ->
+                     TestServer.SSH.start(ip: :invalid)
+                   end
+    end
+
     test "with invalid `:subsystems` option" do
       assert_raise ArgumentError,
                    ~r/expected :subsystems to be a list, got: :invalid/,
@@ -40,6 +48,16 @@ defmodule TestServer.SSHTest do
                    end
     end
 
+    test "with start error" do
+      instance = TestServer.SSH.start!()
+      {_ip, port} = TestServer.SSH.address(instance)
+
+      # When OTP 29+ is required this can be replaced with
+      # `assert TestServer.SSH.start(port: port) == {:error, :eaddrinuse}`
+      assert {:error, error} = TestServer.SSH.start(port: port)
+      assert inspect(error) =~ ":eaddrinuse"
+    end
+
     test "with multiple instances" do
       instance_1 = TestServer.SSH.start!()
       instance_2 = TestServer.SSH.start!()
@@ -52,14 +70,33 @@ defmodule TestServer.SSHTest do
       refute port_1 == port_2
     end
 
+    test "with `:ip` option" do
+      instance = TestServer.SSH.start!(ip: {0, 0, 0, 0})
+
+      {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
+      assert daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+      assert {:ok, info} = :ssh.daemon_info(daemon)
+      assert info[:ip] == {0, 0, 0, 0}
+      assert {ip, _port} = SSHClient.sockname(conn)
+      assert ip == {127, 0, 0, 1}
+    end
+
+    test "with `ipfamily: :inet6` option" do
+      instance = TestServer.SSH.start!(ipfamily: :inet6)
+
+      {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+      assert daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+      assert {:ok, info} = :ssh.daemon_info(daemon)
+      assert info[:ip] == {0, 0, 0, 0, 0, 0, 0, 1}
+      assert {ip, _port} = SSHClient.sockname(conn)
+      assert ip == {0, 0, 0, 0, 0, 0, 0, 1}
+    end
+
     test "with `:host_keys` option list" do
       host_key_1 = :public_key.generate_key({:rsa, 2048, 65_537})
       host_key_2 = :public_key.generate_key({:namedCurve, :secp521r1})
-
-      {:RSAPrivateKey, _, other_mod, other_exp, _, _, _, _, _, _, _} =
-        :public_key.generate_key({:rsa, 2048, 65_537})
-
-      other_hostkey_fingerprint = :ssh.hostkey_fingerprint({:RSAPublicKey, other_mod, other_exp})
+      other_host_key = :public_key.generate_key({:rsa, 2048, 65_537})
+      other_host_key_fingerprint = SSHClient.hostkey_fingerprint(other_host_key)
 
       TestServer.SSH.start!(host_keys: [host_key_1, host_key_2])
 
@@ -70,7 +107,7 @@ defmodule TestServer.SSHTest do
                assert SSHClient.connect(
                         TestServer.SSH.address(),
                         silently_accept_hosts: fn _peer, fingerprint ->
-                          fingerprint == other_hostkey_fingerprint
+                          fingerprint == other_host_key_fingerprint
                         end
                       ) == {:error, "Key exchange failed"}
              end) =~ "Key exchange failed"
@@ -94,13 +131,10 @@ defmodule TestServer.SSHTest do
 
     test "with `:host_keys` option function" do
       host_key = :public_key.generate_key({:rsa, 2_048, 65_537})
-      {:RSAPrivateKey, _, mod, exp, _, _, _, _, _, _, _} = host_key
-      hostkey_fingerprint = :ssh.hostkey_fingerprint({:RSAPublicKey, mod, exp})
+      hostkey_fingerprint = SSHClient.hostkey_fingerprint(host_key)
 
-      {:RSAPrivateKey, _, other_mod, other_exp, _, _, _, _, _, _, _} =
-        :public_key.generate_key({:rsa, 2_048, 65_537})
-
-      other_host_key_fingerprint = :ssh.hostkey_fingerprint({:RSAPublicKey, other_mod, other_exp})
+      other_host_key = :public_key.generate_key({:rsa, 2_048, 65_537})
+      other_host_key_fingerprint = SSHClient.hostkey_fingerprint(other_host_key)
 
       TestServer.SSH.start!(
         host_keys: fn _algorithm, _daemon_options ->
@@ -272,22 +306,6 @@ defmodule TestServer.SSHTest do
       assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
     end
 
-    test "with `ipfamily: :inet6` option" do
-      TestServer.SSH.start!(ipfamily: :inet6)
-
-      {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
-      assert {ip, _port} = SSHClient.sockname(conn)
-      assert ip == {0, 0, 0, 0, 0, 0, 0, 1}
-    end
-
-    test "with `:daemon` option" do
-      TestServer.SSH.start!(daemon: [max_sessions: 2])
-
-      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
-      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address())
-      assert {:error, "Connection closed"} = SSHClient.connect(TestServer.SSH.address())
-    end
-
     test "with `:subsystems` option" do
       TestServer.SSH.start!(subsystems: ["example"])
       TestServer.SSH.handle(to: fn _frame, state -> {:reply, state.subsystem, state} end)
@@ -298,6 +316,20 @@ defmodule TestServer.SSHTest do
       assert SSHClient.send(conn, channel_id, "ping") == :ok
       assert SSHClient.receive_data(conn, channel_id) == {:ok, "example"}
       assert SSHClient.close(conn, channel_id) == :ok
+    end
+
+    test "with `:daemon` option" do
+      instance =
+        TestServer.SSH.start!(daemon: [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, max_sessions: 2])
+
+      assert daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+      assert {:ok, info} = :ssh.daemon_info(daemon)
+      assert info[:ip] == {0, 0, 0, 0, 0, 0, 0, 1}
+      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+
+      assert {:error, "Connection closed"} =
+               SSHClient.connect(TestServer.SSH.address(), inet6: true)
     end
 
     test "with `daemon: [log_level: :none]` option" do
@@ -344,7 +376,9 @@ defmodule TestServer.SSHTest do
 
           send(__MODULE__, {:server, daemon_pid, port})
 
-          assert {:error, :eaddrinuse} = :gen_tcp.listen(port, [])
+          assert {:error, error} = :gen_tcp.listen(port, [])
+
+          send(__MODULE__, {:error, error})
         end
       end
 
@@ -356,16 +390,18 @@ defmodule TestServer.SSHTest do
       assert_receive {:DOWN, ^monitor, :process, ^daemon_pid, _reason}
       assert {:ok, socket} = :gen_tcp.listen(port, [])
       assert :ok = :gen_tcp.close(socket)
+      assert_receive {:error, error}
+      # When OTP 29+ is required this can be replaced with
+      # `assert error == :eaddrinuse`
+      assert inspect(error) =~ ":eaddrinuse"
     end
 
-    test "when instance crashes" do
-      Process.register(self(), __MODULE__)
-
+    test "when instance shuts down" do
       defmodule StartInstanceCrashTest do
         use ExUnit.Case
 
         test "fails" do
-          instance = TestServer.SSH.start!()
+          {TestServer.SSH, instance_pid} = instance = TestServer.SSH.start!()
 
           daemon_pid =
             instance
@@ -374,7 +410,7 @@ defmodule TestServer.SSHTest do
 
           monitor = Process.monitor(daemon_pid)
 
-          Process.exit(instance, :shutdown)
+          Process.exit(instance_pid, :shutdown)
 
           assert_receive {:DOWN, ^monitor, :process, ^daemon_pid, _reason}
         end
@@ -384,6 +420,35 @@ defmodule TestServer.SSHTest do
 
       assert io =~
                ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown"
+    end
+
+    test "when daemon crashes" do
+      defmodule StartDaemonCrashTest do
+        use ExUnit.Case
+
+        test "fails" do
+          {TestServer.SSH, instance_pid} = instance = TestServer.SSH.start!()
+          daemon_pid = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+          monitor = Process.monitor(instance_pid)
+          true = Process.exit(daemon_pid, :kill)
+
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+        end
+      end
+
+      assert io =
+               capture_io(fn ->
+                 capture_log(fn ->
+                   assert %{failures: 1} = ExUnit.run()
+                 end)
+               end)
+
+      assert io =~
+               ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown: :killed"
     end
   end
 
@@ -409,17 +474,39 @@ defmodule TestServer.SSHTest do
 
   describe "start!/1" do
     test "returns instance" do
-      assert instance = TestServer.SSH.start!()
-      assert is_pid(instance)
+      assert {TestServer.SSH, instance_pid} = TestServer.SSH.start!()
+      assert is_pid(instance_pid)
     end
 
-    test "when start fails" do
-      instance = TestServer.SSH.start!()
-      port = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:port)
+    for {ip, text, text_port} <- [
+          {:any, "", " on port "},
+          {:loopback, " on localhost", " on localhost:"},
+          {{127, 0, 0, 1}, " on 127.0.0.1", " on 127.0.0.1:"},
+          {{0, 0, 0, 0, 0, 0, 0, 1}, " on [::1]", " on [::1]:"}
+        ] do
+      test "when start fails with `ip: #{inspect(ip)}`" do
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.SSH.start!(ip: unquote(Macro.escape(ip)), daemon: [invalid: 1])
+          end
 
-      assert_raise RuntimeError,
-                   ~r/could not start TestServer.SSH instance on port #{port}:/,
-                   fn -> TestServer.SSH.start!(port: port) end
+        assert message = Exception.message(error)
+        assert message =~ "could not start TestServer.SSH instance#{unquote(text)}:\n"
+        assert message =~ ":badarg"
+      end
+
+      test "when start fails with `ip: #{inspect(ip)}` and `:port` set" do
+        instance = TestServer.SSH.start!(ip: unquote(Macro.escape(ip)))
+        port = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:port)
+
+        error =
+          assert_raise RuntimeError, fn ->
+            TestServer.SSH.start!(port: port, ip: unquote(Macro.escape(ip)))
+          end
+
+        assert Exception.message(error) =~
+                 "could not start TestServer.SSH instance#{unquote(text_port)}#{port}:"
+      end
     end
   end
 
@@ -452,11 +539,11 @@ defmodule TestServer.SSHTest do
     end
 
     test "stops" do
-      instance = TestServer.SSH.start!()
+      {TestServer.SSH, instance_pid} = TestServer.SSH.start!()
       address = TestServer.SSH.address()
 
       assert TestServer.SSH.stop() == :ok
-      refute Process.alive?(instance)
+      refute Process.alive?(instance_pid)
       assert {:error, reason} = SSHClient.connect(address)
       assert reason in [:econnrefused, :econnreset]
     end
@@ -508,24 +595,41 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.start!()
 
       assert_raise ArgumentError,
-                   ~r/expected :host to be a binary or nil, got: :invalid/,
+                   ~r/expected :host to be a binary, got: :invalid/,
                    fn ->
                      TestServer.SSH.address(host: :invalid)
                    end
     end
 
-    test "with `:host` option" do
-      TestServer.SSH.start!()
+    private_inet_ip = Application.compile_env(:test_server, :private_inet_ip)
+    private_inet6_ip = Application.compile_env(:test_server, :private_inet6_ip)
 
-      assert {"myserver.test", _port} = address = TestServer.SSH.address(host: "myserver.test")
+    for {ip, bind_ip, host_ip, ipfamily} <- [
+          {:loopback, {127, 0, 0, 1}, {127, 0, 0, 1}, :inet},
+          {:any, {0, 0, 0, 0}, {127, 0, 0, 1}, :inet},
+          {private_inet_ip, private_inet_ip, private_inet_ip, :inet},
+          {private_inet6_ip, private_inet6_ip, private_inet6_ip, :inet6}
+        ] do
+      test "with `:host` option when started with `ip: #{inspect(ip)}` option when started with `ipfamily: #{inspect(ipfamily)}`" do
+        options = [ip: unquote(Macro.escape(ip)), ipfamily: unquote(ipfamily)]
+        instance = TestServer.SSH.start!(options)
+        :ok = TestServer.SSH.handle()
+        ip = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:ip)
 
-      assert {:ok, _conn} = SSHClient.connect(address)
-    end
+        assert address = TestServer.SSH.address(host: "example.test")
 
-    test "with `:host` option when started with `ipfamily: :inet6` option" do
-      TestServer.SSH.start!(ipfamily: :inet6)
-
-      assert {:ok, _conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
+        assert ip == unquote(Macro.escape(bind_ip))
+        assert {host, port} = address
+        assert host == "example.test"
+        assert host = to_charlist(host)
+        assert :inet.getaddr(host, unquote(ipfamily)) == {:ok, unquote(Macro.escape(host_ip))}
+        assert {:ok, conn} = SSHClient.connect(address, inet6: unquote(ipfamily) == :inet6)
+        assert {:ok, channel_id} = SSHClient.session_channel(conn)
+        assert SSHClient.exec(conn, channel_id, "ping") == :ok
+        assert {:ok, %{data: "ping"}} = SSHClient.receive_until_closed(conn, channel_id)
+        assert {_, peer_address} = SSHClient.peer(conn)
+        assert peer_address == {unquote(Macro.escape(host_ip)), port}
+      end
     end
   end
 
@@ -591,7 +695,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
           assert {:ok, channel_id_1} = SSHClient.session_channel(conn)
@@ -609,7 +713,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle()
 
           assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address())
@@ -750,12 +854,21 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.stop()
     end
 
-    test "when connection instance not running" do
+    test "when channel instance not running" do
       channel = TestServer.SSH.channel()
       :ok = TestServer.SSH.stop()
 
       assert_raise RuntimeError,
                    ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it was stopped at:/,
+                   fn -> TestServer.SSH.handle(channel) end
+    end
+
+    test "when channel doesn't exist" do
+      instance = TestServer.SSH.start!()
+      channel = {instance, make_ref()}
+
+      assert_raise RuntimeError,
+                   ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to have a channel registered under \#Reference\<[0-9.]+\>/,
                    fn -> TestServer.SSH.handle(channel) end
     end
 
@@ -814,7 +927,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.channel()
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -838,7 +951,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(match: fn _message, _state -> false end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -865,7 +978,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle()
 
           assert {:ok, conn, channel_id} = unquote(__MODULE__).ssh_shell()
@@ -894,7 +1007,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _connection, _state -> raise "boom" end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -917,7 +1030,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _connection, _state -> :invalid end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -982,7 +1095,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _state -> raise "boom" end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -1005,7 +1118,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
           TestServer.SSH.handle(to: fn _msg, _state -> :invalid end)
 
           assert {:ok, %{data: data, exit_status: 1}} = unquote(__MODULE__).ssh_exec("ping")
@@ -1089,7 +1202,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1119,7 +1232,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1149,7 +1262,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1179,7 +1292,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1209,7 +1322,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1239,7 +1352,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             to: fn _msg, state ->
@@ -1294,7 +1407,7 @@ defmodule TestServer.SSHTest do
         use ExUnit.Case
 
         test "fails" do
-          TestServer.SSH.start!(suppress_warning: true)
+          TestServer.SSH.start!(log: false)
 
           TestServer.SSH.handle(
             match: fn {:exec, _channel_id, _want_reply, _command}, _state ->
@@ -1387,8 +1500,18 @@ defmodule TestServer.SSHTest do
       path
     end
 
+    def hostkey_fingerprint({:RSAPrivateKey, _, mod, exp, _, _, _, _, _, _, _}) do
+      to_string(:ssh.hostkey_fingerprint({:RSAPublicKey, mod, exp}))
+    end
+
     def sockname(conn) do
       {:sockname, res} = :ssh.connection_info(conn, :sockname)
+
+      res
+    end
+
+    def peer(conn) do
+      {:peer, res} = :ssh.connection_info(conn, :peer)
 
       res
     end
@@ -1400,6 +1523,15 @@ defmodule TestServer.SSHTest do
           user_interaction: false
         ]
         |> Keyword.merge(options)
+        |> Keyword.update!(:silently_accept_hosts, fn
+          fun when is_function(fun, 2) ->
+            fn peer, fingerprint ->
+              fun.(peer, to_string(fingerprint))
+            end
+
+          boolean when is_boolean(boolean) ->
+            boolean
+        end)
         |> normalize_ssh_connect_options()
 
       suppress_ssh_log_messages()

@@ -20,48 +20,84 @@ if Code.ensure_loaded?(Bandit) do
 
     @impl TestServer.HTTP.Server
     def start(instance, port, scheme, options, bandit_options) do
-      transport_options =
-        bandit_options
-        |> Keyword.get(:transport_options, [])
-        |> put_tls_options(scheme, options[:tls])
+      bandit_options = bandit_options(instance, port, scheme, options, bandit_options)
+      trap_exit = Process.flag(:trap_exit, true)
 
-      ipfamily_options =
-        case options[:ipfamily] do
-          :inet -> []
-          ipfamily -> [ipfamily]
+      # Bandit crashes the instance if it fails to start so we must trap exits
+      # to provide a proper error.
+      result =
+        try do
+          Bandit.start_link(bandit_options)
+        rescue
+          exception -> {:error, exception}
+        catch
+          :exit, reason -> {:error, reason}
+        after
+          Process.flag(:trap_exit, trap_exit)
         end
 
-      thousand_islands_options =
-        bandit_options
-        |> Keyword.get(:thousand_island_options, [])
-        # For tests it is not necessary to open the default 100 acceptor
-        # processes
-        |> Keyword.put(:num_acceptors, 1)
-        |> Keyword.put(:port, port)
-        |> Keyword.put(:transport_options, ipfamily_options ++ transport_options)
+      case result do
+        {:ok, server_pid} ->
+          true = Process.unlink(server_pid)
+          {:ok, address} = ThousandIsland.listener_info(server_pid)
 
-      bandit_options =
-        bandit_options
-        |> Keyword.put(:thousand_island_options, thousand_islands_options)
-        |> Keyword.put(:plug, {TestServer.HTTP.Server.Bandit.Plug, {__MODULE__, [], instance}})
-        |> Keyword.put(:scheme, scheme)
-        |> Keyword.put_new(:startup_log, false)
+          {:ok, server_pid, address, bandit_options, &ThousandIsland.stop/1}
 
-      case Bandit.start_link(bandit_options) do
-        {:ok, server_pid} -> {:ok, server_pid, bandit_options}
-        {:error, error} -> {:error, error}
+        {:error, error} ->
+          {:error, error}
       end
     end
 
-    defp put_tls_options(transport_options, :http, _tls_options), do: transport_options
-
-    defp put_tls_options(transport_options, :https, tls_options) do
-      Keyword.merge(transport_options, Keyword.put_new(tls_options, :log_level, :warning))
+    defp bandit_options(instance, port, scheme, options, bandit_options) do
+      bandit_options
+      |> Keyword.put(
+        :thousand_island_options,
+        thousand_island_options(port, scheme, options, bandit_options)
+      )
+      |> Keyword.put(:plug, {TestServer.HTTP.Server.Bandit.Plug, {__MODULE__, [], instance}})
+      |> Keyword.put(:scheme, scheme)
+      |> Keyword.put_new(:startup_log, false)
     end
 
-    @impl TestServer.HTTP.Server
-    def stop(server_pid, _bandit_options) do
-      ThousandIsland.stop(server_pid)
+    defp thousand_island_options(port, scheme, options, bandit_options) do
+      bandit_options
+      |> Keyword.get(:thousand_island_options, [])
+      # For tests it is not necessary to open the default 100 acceptor
+      # processes
+      |> Keyword.put_new(:num_acceptors, 1)
+      |> Keyword.put(:port, port)
+      |> Keyword.put(:transport_options, transport_options(scheme, options, bandit_options))
+    end
+
+    defp transport_options(scheme, options, bandit_options) do
+      transport_options =
+        bandit_options
+        |> Keyword.get(:thousand_island_options, [])
+        |> Keyword.get(:transport_options, [])
+
+      {transport_atoms, transport_options} =
+        TestServer.split_atom_options_with_ipfamily(transport_options, options)
+
+      options
+      |> Keyword.take([:ip])
+      |> Keyword.merge(transport_options)
+      |> then(fn transport_options ->
+        case scheme do
+          :http ->
+            transport_options
+
+          :https ->
+            tls_options =
+              options
+              |> Keyword.get(:tls, [])
+              |> Keyword.put_new(:log_level, :warning)
+
+            Keyword.merge(transport_options, tls_options)
+        end
+      end)
+      |> then(fn transport_options ->
+        transport_atoms ++ transport_options
+      end)
     end
 
     @impl TestServer.HTTP.Server

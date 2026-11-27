@@ -14,8 +14,9 @@ Requires Elixir 1.15 or higher.
 - Renamed `websocket_init/1` to `TestServer.HTTP.websocket/1`; it now returns the WebSocket directly instead of `{:ok, websocket}`
 - Renamed `websocket_info/2` to `TestServer.HTTP.websocket_send/2`; it now accepts options as its second argument instead of a function
 - Replaced `x509_suite/0` with `TestServer.HTTP.cacerts/0`, which returns the CA certificates directly
-- Changed `TestServer.HTTP.start/1` to return `{:error, reason}` instead of raising
-- Removed `:suppress_warning` option in favor of `:log` option
+- Changed `TestServer.HTTP.start/1` to return `{:error, reason}` for startup failures, invalid options still raise
+- Removed `suppress_warning: true` option in favor of `log: false` option
+- `TestServer.HTTP` now defaults binding to `:loopback` IP instead of `ip: :any`
 
 ### Added
 

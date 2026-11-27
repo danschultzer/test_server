@@ -452,7 +452,7 @@ defmodule TestServer.UDPTest do
       TestServer.UDP.start!()
 
       assert_raise ArgumentError, ~r/unknown keys/, fn ->
-        TestServer.UDP.address(invalid: :option)
+        TestServer.UDP.address(ip: {127, 0, 0, 2})
       end
     end
 

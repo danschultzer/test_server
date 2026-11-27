@@ -7,10 +7,12 @@ defmodule TestServer.InetDB do
     GenServer.start_link(__MODULE__, options, name: __MODULE__)
   end
 
-  @spec add_host(TestServer.ip_address(), binary(), :inet | :inet6) ::
+  @spec add_host(TestServer.ip_address(), binary(), TestServer.ipfamily()) ::
           :ok | {:error, [:inet.ip_address()]}
-  def add_host(ip, host, ipfamily) do
-    GenServer.call(__MODULE__, {:add_host, ip, host, ipfamily})
+  def add_host(ip, name, ipfamily) do
+    name = String.to_charlist(name)
+
+    GenServer.call(__MODULE__, {:add_host, ip, name, ipfamily})
   end
 
   @impl true
@@ -23,7 +25,6 @@ defmodule TestServer.InetDB do
   @impl true
   def handle_call({:add_host, ip, name, ipfamily}, {caller_pid, _tag}, state) do
     state = cleanup_dead_entries(state)
-    name = String.to_charlist(name)
     state = ensure_file_lookup(state)
 
     case add_host(caller_pid, ip, ipfamily, name, state) do

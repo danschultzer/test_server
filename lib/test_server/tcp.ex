@@ -44,18 +44,20 @@ defmodule TestServer.TCP do
   @doc """
   Starts a test server TCP instance.
 
-  The instance will be terminated when the test case finishes.
+  The instance will be terminated when the test case finishes. Error is
+  returned if the server cannot be started. Invalid options will raise.
 
   ## Options
 
     * `:port`      - integer of port number. Defaults to `0` which selects a
       random port;
 
-    * `:ip`        - a `t:TestServer.ip_address/0` the server will bind to.
-      Defaults to `:loopback`;
+    * `:ip`        - a `t:TestServer.ip_address/0` the server will bind to. IP
+      in `:listen` option takes precedence.  Defaults to `:loopback`;
 
-    * `:ipfamily`  - the IP address type to use, either `:inet` or `:inet6`.
-      Defaults to `:inet6` if `:ip` is IPv6 format, otherwise `:inet`;
+    * `:ipfamily`  - the IP address type to use, either `:inet` or `:inet6`. IP
+      address type in `:listen` option takes precedence. Defaults to `:inet6`
+      if `:ip` is IPv6 format, otherwise `:inet`;
 
     * `:transport` - the supported socket transport, either `:tcp`, `:tls`, or
       a list containing both. Defaults to `:tcp`;
@@ -67,6 +69,9 @@ defmodule TestServer.TCP do
       from `cacerts/0`; options for TLS configuration passed directly to
       `:ssl.listen/2`. Defaults to `[key: key, cert: cert, cacerts: cacerts]`
       with generated certificates when `transport: :tls`;
+
+    * `:listen`    - options passed to the transport listener. Defaults to
+      `[mode: :binary]`, `:active` can't be set;
 
     * `:log`       - The log level for the instance when errors occur. Defaults
       to `:warning`, can be set to false to disable it.;
@@ -140,8 +145,8 @@ defmodule TestServer.TCP do
   @doc """
   Shuts down the current test server TCP instance.
 
-  Removes the ExUnit test callback which eliminates verification of any
-  outstanding expectations.
+  Stopping the server discards outstanding expectations. Errors already
+  recorded still fail the test during teardown.
 
   ## Examples
 
@@ -174,6 +179,7 @@ defmodule TestServer.TCP do
     end
   end
 
+  @doc "Equivalent to `address/1` with empty options."
   @spec address() :: {binary(), TestServer.port_number()}
   def address, do: address([])
 
@@ -182,9 +188,9 @@ defmodule TestServer.TCP do
 
   ## Options
 
-    * `:host` - binary host value, it'll be registered in the `m::inet` DNS
-      file for the instance's IP, and will last the duration of the test.
-      Defaults to `"localhost"`.
+    * `:host` - binary host value. The host name will be registered with the
+      instance's IP in the `m::inet` lookup file and removed once no more
+      processes that registered it are alive. Defaults to `"localhost"`.
 
   ## Examples
 
@@ -206,6 +212,7 @@ defmodule TestServer.TCP do
   """
   @spec address(TestServer.instance(), keyword()) :: {binary(), TestServer.port_number()}
   def address({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
+    Keyword.validate!(options, [:host])
     TestServer.assert_instance_alive!(instance)
 
     options =
@@ -263,7 +270,8 @@ defmodule TestServer.TCP do
   @doc """
   Adds an expected TCP connection on the current test server instance.
 
-  Connections are exhausted FIFO (first in, first out) as sockets are opened.
+  Connections are exhausted FIFO (first in, first out) after TCP socket is
+  established or TLS transport handshake completes.
 
   ## Examples
 
@@ -303,6 +311,7 @@ defmodule TestServer.TCP do
     {instance, connection.ref}
   end
 
+  @doc "Equivalent to `handle/1` with empty options."
   def handle, do: handle([])
 
   @doc """
@@ -394,6 +403,7 @@ defmodule TestServer.TCP do
     raise "expected #{TestServer.format_instance(instance)} to have a connection registered under #{inspect(connection_ref)}"
   end
 
+  @doc "Equivalent to `send/2` with empty options."
   @spec send(connection()) :: :ok
   def send(connection), do: send(connection, [])
 

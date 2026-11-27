@@ -83,13 +83,21 @@ defmodule TestServer.SSHTest do
 
     test "with `ipfamily: :inet6` option" do
       instance = TestServer.SSH.start!(ipfamily: :inet6)
+      daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
+      _channel = TestServer.SSH.channel(instance)
+      {:ok, daemon_info} = :ssh.daemon_info(daemon)
 
-      {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
-      assert daemon = instance |> TestServer.SSH.Instance.options() |> Keyword.fetch!(:daemon)
-      assert {:ok, info} = :ssh.daemon_info(daemon)
-      assert info[:ip] == {0, 0, 0, 0, 0, 0, 0, 1}
+      assert Keyword.fetch!(daemon_info, :ip) == {0, 0, 0, 0, 0, 0, 0, 1}
+      assert {:ok, conn} = SSHClient.connect(TestServer.SSH.address(), inet6: true)
       assert {ip, _port} = SSHClient.sockname(conn)
       assert ip == {0, 0, 0, 0, 0, 0, 0, 1}
+
+      :ok = TestServer.SSH.handle()
+
+      assert {:ok, channel_id} = SSHClient.session_channel(conn)
+      assert {:ok, conn, channel_id} = SSHClient.open_shell(conn, channel_id)
+      assert SSHClient.send(conn, channel_id, "ping") == :ok
+      assert SSHClient.receive_data(conn, channel_id) == {:ok, "ping"}
     end
 
     test "with `:host_keys` option list" do
@@ -580,7 +588,7 @@ defmodule TestServer.SSHTest do
       TestServer.SSH.start!()
 
       assert_raise ArgumentError, ~r/unknown keys/, fn ->
-        TestServer.SSH.address(invalid: :option)
+        TestServer.SSH.address(ip: {127, 0, 0, 2})
       end
     end
 

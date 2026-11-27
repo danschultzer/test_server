@@ -63,7 +63,7 @@ TestServer.TCP.send(connection, to: fn state -> {:reply, "ping", state} end)
 assert TCPClient.receive_data(socket) == {:ok, "ping"}
 ```
 
-Use `TestServer.TCP.connection/0` to expect multiple client connections or use with `TestServer.TCP.send/2`. They are assigned to accepted sockets in the order they are added:
+Use `TestServer.TCP.connection/0` to expect multiple client connections or use with `TestServer.TCP.send/2`. They are assigned after connection or TLS transport handshake succeeds in the order they were added:
 
 ```elixir
 connection_1 = TestServer.TCP.connection()
@@ -133,9 +133,10 @@ Use the `:ipfamily` option to test with IPv6:
 
 ```elixir
 TestServer.TCP.start!(ipfamily: :inet6)
+TestServer.TCP.connection()
 
 assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
-assert {{0, 0, 0, 0, 0, 0, 0, 1}, _port} = :inet.peername(socket)
+assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
 ```
 
 ## Example: SMTP

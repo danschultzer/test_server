@@ -428,7 +428,7 @@ defmodule TestServer.HTTPTest do
       TestServer.HTTP.start!()
 
       assert_raise ArgumentError, ~r/unknown keys/, fn ->
-        TestServer.HTTP.url(invalid: :option)
+        TestServer.HTTP.url(ip: {127, 0, 0, 2})
       end
     end
 

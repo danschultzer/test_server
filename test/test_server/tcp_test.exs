@@ -71,28 +71,34 @@ defmodule TestServer.TCPTest do
 
     test "with `ipfamily: :inet6` option" do
       instance = TestServer.TCP.start!(ipfamily: :inet6)
-      :ok = TestServer.TCP.handle()
       options = TestServer.TCP.Instance.options(instance)
       listener_socket = Keyword.fetch!(options, :listener)
+      _connection = TestServer.TCP.connection(instance)
 
       assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.sockname(listener_socket)
       assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address(), [:inet6])
+      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
+
+      :ok = TestServer.TCP.handle()
+
       assert TCPClient.send(socket, "ping") == :ok
       assert TCPClient.receive_data(socket) == {:ok, "ping"}
-      assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port}} = :inet.peername(socket)
     end
 
     test "with `:ip` option" do
       instance = TestServer.TCP.start!(ip: {0, 0, 0, 0})
-      :ok = TestServer.TCP.handle()
       options = TestServer.TCP.Instance.options(instance)
       listener_socket = Keyword.fetch!(options, :listener)
+      _connection = TestServer.TCP.connection(instance)
 
       assert {:ok, {{0, 0, 0, 0}, _port}} = :inet.sockname(listener_socket)
       assert {:ok, socket} = TCPClient.connect(TestServer.TCP.address())
+      assert {:ok, {{127, 0, 0, 1}, _port}} = :inet.peername(socket)
+
+      :ok = TestServer.TCP.handle()
+
       assert TCPClient.send(socket, "ping") == :ok
       assert TCPClient.receive_data(socket) == {:ok, "ping"}
-      assert {:ok, {{127, 0, 0, 1}, _port}} = :inet.peername(socket)
     end
 
     test "with `transport: :tls` option" do
@@ -407,7 +413,7 @@ defmodule TestServer.TCPTest do
       TestServer.TCP.start!()
 
       assert_raise ArgumentError, ~r/unknown keys/, fn ->
-        TestServer.TCP.address(invalid: :option)
+        TestServer.TCP.address(ip: {127, 0, 0, 2})
       end
     end
 

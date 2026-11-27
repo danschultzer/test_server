@@ -39,7 +39,7 @@ defmodule TestServer.HTTP.Server do
   @type options :: [ip: TestServer.ip_address(), ipfamily: TestServer.ipfamily(), tls: keyword()]
   @type server_options :: keyword()
   @type address :: {TestServer.ip_address(), TestServer.port_number()}
-  @type on_exit :: (server_pid :: pid() -> :ok)
+  @type shutdown_fun :: (server_pid :: pid() -> :ok)
 
   @callback start(
               TestServer.instance(),
@@ -48,7 +48,9 @@ defmodule TestServer.HTTP.Server do
               options(),
               server_options()
             ) ::
-              {:ok, pid(), address(), server_options(), on_exit()} | {:error, term()}
+              {:ok, server_pid :: pid(), bind_address :: address(), server_options(),
+               shutdown_fun()}
+              | {:error, term()}
 
   @callback socket_pid(Plug.Conn.t()) :: pid()
 

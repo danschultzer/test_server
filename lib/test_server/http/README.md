@@ -56,8 +56,8 @@ When a handler is matched it is removed from the list of active handlers. Handle
 TestServer.HTTP.handle(to: &Plug.Conn.send_resp(&1, 200, "first"))
 TestServer.HTTP.handle(to: &Plug.Conn.send_resp(&1, 200, "second"))
 
-assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "first"}
-assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "second"}
+assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, "first"}
+assert HTTPClient.fetch(TestServer.HTTP.url()) == {:ok, "second"}
 ```
 
 Plugs can be added to the pipeline with `TestServer.HTTP.plug/1`. All plugs will run before any handlers are matched. `Plug.Conn.fetch_query_params/1` is used if no plugs are set.
@@ -153,7 +153,7 @@ TestServer.HTTP.handle(
   end
 )
 
-assert HTTPClient.fetch_url(TestServer.HTTP.url()) == {:ok, "OK"}
+assert HTTPClient.fetch(TestServer.HTTP.url(), ipfamily: :inet6) == {:ok, "OK"}
 ```
 
 The `:ipfamily` is automatically set if you specify the `:ip` option:

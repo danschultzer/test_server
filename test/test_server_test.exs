@@ -691,15 +691,17 @@ defmodule TestServerTest do
       end
     end
 
-    test "with invalid options" do
-      assert_raise ArgumentError, ~r/unknown keys/, fn ->
-        TestServer.add_host(invalid: :option)
-      end
-    end
-
     test "with invalid `:host` option" do
       assert_raise ArgumentError, "expected :host to be a binary, got: :invalid", fn ->
         TestServer.add_host(host: :invalid)
+      end
+
+      assert_raise ArgumentError, "expected :host to be a binary, got: nil", fn ->
+        TestServer.add_host(host: nil)
+      end
+
+      assert_raise UnicodeConversionError, "incomplete encoding starting at <<225>>", fn ->
+        TestServer.add_host(host: <<225>>)
       end
     end
 

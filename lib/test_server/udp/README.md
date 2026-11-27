@@ -60,7 +60,7 @@ TestServer.UDP.send(peer, to: fn state -> {:reply, "ping", state} end)
 assert UDPClient.receive_data(socket) == {:ok, "ping"}
 ```
 
-Use `TestServer.UDP.peer/0` to expect multiple clients or use with `TestServer.UDP.send/2`. They are assigned in the order they are added:
+Use `TestServer.UDP.peer/0` to expect multiple clients or use with `TestServer.UDP.send/2`.  They are assigned after the first time a peer is seen or when DTLS transport handshake succeeds in the order they were added:
 
 ```elixir
 peer_1 = TestServer.UDP.peer()
@@ -121,10 +121,9 @@ Use the `:ipfamily` option to test with IPv6:
 TestServer.UDP.start!(ipfamily: :inet6)
 TestServer.UDP.handle()
 
-
 assert {:ok, socket} = UDPClient.open(:inet6)
-assert UDPClient.send(socket, TestServer.UDP.address(), "ping", :inet6) == :ok
-assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port, "ping"}} = UDPClient.receive_data(socket)
+assert UDPClient.send(socket, TestServer.UDP.address(), "ping") == :ok
+assert {:ok, {{0, 0, 0, 0, 0, 0, 0, 1}, _port, "ping"}} = UDPClient.receive_data(socket, :raw)
 ```
 
 ## Example: DNS

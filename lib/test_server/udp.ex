@@ -38,18 +38,20 @@ defmodule TestServer.UDP do
   @doc """
   Starts a test server UDP instance.
 
-  The instance will be terminated when the test case finishes.
+  The instance will be terminated when the test case finishes. Error is
+  returned if the server cannot be started. Invalid options will raise.
 
   ## Options
 
     * `:port`      - integer of port number. Defaults to `0` which selects a
       random port;
 
-    * `:ip`        - a `t:TestServer.ip_address/0` the server will bind to.
-      Defaults to `:loopback`;
+    * `:ip`        - a `t:TestServer.ip_address/0` the server will bind to. IP
+      in `:listen` option takes precedence.  Defaults to `:loopback`;
 
-    * `:ipfamily`  - the IP address type to use, either `:inet` or `:inet6`.
-      Defaults to `:inet6` if `:ip` is IPv6 format, otherwise `:inet`;
+    * `:ipfamily`  - the IP address type to use, either `:inet` or `:inet6`. IP
+      address type in `:listen` option takes precedence. Defaults to `:inet6`
+      if `:ip` is IPv6 format, otherwise `:inet`;
 
     * `:transport` - the supported socket transport, either `:udp` or `:dtls`.
       Defaults to `:udp`;
@@ -133,8 +135,8 @@ defmodule TestServer.UDP do
   @doc """
   Shuts down the current test server UDP instance.
 
-  Removes the ExUnit test callback which eliminates verification of any
-  outstanding expectations.
+  Stopping the server discards outstanding expectations. Errors already
+  recorded still fail the test during teardown.
 
   ## Examples
 
@@ -169,6 +171,7 @@ defmodule TestServer.UDP do
     end
   end
 
+  @doc "Equivalent to `address/1` with empty options."
   @spec address() :: {binary(), TestServer.port_number()}
   def address, do: address([])
 
@@ -177,9 +180,9 @@ defmodule TestServer.UDP do
 
   ## Options
 
-    * `:host` - binary host value, it'll be registered in the `m::inet` DNS
-      file for the instance's IP, and will last the duration of the test.
-      Defaults to `"localhost"`.
+    * `:host` - binary host value. The host name will be registered with the
+      instance's IP in the `m::inet` lookup file and removed once no more
+      processes that registered it are alive. Defaults to `"localhost"`.
 
   ## Examples
 
@@ -201,6 +204,7 @@ defmodule TestServer.UDP do
   """
   @spec address(TestServer.instance(), keyword()) :: {binary(), TestServer.port_number()}
   def address({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
+    Keyword.validate!(options, [:host])
     TestServer.assert_instance_alive!(instance)
 
     options =
@@ -258,8 +262,8 @@ defmodule TestServer.UDP do
   @doc """
   Adds an expected UDP peer on the current test server instance.
 
-  Peers are exhausted FIFO (first in, first out) as clients sends data or
-  establishes a DTLS connection.
+  Peers are exhausted FIFO (first in, first out) after first time receiving
+  UDP data from a peer or after DTLS transport handshake succeeds.
 
   ## Examples
 
@@ -298,6 +302,7 @@ defmodule TestServer.UDP do
     {instance, peer.ref}
   end
 
+  @doc "Equivalent to `handle/1` with empty options."
   def handle, do: handle([])
 
   @doc """
@@ -380,6 +385,7 @@ defmodule TestServer.UDP do
     raise "expected #{TestServer.format_instance(instance)} to have a peer registered under #{inspect(peer_ref)}"
   end
 
+  @doc "Equivalent to `send/2` with empty options."
   @spec send(peer()) :: :ok
   def send(peer), do: send(peer, [])
 

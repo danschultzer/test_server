@@ -396,16 +396,9 @@ defmodule TestServer do
 
   @doc false
   def add_host(options) do
-    Keyword.validate!(options, [:host, :port, :ip, :ipfamily])
-
-    case Keyword.has_key?(options, :host) do
-      false ->
-        "localhost"
-
-      true ->
-        name = Keyword.fetch!(options, :host)
-
-        do_add_host(name, options)
+    case Keyword.fetch(options, :host) do
+      :error -> "localhost"
+      {:ok, name} -> do_add_host(name, options)
     end
   end
 
@@ -457,7 +450,6 @@ defmodule TestServer do
   end
 
   @doc false
-  @spec put_tls_options(keyword(), keyword()) :: keyword()
   def put_tls_options(options, x509_opts \\ []) do
     tls_options = Keyword.get(options, :tls, [])
 

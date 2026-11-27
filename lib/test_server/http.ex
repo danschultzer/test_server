@@ -20,8 +20,8 @@ defmodule TestServer.HTTP do
   @typedoc "An anonymous function that processes a request."
   @type handler_fun :: (conn :: Plug.Conn.t() -> Plug.Conn.t())
 
-  @type websocket_ref :: reference()
   @type websocket :: {TestServer.instance(), websocket_ref()}
+  @type websocket_ref :: reference()
   @type websocket_frame :: {:text | :binary, iodata()}
   @type websocket_state :: term()
 
@@ -53,7 +53,8 @@ defmodule TestServer.HTTP do
   @doc """
   Starts a test server HTTP instance.
 
-  The instance will be terminated when the test case finishes.
+  The instance will be terminated when the test case finishes. Error is
+  returned if the server cannot be started. Invalid options will raise.
 
   ## Options
 
@@ -61,10 +62,12 @@ defmodule TestServer.HTTP do
       random port;
 
     * `:ip`               - a `t:TestServer.ip_address/0` the server will bind
-      to. Defaults to `:loopback`;
+      to. IP in `:http_server` option takes precedence. Defaults to
+      `:loopback`;
 
     * `:ipfamily`    - the IP address type to use, either `:inet` or `:inet6`.
-      Defaults to `:inet6` if `:ip` is IPv6 format, otherwise `:inet`;
+       IP address type in `:http_server` option takes precedence.  Defaults to
+       `:inet6` if `:ip` is IPv6 format, otherwise `:inet`;
 
     * `:scheme`           - an atom for the http scheme. Defaults to `:http`;
 
@@ -166,8 +169,8 @@ defmodule TestServer.HTTP do
   @doc """
   Shuts down the current test server.
 
-  Removes the ExUnit test callback which eliminates verification of any
-  outstanding expectations.
+  Stopping the server discards outstanding expectations. Errors already
+  recorded still fail the test during teardown.
 
   ## Examples
 
@@ -200,17 +203,18 @@ defmodule TestServer.HTTP do
     end
   end
 
+  @doc "Equivalent to `url/1` with empty path."
   @spec url() :: binary()
   def url, do: url("")
 
   @doc """
-  Produces a URL for current test server.
+  Returns the URL for current test server.
 
   ## Options
 
-    * `:host` - binary host value, it'll be registered in the `m::inet` DNS
-      file for the instance's IP, and will last the duration of the test.
-      Defaults to `"localhost"`.
+    * `:host` - binary host value. The host name will be registered with the
+      instance's IP in the `m::inet` lookup file and removed once no more
+      processes that registered it are alive. Defaults to `"localhost"`.
 
   ## Examples
 
@@ -223,8 +227,9 @@ defmodule TestServer.HTTP do
   @spec url(uri_path :: binary() | keyword() | TestServer.instance()) :: binary()
   def url(path) when is_binary(path), do: url(path, [])
   def url(options) when is_list(options), do: url("", options)
-  def url({__MODULE__, _instance_pid} = instance), do: url(instance, "", [])
+  def url({__MODULE__, _instance_pid} = instance), do: url(instance, [])
 
+  @doc "Equivalent to `url/3` with current instance, empty path, or empty options."
   @spec url(uri_path :: binary(), keyword()) :: binary()
   def url(path, options) when is_binary(path) and is_list(options),
     do: url(TestServer.fetch_protocol_instance!(__MODULE__), path, options)
@@ -233,14 +238,19 @@ defmodule TestServer.HTTP do
   def url({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
     do: url(instance, path, [])
 
+  @spec url(TestServer.instance(), keyword()) :: binary()
+  def url({__MODULE__, _instance_pid} = instance, options) when is_list(options),
+    do: url(instance, "", options)
+
   @doc """
-  Produces a URL for a test server instance.
+  Returns the URL for a test server instance.
 
   See `url/1` for options.
   """
   @spec url(TestServer.instance(), uri_path :: binary(), keyword()) :: binary()
   def url({__MODULE__, _instance_pid} = instance, path, options)
       when is_binary(path) and is_list(options) do
+    Keyword.validate!(options, [:host])
     TestServer.assert_instance_alive!(instance)
 
     options =
@@ -256,6 +266,7 @@ defmodule TestServer.HTTP do
     "#{scheme}://#{host}:#{port}#{path}"
   end
 
+  @doc "Equivalent to `handle/1` with empty options."
   def handle, do: handle([])
 
   @doc """
@@ -279,7 +290,8 @@ defmodule TestServer.HTTP do
       Defaults to matching anything;
 
     * `:to`        - a `t:handler_fun/0` or `t:plug/0` that will be
-      called when the handler matches. Defaults to return the HTTP protocol;
+      called when the handler matches. Defaults to return a 200 status response
+      with the HTTP protocol as body;
 
   ## Examples
 
@@ -311,15 +323,15 @@ defmodule TestServer.HTTP do
   @spec handle(TestServer.instance()) :: :ok
   def handle({__MODULE__, _instance_pid} = instance), do: handle(instance, [])
 
-  @spec handle(TestServer.instance(), uri_path :: binary()) :: :ok
-  def handle({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
-    do: handle(instance, path, [])
-
   @doc """
   Adds a request handler to a test server instance.
 
   See `handle/1` for options.
   """
+  @spec handle(TestServer.instance(), uri_path :: binary()) :: :ok
+  def handle({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
+    do: handle(instance, path, [])
+
   @spec handle(TestServer.instance(), keyword()) :: :ok
   def handle({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:path, :method, :match, :to])
@@ -334,6 +346,7 @@ defmodule TestServer.HTTP do
     handle(Keyword.put(options, :path, path))
   end
 
+  @doc "Equivalent to `handle/2` with `path: path` in options."
   @spec handle(TestServer.instance(), uri_path :: binary(), keyword()) :: :ok
   def handle({__MODULE__, _instance_pid} = instance, path, options)
       when is_binary(path) and is_list(options) do
@@ -430,6 +443,7 @@ defmodule TestServer.HTTP do
     end
   end
 
+  @doc "Equivalent to `websocket/1` with empty options."
   def websocket, do: websocket([])
 
   @doc """
@@ -484,15 +498,15 @@ defmodule TestServer.HTTP do
   @spec websocket(TestServer.instance()) :: websocket()
   def websocket({__MODULE__, _instance_pid} = instance), do: websocket(instance, [])
 
-  @spec websocket(TestServer.instance(), uri_path :: binary()) :: websocket()
-  def websocket({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
-    do: websocket(instance, path, [])
-
   @doc """
   Adds a websocket endpoint to a test server instance.
 
   See `websocket/1` for options.
   """
+  @spec websocket(TestServer.instance(), uri_path :: binary()) :: websocket()
+  def websocket({__MODULE__, _instance_pid} = instance, path) when is_binary(path),
+    do: websocket(instance, path, [])
+
   @spec websocket(TestServer.instance(), keyword()) :: websocket()
   def websocket({__MODULE__, _instance_pid} = instance, options) when is_list(options) do
     Keyword.validate!(options, [:path, :method, :match, :to])
@@ -512,12 +526,14 @@ defmodule TestServer.HTTP do
     websocket(Keyword.put(options, :path, path))
   end
 
+  @doc "Equivalent to `websocket/2` with `path: path` in options."
   @spec websocket(TestServer.instance(), uri_path :: binary(), keyword()) :: websocket()
   def websocket({__MODULE__, _instance_pid} = instance, path, options)
       when is_binary(path) and is_list(options) do
     websocket(instance, Keyword.put(options, :path, path))
   end
 
+  @doc "Equivalent to `websocket_handle/2` with empty options."
   @spec websocket_handle(websocket()) :: :ok
   def websocket_handle(websocket), do: websocket_handle(websocket, [])
 
@@ -534,7 +550,7 @@ defmodule TestServer.HTTP do
       boolean. Defaults to matching anything;
 
     * `:to`        - a `t:websocket_handler_fun/0` function called when the
-      handler matches. Defaults to send back the received message;
+      handler matches. Defaults to echoing the received message;
 
   ## Examples
 
@@ -576,6 +592,7 @@ defmodule TestServer.HTTP do
   defp default_websocket_handler(frame, state),
     do: {:reply, frame, state}
 
+  @doc "Equivalent to `websocket_send/2` with empty options."
   @spec websocket_send(websocket()) :: :ok
   def websocket_send(websocket), do: websocket_send(websocket, [])
 
@@ -586,7 +603,8 @@ defmodule TestServer.HTTP do
   @doc """
   Sends a message to a websocket endpoint.
 
-    * `:to` - a `t:websocket_send_fun/0` that will run on the server;
+    * `:to` - a `t:websocket_send_fun/0` that will run on the server.
+      Defaults to sending the text message `"ping"`.
 
   ## Examples
 

@@ -5,7 +5,7 @@ defmodule TestServer.TCPTest do
   import ExUnit.CaptureIO
   import ExUnit.CaptureLog
 
-  alias __MODULE__.{LogHandler, TCPClient, TLSClient}
+  alias __MODULE__.{LogHandler, TCPClient, TLSClient, TLSTransport}
 
   describe "start/1" do
     test "with invalid options" do
@@ -213,7 +213,7 @@ defmodule TestServer.TCPTest do
       assert io =~
                ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown\n"
     end
 
     test "when acceptor process crashes" do
@@ -229,9 +229,9 @@ defmodule TestServer.TCPTest do
             |> Keyword.fetch!(:acceptor)
 
           monitor = Process.monitor(instance_pid)
-          true = Process.exit(acceptor_pid, :kill)
 
-          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+          assert Process.exit(acceptor_pid, :kill)
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, {:shutdown, :killed}}
         end
       end
 
@@ -240,7 +240,7 @@ defmodule TestServer.TCPTest do
       assert io =~
                ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown: :killed"
+      assert io =~ "     shutdown: :killed\n"
     end
 
     test "when socket process crashes" do
@@ -267,7 +267,204 @@ defmodule TestServer.TCPTest do
       assert io =~
                ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown: :killed"
+      assert io =~ "     shutdown: :killed\n"
+    end
+
+    @accept_tls [cb_info: {TLSTransport, :tcp, :tcp_closed, :tcp_error, :tcp_passive}]
+
+    test "when started with `transport: :tls` option when transport accept returns error" do
+      defmodule StartTransportAcceptErrorTest do
+        use ExUnit.Case
+
+        @accept_tls unquote(Macro.escape(@accept_tls))
+
+        test "fails" do
+          true = Process.register(self(), TLSTransport)
+          instance = TestServer.TCP.start!(transport: :tls, tls: @accept_tls)
+          {TestServer.TCP, instance_pid} = instance
+          options = TestServer.TCP.Instance.options(instance)
+          acceptor_pid = Keyword.fetch!(options, :acceptor)
+          listener_socket = Keyword.fetch!(options, :listener)
+          monitor_acceptor = Process.monitor(acceptor_pid)
+          monitor_instance = Process.monitor(instance_pid)
+
+          assert send(acceptor_pid, :before_accept)
+          assert_receive {:paused, ^acceptor_pid}
+
+          log =
+            capture_log(fn ->
+              assert :ok = :ssl.close(listener_socket)
+              assert Process.alive?(instance_pid)
+
+              unquote(__MODULE__).wait_till_ssl_socket_down(listener_socket)
+
+              send(acceptor_pid, :continue)
+
+              assert_receive {:DOWN, ^monitor_acceptor, :process, ^acceptor_pid, reason}
+
+              assert_receive {:DOWN, ^monitor_instance, :process, ^instance_pid,
+                              {:shutdown, ^reason}}
+
+              send(__MODULE__, {:reason, reason})
+            end)
+
+          send(__MODULE__, {:log, log})
+        end
+      end
+
+      Process.register(self(), StartTransportAcceptErrorTest)
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+      assert_receive {:reason, {%RuntimeError{} = error, _stacktrace}}
+      assert Exception.message(error) == "could not accept TCP connection: :einval"
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "** (RuntimeError) could not accept TCP connection: :einval"
+      assert_received {:log, log}
+      assert log =~ "** (RuntimeError) could not accept TCP connection: :einval"
+    end
+
+    test "when started with `transport: :tls` option when transport accept returns error when instance died" do
+      defmodule StartTransportAcceptErrorInstanceDeadTest do
+        use ExUnit.Case
+
+        @accept_tls unquote(Macro.escape(@accept_tls))
+
+        test "fails" do
+          true = Process.register(self(), TLSTransport)
+          instance = TestServer.TCP.start!(transport: :tls, tls: @accept_tls)
+          {TestServer.TCP, instance_pid} = instance
+          options = TestServer.TCP.Instance.options(instance)
+          acceptor_pid = Keyword.fetch!(options, :acceptor)
+          listener_socket = Keyword.fetch!(options, :listener)
+          monitor_acceptor = Process.monitor(acceptor_pid)
+          monitor_instance = Process.monitor(instance_pid)
+
+          assert send(acceptor_pid, :before_accept)
+          assert_receive {:paused, ^acceptor_pid}
+          assert Process.exit(instance_pid, :shutdown)
+          assert_receive {:DOWN, ^monitor_instance, :process, ^instance_pid, :shutdown}
+
+          unquote(__MODULE__).wait_till_ssl_socket_down(listener_socket)
+
+          send(acceptor_pid, :continue)
+
+          assert_receive {:result, result}
+          assert_receive {:DOWN, ^monitor_acceptor, :process, ^acceptor_pid, reason}
+
+          send(__MODULE__, {:result, result})
+          send(__MODULE__, {:reason, reason})
+        end
+      end
+
+      Process.register(self(), StartTransportAcceptErrorInstanceDeadTest)
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+      assert_receive {:result, {:error, :einval}}
+      assert_receive {:reason, {:shutdown, :closed}}
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown\n"
+    end
+
+    test "when started with `transport: :tls` option when transport accept exits" do
+      defmodule StartTransportAcceptExitTest do
+        use ExUnit.Case
+
+        @accept_tls unquote(Macro.escape(@accept_tls))
+
+        test "fails" do
+          true = Process.register(self(), TLSTransport)
+          instance = TestServer.TCP.start!(transport: :tls, tls: @accept_tls)
+          {TestServer.TCP, instance_pid} = instance
+          options = TestServer.TCP.Instance.options(instance)
+          acceptor_pid = Keyword.fetch!(options, :acceptor)
+          listener_socket = Keyword.fetch!(options, :listener)
+          monitor_acceptor = Process.monitor(acceptor_pid)
+          monitor_instance = Process.monitor(instance_pid)
+
+          assert {:ok, _socket} = TCPClient.connect(TestServer.TCP.address(instance))
+          assert send(acceptor_pid, :after_accept)
+          assert_receive {:paused, ^acceptor_pid}
+
+          log =
+            capture_log(fn ->
+              assert :ok = :ssl.close(listener_socket)
+              assert Process.alive?(instance_pid)
+
+              unquote(__MODULE__).wait_till_ssl_socket_down(listener_socket)
+
+              send(acceptor_pid, :continue)
+
+              assert_receive {:DOWN, ^monitor_acceptor, :process, ^acceptor_pid, reason}
+
+              assert_receive {:DOWN, ^monitor_instance, :process, ^instance_pid,
+                              {:shutdown, ^reason}}
+
+              send(__MODULE__, {:reason, reason})
+            end)
+
+          send(__MODULE__, {:log, log})
+        end
+      end
+
+      Process.register(self(), StartTransportAcceptExitTest)
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+      assert_receive {:reason, {:noproc, {:gen_server, :call, [_tracker, _request, :infinity]}}}
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "shutdown: {:noproc, {:gen_server"
+      assert_received {:log, log}
+      assert log =~ "** (stop) exited in: :gen_server.call"
+    end
+
+    test "when started with `transport: :tls` option when transport accept exits when instance died" do
+      defmodule StartTransportAcceptExitInstanceDeadTest do
+        use ExUnit.Case
+
+        @accept_tls unquote(Macro.escape(@accept_tls))
+
+        test "fails" do
+          true = Process.register(self(), TLSTransport)
+          instance = TestServer.TCP.start!(transport: :tls, tls: @accept_tls)
+          {TestServer.TCP, instance_pid} = instance
+          options = TestServer.TCP.Instance.options(instance)
+          acceptor_pid = Keyword.fetch!(options, :acceptor)
+          listener_socket = Keyword.fetch!(options, :listener)
+          monitor_acceptor = Process.monitor(acceptor_pid)
+          monitor_instance = Process.monitor(instance_pid)
+
+          assert {:ok, _socket} = TCPClient.connect(TestServer.TCP.address(instance))
+          assert send(acceptor_pid, :after_accept)
+          assert_receive {:paused, ^acceptor_pid}
+          assert Process.exit(instance_pid, :shutdown)
+          assert_receive {:DOWN, ^monitor_instance, :process, ^instance_pid, :shutdown}
+
+          unquote(__MODULE__).wait_till_ssl_socket_down(listener_socket)
+
+          send(acceptor_pid, :continue)
+
+          assert_receive {:DOWN, ^monitor_acceptor, :process, ^acceptor_pid, reason}
+          send(__MODULE__, {:reason, reason})
+        end
+      end
+
+      Process.register(self(), StartTransportAcceptExitInstanceDeadTest)
+
+      assert io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
+      assert_receive {:reason, {:shutdown, :closed}}
+
+      assert io =~
+               ~r/expected TestServer\.TCP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+
+      assert io =~ "     shutdown\n"
     end
   end
 
@@ -350,7 +547,7 @@ defmodule TestServer.TCPTest do
 
       assert TestServer.TCP.stop() == :ok
 
-      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
+      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, {:shutdown, :closed}}
       refute Process.alive?(instance_pid)
       refute Process.alive?(acceptor_pid)
       assert {:error, reason} = TCPClient.connect(address)
@@ -368,14 +565,15 @@ defmodule TestServer.TCPTest do
       {:ok, "ping"} = TLSClient.receive_data(socket)
       [%{owner: owner_pid}] = TestServer.TCP.Instance.connections(instance)
       options = TestServer.TCP.Instance.options(instance)
+      owner_monitor = Process.monitor(owner_pid)
       acceptor_pid = Keyword.fetch!(options, :acceptor)
-      monitor = Process.monitor(owner_pid)
+      acceptor_monitor = Process.monitor(acceptor_pid)
 
       assert TestServer.TCP.stop() == :ok
 
-      assert_receive {:DOWN, ^monitor, :process, ^owner_pid, :shutdown}
+      assert_receive {:DOWN, ^owner_monitor, :process, ^owner_pid, {:shutdown, :closed}}
+      assert_receive {:DOWN, ^acceptor_monitor, :process, ^acceptor_pid, {:shutdown, :closed}}
       refute Process.alive?(instance_pid)
-      refute Process.alive?(acceptor_pid)
       assert {:error, reason} = TLSClient.connect(address, tls_options)
       assert reason in [:econnrefused, :econnreset]
       assert {:error, :closed} = TLSClient.receive_data(socket)
@@ -1464,6 +1662,15 @@ defmodule TestServer.TCPTest do
     ]
   end
 
+  def wait_till_ssl_socket_down(listener_socket) do
+    wait_until(fn ->
+      match?(
+        {:error, {:options, {:socket_options, [:active], {:noproc, _}}}},
+        :ssl.getopts(listener_socket, [:active])
+      )
+    end)
+  end
+
   defmodule TCPClient do
     def connect({host, port}, options \\ []) do
       :gen_tcp.connect(String.to_charlist(host), port, [:binary, active: false] ++ options)
@@ -1501,6 +1708,44 @@ defmodule TestServer.TCPTest do
 
     def upgrade(tcp_socket, options) do
       :ssl.connect(tcp_socket, [:binary, active: false] ++ options)
+    end
+  end
+
+  defmodule TLSTransport do
+    defdelegate sockname(socket), to: :inet
+    defdelegate close(socket), to: :gen_tcp
+
+    def listen(port, options), do: :gen_tcp.listen(port, [{:inet_backend, :inet} | options])
+
+    def accept(listener, timeout) do
+      test_pid = Process.whereis(__MODULE__)
+      monitor = Process.monitor(test_pid)
+
+      receive do
+        :before_accept ->
+          {:ok, backend} = :inet_db.lookup_socket(listener)
+          pause(test_pid, monitor)
+          result = backend.accept(listener, timeout)
+          send(test_pid, {:result, result})
+          result
+
+        :after_accept ->
+          {:ok, socket} = :gen_tcp.accept(listener, timeout)
+          pause(test_pid, monitor)
+          {:ok, socket}
+
+        {:DOWN, ^monitor, :process, ^test_pid, _reason} ->
+          exit(:shutdown)
+      end
+    end
+
+    defp pause(test_pid, monitor) do
+      send(test_pid, {:paused, self()})
+
+      receive do
+        :continue -> :ok
+        {:DOWN, ^monitor, :process, ^test_pid, _reason} -> exit(:shutdown)
+      end
     end
   end
 

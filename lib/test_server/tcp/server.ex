@@ -114,29 +114,45 @@ defmodule TestServer.TCP.Server do
   end
 
   defp accept_loop(instance, listener) do
-    case transport_accept(listener) do
+    case transport_accept(listener, instance) do
       {:ok, socket} ->
         start_socket(instance, socket)
         accept_loop(instance, listener)
 
       {:error, :closed} ->
-        exit(:shutdown)
+        exit({:shutdown, :closed})
 
       {:error, reason} ->
         raise "could not accept TCP connection: #{inspect(reason)}"
     end
   end
 
-  defp transport_accept({transport, raw_socket}) do
+  defp transport_accept({transport, raw_socket}, instance) do
     transport
     |> case do
       :tcp -> :gen_tcp.accept(raw_socket)
       :tls -> :ssl.transport_accept(raw_socket)
     end
     |> case do
-      {:ok, raw_socket} -> {:ok, {transport, raw_socket}}
-      {:error, reason} -> {:error, reason}
+      {:ok, raw_socket} ->
+        {:ok, {transport, raw_socket}}
+
+      {:error, reason} ->
+        {TestServer.TCP, instance_pid} = instance
+
+        case Process.alive?(instance_pid) do
+          true -> {:error, reason}
+          false -> {:error, :closed}
+        end
     end
+  catch
+    :exit, reason ->
+      {TestServer.TCP, instance_pid} = instance
+
+      case Process.alive?(instance_pid) do
+        true -> :erlang.raise(:exit, reason, __STACKTRACE__)
+        false -> {:error, :closed}
+      end
   end
 
   defp start_socket(instance, socket) do

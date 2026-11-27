@@ -217,7 +217,7 @@ defmodule TestServer.HTTPTest do
       assert io =~
                ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown\n"
     end
 
     test "when server crashes" do
@@ -229,50 +229,44 @@ defmodule TestServer.HTTPTest do
 
           options = TestServer.HTTP.Instance.options(instance)
           server_pid = Keyword.fetch!(options, :server)
-          port = Keyword.fetch!(options, :port)
 
-          monitor = Process.monitor(instance_pid)
-          true = Process.exit(server_pid, :kill)
+          monitors =
+            options
+            |> Keyword.fetch!(:http_server)
+            |> case do
+              {TestServer.HTTP.Server.Bandit, _} -> Supervisor.which_children(server_pid)
+              {TestServer.HTTP.Server.Plug.Cowboy, _} -> Supervisor.which_children(server_pid)
+              {TestServer.HTTP.Server.Httpd, _} -> []
+            end
+            |> Enum.map(fn {_id, pid, _type, _modules} -> pid end)
+            |> Kernel.++([server_pid, instance_pid])
+            |> Enum.map(fn pid -> {pid, Process.monitor(pid)} end)
 
-          send(__MODULE__, {:server, server_pid, port})
+          assert Process.exit(server_pid, :kill)
 
-          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, _reason}
+          Enum.each(monitors, fn {pid, monitor} ->
+            assert_receive {:DOWN, ^monitor, :process, ^pid, _reason}, 1_000
+          end)
+
+          send(__MODULE__, {:server, server_pid})
         end
       end
 
       Process.register(self(), StartServerCrashTest)
 
-      {{server_pid, port}, log} =
-        with_log(fn ->
-          assert io =
-                   capture_io(fn ->
-                     assert %{failures: 1} = ExUnit.run()
-                   end)
+      capture_log(fn ->
+        io = capture_io(fn -> assert %{failures: 1} = ExUnit.run() end)
 
-          assert io =~
-                   ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
+        assert io =~
+                 ~r/expected TestServer\.HTTP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-          assert io =~ "     shutdown: :killed"
+        assert io =~ "     shutdown: :killed\n"
 
-          assert_receive {:server, server_pid, port}
+        assert_received {:server, server_pid}
 
-          # Inets crash crashes the supervisor which can leak to other tests
-          wait_till_httpd_process_removed(server_pid)
-
-          {server_pid, port}
-        end)
-
-      case Application.fetch_env!(:test_server, :http_server) do
-        {TestServer.HTTP.Server.Bandit, []} ->
-          assert log =~ ~r/GenServer \#PID\<[0-9.]+\> terminating/
-
-        {TestServer.HTTP.Server.Plug.Cowboy, []} ->
-          assert log =~ ~r/GenServer \#PID\<[0-9.]+\> terminating/
-
-        {TestServer.HTTP.Server.Httpd, []} ->
-          assert log =~ ~r/GenServer :httpd__127_0_0_1__#{port}default terminating/
-          assert log =~ inspect(server_pid)
-      end
+        # Inets crash crashes the supervisor which can leak to other tests
+        wait_till_httpd_process_removed(server_pid)
+      end)
     end
   end
 

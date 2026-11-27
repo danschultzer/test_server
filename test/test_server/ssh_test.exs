@@ -429,7 +429,7 @@ defmodule TestServer.SSHTest do
       assert io =~
                ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown\n"
     end
 
     test "when daemon crashes" do
@@ -456,7 +456,7 @@ defmodule TestServer.SSHTest do
       assert io =~
                ~r/expected TestServer\.SSH\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown: :killed"
+      assert io =~ "     shutdown: :killed\n"
     end
   end
 

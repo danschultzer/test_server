@@ -197,7 +197,7 @@ defmodule TestServer.UDPTest do
       assert io =~
                ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown\n"
     end
 
     test "when receiver process crashes" do
@@ -224,7 +224,7 @@ defmodule TestServer.UDPTest do
       assert io =~
                ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown: :shutdown\n"
     end
 
     test "with `transport: :dtls` option when receiver process crashes" do
@@ -251,7 +251,7 @@ defmodule TestServer.UDPTest do
       assert io =~
                ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown: :shutdown\n"
     end
 
     test "when peer process crashes" do
@@ -278,7 +278,7 @@ defmodule TestServer.UDPTest do
       assert io =~
                ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown: :killed\n"
     end
 
     test "with `transport: :dtls` option when peer process crashes" do
@@ -306,7 +306,7 @@ defmodule TestServer.UDPTest do
       assert io =~
                ~r/expected TestServer\.UDP\.Instance \#PID\<[0-9.]+\> to be running, but it exited with reason:/
 
-      assert io =~ "     shutdown"
+      assert io =~ "     shutdown: :killed\n"
     end
   end
 

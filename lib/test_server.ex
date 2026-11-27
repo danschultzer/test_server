@@ -135,9 +135,16 @@ defmodule TestServer do
     raise RuntimeError, """
     expected #{format_instance(instance)} to be running, but it exited with reason:
 
-    #{Exception.format_exit(reason)}
+    #{format_exit(reason)}
     """
   end
+
+  defp format_exit({:shutdown, {exception, stacktrace}})
+       when is_exception(exception) and is_list(stacktrace) do
+    Exception.format(:error, exception, stacktrace)
+  end
+
+  defp format_exit(reason), do: Exception.format_exit(reason)
 
   defp raise_instance_not_found!(instance) do
     raise RuntimeError,
@@ -223,17 +230,25 @@ defmodule TestServer do
 
   @doc false
   def supervise_server(server_pid, shutdown_fn) do
-    spawn_link(fn ->
-      false = Process.flag(:trap_exit, true)
-      monitor = Process.monitor(server_pid)
+    parent = self()
 
-      receive do
-        {:DOWN, ^monitor, :process, ^server_pid, reason} -> exit({:shutdown, reason})
-        {:EXIT, _pid, _reason} -> shutdown_fn.(server_pid)
-      end
-    end)
+    supervisor_pid =
+      spawn_link(fn ->
+        false = Process.flag(:trap_exit, true)
+        monitor = Process.monitor(server_pid)
 
-    :ok
+        send(parent, {self(), :done})
+
+        receive do
+          {:DOWN, ^monitor, :process, ^server_pid, reason} -> exit({:shutdown, reason})
+          {:EXIT, _pid, _reason} -> shutdown_fn.(server_pid)
+        end
+      end)
+
+    receive do
+      {^supervisor_pid, :done} -> :ok
+      {:EXIT, ^supervisor_pid, reason} -> exit(reason)
+    end
   end
 
   @doc false

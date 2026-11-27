@@ -75,27 +75,19 @@ defmodule TestServerTest do
         use ExUnit.Case
 
         test "fails" do
-          options = [
-            init: fn ->
-              Process.send_after(self(), :crash, 10)
-
-              {:ok, %{}}
-            end
-          ]
-
-          {:ok, instance} =
+          {:ok, {unquote(__MODULE__).FakeProtocol, instance_pid} = instance} =
             TestServer.start_instance(
               unquote(__MODULE__).FakeProtocol,
-              options,
+              [],
               fn _instance -> :ok end
             )
 
           send(__MODULE__, {:instance, instance})
           send(__MODULE__, {:test_pid, self()})
 
-          :timer.sleep(10_000)
+          send(instance_pid, :crash)
 
-          flunk("Instance did not crash as expected")
+          assert_receive :nothing, 1_000, "instance did not crash immediately"
         end
       end
 
@@ -201,8 +193,10 @@ defmodule TestServerTest do
             )
 
           {unquote(__MODULE__).FakeProtocol, instance_pid} = instance
+          monitor = Process.monitor(instance_pid)
 
-          Process.exit(instance_pid, :shutdown)
+          assert Process.exit(instance_pid, :shutdown)
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, :shutdown}, 1_000
 
           send(__MODULE__, {:instance, instance})
         end
@@ -233,9 +227,11 @@ defmodule TestServerTest do
             )
 
           {unquote(__MODULE__).FakeProtocol, instance_pid} = instance
+          monitor = Process.monitor(instance_pid)
 
-          Process.exit(instance_pid, :shutdown)
-          TestServer.InstanceManager.delete_instance_entry(instance)
+          assert Process.exit(instance_pid, :shutdown)
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, :shutdown}, 1_000
+          assert TestServer.InstanceManager.delete_instance_entry(instance) == :ok
 
           send(__MODULE__, {:instance, instance})
         end
@@ -414,6 +410,7 @@ defmodule TestServerTest do
       :ok = delete_instance_entry_on_exit(instance)
       manager_pid = Process.whereis(TestServer.InstanceManager)
       {FakeProtocol, instance_pid} = instance
+      monitor = Process.monitor(instance_pid)
 
       task =
         with_suspended_process(manager_pid, fn ->
@@ -431,6 +428,7 @@ defmodule TestServerTest do
 
           assert_receive {^manager_pid, {:"$gen_call", _from, {:fetch_entry, ^instance}}}
           assert Process.exit(instance_pid, :kill)
+          assert_receive {:DOWN, ^monitor, :process, ^instance_pid, :killed}, 1_000
 
           task
         end)
@@ -479,8 +477,8 @@ defmodule TestServerTest do
       :ok = delete_instance_entry_on_exit(instance)
       {FakeProtocol, instance_pid} = instance
       monitor = Process.monitor(instance_pid)
-      true = Process.exit(instance_pid, {:shutdown, :normal})
 
+      assert Process.exit(instance_pid, {:shutdown, :normal})
       assert_receive {:DOWN, ^monitor, :process, ^instance_pid, {:shutdown, :normal}}
 
       error =
@@ -859,7 +857,7 @@ defmodule TestServerTest do
       assert_receive {:done, ^task_pid}
       assert :inet.getaddrs(~c"example.test", :inet) == {:ok, [{127, 0, 0, 1}]}
 
-      Process.exit(task_pid, :kill)
+      assert Process.exit(task_pid, :kill)
       assert_receive {:DOWN, ^monitor, :process, ^task_pid, _reason}
 
       assert TestServer.add_host(host: "otherhost.test") == "otherhost.test"

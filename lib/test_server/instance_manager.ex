@@ -170,8 +170,8 @@ defmodule TestServer.InstanceManager do
             {:DOWN, ^monitor, :process, ^instance_pid, reason} -> reason
           end
 
-        case {alive?, abnormal_exit?(reason)} do
-          {true, false} ->
+        case {alive?, reason} do
+          {true, :shutdown} ->
             updated_entry = %{entry | status: {:stopped, stacktrace}}
             state = %{state | entries: entries ++ [updated_entry]}
 
@@ -221,11 +221,6 @@ defmodule TestServer.InstanceManager do
     end
   end
 
-  defp abnormal_exit?(:normal), do: false
-  defp abnormal_exit?(:shutdown), do: false
-  defp abnormal_exit?({:shutdown, _}), do: false
-  defp abnormal_exit?(_), do: true
-
   defp synchronize_entry(
          %{status: :running, instance: {_protocol_module, instance_pid}, ref: monitor} = entry,
          state
@@ -262,4 +257,9 @@ defmodule TestServer.InstanceManager do
 
     {:noreply, %{state | entries: entries ++ ref_entries}}
   end
+
+  defp abnormal_exit?(:normal), do: false
+  defp abnormal_exit?(:shutdown), do: false
+  defp abnormal_exit?({:shutdown, _}), do: false
+  defp abnormal_exit?(_), do: true
 end

@@ -20,30 +20,46 @@ defmodule TestServer.HTTP.Server.Bandit.AdapterTest do
       use ExUnit.Case
 
       test "fails" do
-        TestServer.HTTP.start!(unquote(@options))
+        _ = Process.flag(:trap_exit, true)
+        {TestServer.HTTP, instance_pid} = instance = TestServer.HTTP.start!(unquote(@options))
+        monitor = Process.monitor(instance_pid)
 
         TestServer.HTTP.handle(
           to: fn conn ->
             {TestServer.HTTP.Server.Bandit.Adapter, {plug_pid, _adapter}} = conn.adapter
+            monitor = Process.monitor(plug_pid)
 
             conn = Plug.Conn.send_chunked(conn, 200)
-            Process.exit(plug_pid, :boom)
-            Plug.Conn.chunk(conn, "OK")
 
-            flunk("Instance did not crash")
+            assert Process.exit(plug_pid, :boom)
+            assert_receive {:DOWN, ^monitor, :process, ^plug_pid, :boom}, 1_000
+
+            # This must raise now that the plug pid is dead
+            refute Plug.Conn.chunk(conn, "OK"), "instance did not crash"
           end
         )
 
+        send(__MODULE__, {:instance, instance})
+
         assert {:error, _} = unquote(__MODULE__).http2_request(TestServer.HTTP.url())
+
+        assert_receive {:DOWN, ^monitor, :process, ^instance_pid, {:plug, :noproc}}, 1_000
       end
     end
+
+    Process.register(self(), PlugProcessCrashTest)
 
     assert {log, io} =
              with_io(fn ->
                capture_log(fn -> assert %{failures: 1} = ExUnit.run() end)
              end)
 
-    assert io =~ ~r/\*\* \(EXIT.*\) {:plug, :noproc}/
+    assert_received {:instance, {TestServer.HTTP, instance_pid}}
+
+    assert io =~
+             "expected TestServer.HTTP.Instance #{inspect(instance_pid)} to be running, but it exited with reason:\n"
+
+    assert io =~ "     {:plug, :noproc}"
     assert log =~ "** (stop) {:plug, :noproc}"
   end
 
